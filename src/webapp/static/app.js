@@ -26,6 +26,10 @@ const I18N = {
     "edit.s1_lead": "Видео, где человек говорит в камеру. Соберём из него вертикальный ролик с субтитрами.",
     "edit.limits": "до {mb} МБ · от {min} с до {max} мин",
     "edit.style": "Стиль субтитров", "edit.font": "Шрифт", "edit.color": "Цвет выделения", "edit.effects": "Эффекты",
+    "music.title": "Музыка из рилса", "music.placeholder": "Вставьте ссылку на рилс", "music.paste": "Вставить",
+    "music.checking": "Достаём звук…", "music.ready": "Трек {t}", "music.clear": "Убрать музыку",
+    "music.hint": "Звук рилса тихо заиграет под вашей речью",
+    "music.dropped": "Музыка не успела подготовиться — ролик будет без неё",
     "edit.requirements": "Требования к видео", "edit.in_chat": "Отправить в чат с ботом",
     "edit.untitled": "Видео", "edit.remove": "Убрать видео",
     "edit.next": "Далее: оформление", "edit.next_idle": "Сначала добавьте видео", "edit.next_ready": "стиль, шрифт и цвет субтитров",
@@ -120,6 +124,10 @@ const I18N = {
     "edit.s1_lead": "A video of someone talking to the camera. We'll turn it into a vertical reel with captions.",
     "edit.limits": "up to {mb} MB · {min} s to {max} min",
     "edit.style": "Caption style", "edit.font": "Typeface", "edit.color": "Highlight colour", "edit.effects": "Effects",
+    "music.title": "Music from a reel", "music.placeholder": "Paste a reel link", "music.paste": "Paste",
+    "music.checking": "Getting the sound…", "music.ready": "Track {t}", "music.clear": "Remove music",
+    "music.hint": "The reel's sound plays quietly under your voice",
+    "music.dropped": "The music wasn't ready — the video will have none",
     "edit.requirements": "Video requirements", "edit.in_chat": "Send it in the bot chat",
     "edit.untitled": "Video", "edit.remove": "Remove video",
     "edit.next": "Next: design", "edit.next_idle": "Add a video first", "edit.next_ready": "caption style, typeface and colour",
@@ -220,6 +228,8 @@ function applyStaticTexts() {
   document.documentElement.lang = currentLang();
   for (const node of $$("[data-i18n]")) node.textContent = tr(node.dataset.i18n);
   for (const node of $$("[data-i18n-aria]")) node.setAttribute("aria-label", tr(node.dataset.i18nAria));
+  for (const node of $$("[data-i18n-placeholder]")) node.placeholder = tr(node.dataset.i18nPlaceholder);
+  if (state.music) renderMusic();
 }
 
 const state = {
@@ -233,6 +243,9 @@ const state = {
   // верхнее, то, что показывают.
   layout: "single",
   topFile: null,
+  // «Музыка из рилса»: ссылку проверяет сервер (`POST /api/music`), `id` уходит
+  // в `finish`. `seq` отбрасывает ответы на ссылки, которые уже заменили.
+  music: { status: "empty", id: null, duration: null, error: null, seq: 0, url: "" },
   busy: false,
   jobs: [],
   jobsLoaded: false,
@@ -1041,6 +1054,82 @@ function initEdit() {
   });
   $("#to-step1").addEventListener("click", () => { haptic(); setStep(1); });
   $("#cta").addEventListener("click", onCta);
+  initMusic();
+}
+
+// ------------------------------------------------------------------ музыка из рилса
+
+function mmss(seconds) {
+  const s = Math.round(seconds || 0);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function renderMusic() {
+  const m = state.music;
+  const card = $("#music-card");
+  if (!card) return;
+  card.dataset.state = m.status;
+  $("#music-clear").hidden = m.status === "empty" && !$("#music-input").value;
+  $("#music-paste").hidden = !$("#music-clear").hidden;
+  const text = {
+    empty: tr("music.hint"),
+    checking: tr("music.checking"),
+    ready: tr("music.ready", { t: mmss(m.duration) }),
+    error: m.error || "",
+  }[m.status];
+  $("#music-status-text").textContent = text;
+}
+
+function clearMusic() {
+  state.music = { status: "empty", id: null, duration: null, error: null, seq: state.music.seq + 1, url: "" };
+  $("#music-input").value = "";
+  renderMusic();
+}
+
+async function checkMusic(raw) {
+  const url = (raw || "").trim();
+  if (url === state.music.url && state.music.status !== "error") return;
+  const seq = state.music.seq + 1;
+  if (!url) { clearMusic(); return; }
+  state.music = { status: "checking", id: null, duration: null, error: null, seq, url };
+  renderMusic();
+  try {
+    const res = await api("/api/music", { method: "POST", body: { url } });
+    if (state.music.seq !== seq) return;
+    state.music = { ...state.music, status: "ready", id: res.music_id, duration: res.duration };
+    haptic("success");
+  } catch (e) {
+    if (state.music.seq !== seq) return;
+    state.music = { ...state.music, status: "error", error: e.message };
+    haptic("error");
+  }
+  renderMusic();
+}
+
+function initMusic() {
+  const input = $("#music-input");
+  let timer = null;
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    renderMusic();
+    timer = setTimeout(() => checkMusic(input.value), 600);
+  });
+  input.addEventListener("paste", () => {
+    clearTimeout(timer);
+    setTimeout(() => checkMusic(input.value), 0);
+  });
+  input.addEventListener("change", () => { clearTimeout(timer); checkMusic(input.value); });
+  input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") input.blur(); });
+  $("#music-paste").addEventListener("click", async () => {
+    haptic();
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) { input.value = text.trim(); checkMusic(input.value); return; }
+    } catch (_) { /* Telegram WebView часто не даёт буфер — тогда просто поле */ }
+    input.focus();
+  });
+  $("#music-clear").addEventListener("click", () => { haptic(); clearMusic(); });
+  renderMusic();
 }
 
 // Платит ли пользователь за ролик. Владельцы не платят никогда, остальные —
@@ -1087,14 +1176,16 @@ async function onCta() {
 
   state.busy = true;
   try {
-    const job = await uploadAndStart();
+    const res = await uploadAndStart();
+    const job = res.job;
     haptic("success");
     setFile(null);
     setFile(null, "top");
+    clearMusic();
     state.step = 1;
     for (const s of $$("[data-step]")) s.hidden = Number(s.dataset.step) !== 1;
     await refreshBoot();
-    toast(tr("toast.accepted"));
+    toast(res.music_dropped ? tr("music.dropped") : tr("toast.accepted"));
     state.jobs = [job, ...state.jobs.filter((j) => j.id !== job.id)];
     state.jobsLoaded = true;
     go("videos", { replace: true });
@@ -1156,8 +1247,10 @@ async function uploadAndStart() {
     options: { ...state.options, accent: state.accent, font: state.font },
   };
   if (ids[1]) body.top_upload_id = ids[1];
-  const res = await api(`/api/uploads/${ids[0]}/finish`, { method: "POST", body });
-  return res.job;
+  // Трек уходит, только если уже проверен. Пока ссылка проверяется, ролик
+  // собирается без музыки — ждать её кнопка не обязана.
+  if (state.music.status === "ready" && state.music.id) body.music_id = state.music.id;
+  return api(`/api/uploads/${ids[0]}/finish`, { method: "POST", body });
 }
 
 // ------------------------------------------------------------------ «Главная»

@@ -756,11 +756,44 @@ svg { flex: none; }
 /* Палец: мишень не меньше 44 px. Вид кнопок прежний — растёт только зона
    касания (::after), иначе плотные ряды настроек разъехались бы. Мышь и
    так попадает в 32 px, поэтому только для грубого указателя. */
+/* ---------------------------------------------------------------- музыка из рилса */
+.music { padding: 6px 8px 10px 14px; display: grid; gap: 2px; }
+.music__row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.music__icon { flex: none; color: var(--muted); }
+.music__input {
+  flex: 1; min-width: 0; height: 44px; padding: 0 2px;
+  background: transparent; border: 0; outline: none; color: var(--text);
+  font: inherit; font-size: 15px; text-overflow: ellipsis;
+}
+.music__input::placeholder { color: var(--muted); }
+.music__btn {
+  flex: none; min-height: 36px; padding: 0 14px; border-radius: 999px;
+  background: var(--field); color: var(--text); font-size: 14px; font-weight: 700;
+}
+.music__clear { flex: none; }
+.music__status {
+  display: flex; align-items: center; gap: 6px; min-height: 18px; padding-left: 28px;
+  font-size: 13px; color: var(--muted);
+}
+.music__spin, .music__ok { display: none; flex: none; }
+.music__spin {
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--text); animation: spin 0.8s linear infinite;
+}
+.music[data-state="checking"] .music__spin { display: block; }
+.music[data-state="ready"] .music__ok { display: block; color: var(--ok); }
+.music[data-state="ready"] .music__status { color: var(--text); font-weight: 600; }
+.music[data-state="error"] .music__status { color: #ff5a6a; }
+:root[data-theme="light"] .music[data-state="error"] .music__status { color: #d22c3d; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 @media (pointer: coarse) {
   .seg button, .chips button, .icon-btn--sm { position: relative; }
   .seg button::after, .chips button::after { content: ""; position: absolute; inset: -4px 0; }
   .seg--sm button::after { inset: -6px 0; }
   .icon-btn--sm::after, .strip__arrow::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; }
+  .music__btn { position: relative; }
+  .music__btn::after { content: ""; position: absolute; inset: -4px 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

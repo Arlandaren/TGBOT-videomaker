@@ -21,6 +21,8 @@
       <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
       <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.3A8.5 8.5 0 0 1 9.7 3.5a8.5 8.5 0 1 0 10.8 10.8Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
       <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+      <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 17.5V6l10-2v11.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="6.5" cy="17.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="16.5" cy="15.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
       <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -273,6 +275,23 @@
                     <span class="toggle-row__label" data-i18n="opt.camera">Движение камеры</span>
                     <button class="help" type="button" data-help="camera">?</button>
                     <label class="switch"><input type="checkbox" data-option="camera" /><span></span></label>
+                  </div>
+                </div>
+
+                <div class="section-head"><h2 data-i18n="music.title">Музыка из рилса</h2></div>
+                <div class="card music" id="music-card" data-state="empty">
+                  <div class="music__row">
+                    <svg class="music__icon" width="20" height="20" aria-hidden="true"><use href="#i-music"/></svg>
+                    <input class="music__input" id="music-input" type="url" inputmode="url" autocomplete="off"
+                           autocapitalize="off" spellcheck="false" enterkeyhint="done"
+                           data-i18n-placeholder="music.placeholder" data-i18n-aria="music.placeholder" />
+                    <button class="music__btn" type="button" id="music-paste" data-i18n="music.paste">Вставить</button>
+                    <button class="icon-btn icon-btn--sm music__clear" type="button" id="music-clear" data-i18n-aria="music.clear" hidden><svg width="16" height="16"><use href="#i-close"/></svg></button>
+                  </div>
+                  <div class="music__status" id="music-status" role="status" aria-live="polite">
+                    <span class="music__spin" aria-hidden="true"></span>
+                    <svg class="music__ok" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg>
+                    <span id="music-status-text" data-i18n="music.hint">Звук рилса тихо заиграет под вашей речью</span>
                   </div>
                 </div>
 

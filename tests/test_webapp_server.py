@@ -1330,3 +1330,37 @@ async def test_no_track_is_fetched_onto_a_full_disk(client, reel_fetch, monkeypa
     r = await _music(client)
     assert r.status == 507
     assert reel_fetch["urls"] == []
+
+
+async def test_a_slow_earlier_check_does_not_delete_the_newer_track(client, reel_fetch, monkeypatch):
+    """Ссылку A заменили на B; B скачалась первой и показана «Трек ✓», A —
+    позже. A не имеет права снести B: в `finish` уйдёт именно B."""
+    import asyncio
+
+    from src.pipeline import reel_audio
+    from src.pipeline.reel_audio import ReelTrack
+    from src.webapp import server as mod
+
+    release_a = asyncio.Event()
+
+    async def fake_fetch(url, dst_dir):
+        if "AAAAAAA" in url:
+            await release_a.wait()
+        path = Path(dst_dir) / "track.m4a"
+        path.write_bytes(b"m4a!")
+        return ReelTrack(path=path, duration=10.0)
+
+    monkeypatch.setattr(reel_audio, "fetch_reel_audio", fake_fetch)
+    slow = asyncio.ensure_future(_music(client, "https://www.instagram.com/reel/AAAAAAA/"))
+    await asyncio.sleep(0.05)
+    b = (await (await _music(client, "https://www.instagram.com/reel/BBBBBBB/")).json())["music_id"]
+    release_a.set()
+    assert (await slow).status == 200
+    assert mod._music_dir(client.server.app[mod.CFG_KEY], b).exists(), "медленная A снесла свежую B"
+
+
+async def test_typing_a_link_does_not_use_up_the_limit(client, reel_fetch):
+    """Недописанная ссылка — не поход в Instagram и в лимит не идёт."""
+    for partial in ["h", "https://www.insta", "https://www.instagram.com/re", "x", "y", "z", "w"]:
+        assert (await _music(client, partial)).status == 400
+    assert (await _music(client)).status == 200

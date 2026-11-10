@@ -144,7 +144,12 @@ async def resolve_share(link: ReelLink, *, client: httpx.AsyncClient | None = No
 
 def _classify(stderr: str) -> Code | None:
     low = stderr.lower()
-    if "requested format is not available" in low:
+    # Лимит Instagram на анонимные запросы первым: в его тексте есть и «login»,
+    # и «not available», и без этой строки человек слышал бы «рилс закрыт»,
+    # а мы теряли бы ровно тот сигнал, ради которого держим лимит у себя.
+    if "rate-limit" in low or "rate limit" in low:
+        return "instagram_down"
+    if "requested format is not available" in low or "no video in this post" in low:
         return "no_audio"
     if "larger than max-filesize" in low:
         return "too_big"
@@ -198,6 +203,8 @@ async def fetch_reel_audio(url: str, dst_dir: Path) -> ReelTrack:
             log.warning("reel_audio_broken: %s — код %s: %s", url, proc.returncode,
                         stderr.strip()[-500:])
             code = "instagram_down"
+        else:
+            log.warning("reel_audio %s: %s — %s", code, url, stderr.strip()[-300:])
         for f in files:
             f.unlink(missing_ok=True)
         raise ReelAudioError(code, stderr.strip()[-200:])

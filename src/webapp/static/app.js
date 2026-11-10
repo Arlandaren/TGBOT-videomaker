@@ -1176,6 +1176,9 @@ async function onCta() {
 
   state.busy = true;
   try {
+    // Ссылка ещё проверяется — ролик уйдёт без музыки, и сказать об этом надо
+    // сейчас: сервер про незаконченную проверку не знает.
+    const musicPending = state.music.status === "checking";
     const res = await uploadAndStart();
     const job = res.job;
     haptic("success");
@@ -1185,7 +1188,7 @@ async function onCta() {
     state.step = 1;
     for (const s of $$("[data-step]")) s.hidden = Number(s.dataset.step) !== 1;
     await refreshBoot();
-    toast(res.music_dropped ? tr("music.dropped") : tr("toast.accepted"));
+    toast(res.music_dropped || musicPending ? tr("music.dropped") : tr("toast.accepted"));
     state.jobs = [job, ...state.jobs.filter((j) => j.id !== job.id)];
     state.jobsLoaded = true;
     go("videos", { replace: true });

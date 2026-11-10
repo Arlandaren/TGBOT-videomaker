@@ -253,12 +253,16 @@ def _own_music(cfg: Settings, user_id: int, music_id: Any) -> Path | None:
     return next(iter(sorted(folder.glob("track.*"))), None)
 
 
-def _drop_older_tracks(cfg: Settings, user_id: int, *, keep: Path) -> None:
+def _drop_older_tracks(cfg: Settings, user_id: int, *, keep: Path, started: float) -> None:
     """У человека живёт один трек — последний проверенный.
 
     Шесть проверок в минуту по 25 МБ, пока уборщик не пришёл через два часа, —
     это гигабайты треков одного человека. Прежние ему уже не нужны: в `finish`
     уходит только последний `music_id`.
+
+    «Последний» — по моменту, когда человек вставил ссылку, а не когда звук
+    скачался: медленная проверка прежней ссылки, закончив позже, не имеет права
+    снести свежий трек, который приложение уже показало «готов».
     """
     root = Path(cfg.work_dir)
     for folder in root.glob(f"{MUSIC_PREFIX}*"):
@@ -268,7 +272,9 @@ def _drop_older_tracks(cfg: Settings, user_id: int, *, keep: Path) -> None:
             meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue  # недописанная папка соседней проверки — не трогаем
-        if isinstance(meta, dict) and meta.get("user_id") == user_id:
+        if not isinstance(meta, dict) or meta.get("user_id") != user_id:
+            continue
+        if float(meta.get("started") or 0) < started:
             shutil.rmtree(folder, ignore_errors=True)
 
 
@@ -289,11 +295,13 @@ async def music_check(request: web.Request) -> web.Response:
     db_user = await _db_user(request)
     if db_user.is_blocked:
         return await _fail(request, 403, "api.blocked")
-    if not _allow_music_check(request.app[MUSIC_CHECKS_KEY], user.id):
-        return await _fail(request, 429, "music.too_many")
     link = reel_audio.parse_reel_link(str((body or {}).get("url") or "")[:2000])
     if link is None:
+        # До лимита: недописанная ссылка, пока её набирают, — не поход в
+        # Instagram, и съедать ею проверки настоящей ссылки нельзя.
         return await _fail(request, 400, "music.bad_link")
+    if not _allow_music_check(request.app[MUSIC_CHECKS_KEY], user.id):
+        return await _fail(request, 429, "music.too_many")
     # Тот же запас диска, что у приёма видео: под базу и монтаж место остаётся
     # при любом потоке ссылок.
     free = shutil.disk_usage(cfg.work_dir).free - DISK_RESERVE_MB * 1024 * 1024
@@ -301,15 +309,17 @@ async def music_check(request: web.Request) -> web.Response:
         return await _fail(request, 507, "api.no_space")
     music_id = uuid.uuid4().hex
     folder = _music_dir(cfg, music_id)
+    started = time.time()
     try:
         link = await reel_audio.resolve_share(link)
         folder.mkdir(parents=True, exist_ok=True)
         async with _fetch_gate:
             track = await reel_audio.fetch_reel_audio(link.url, folder)
         (folder / "meta.json").write_text(
-            json.dumps({"user_id": user.id, "duration": track.duration}), encoding="utf-8"
+            json.dumps({"user_id": user.id, "duration": track.duration, "started": started}),
+            encoding="utf-8",
         )
-        _drop_older_tracks(cfg, user.id, keep=folder)
+        _drop_older_tracks(cfg, user.id, keep=folder, started=started)
     except reel_audio.ReelAudioError as e:
         shutil.rmtree(folder, ignore_errors=True)
         return await _fail(request, _MUSIC_STATUS.get(e.code, 502), f"music.{e.code}")

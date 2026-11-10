@@ -258,3 +258,23 @@ async def test_a_hung_download_is_killed(tmp_path, fake_ytdlp, monkeypatch):
         await fetch_reel_audio(REEL, tmp_path)
     assert e.value.code == "instagram_down"
     assert not list(tmp_path.glob("track.*"))
+
+
+@pytest.mark.parametrize("stderr, code", [
+    ("ERROR: [Instagram] X: Requested content is not available, rate-limit reached or login required. "
+     "You have exceeded the rate-limit for accessing posts anonymously", "instagram_down"),
+    ("ERROR: [Instagram] X: There is no video in this post", "no_audio"),
+])
+def test_the_rate_limit_and_photo_posts_are_told_apart(stderr, code):
+    """Лимит Instagram — это «не ответил, попробуйте позже», а не «рилс закрыт»;
+    пост с фотографиями — «нет звука», а не поломка yt-dlp."""
+    assert reel_audio._classify(stderr) == code
+
+
+async def test_every_failure_is_logged_with_its_code(tmp_path, fake_ytdlp, caplog):
+    """Сигнал здоровья yt-dlp — все отказы с кодом, а не только неузнанные."""
+    fake_ytdlp("private")
+    with caplog.at_level(logging.WARNING, logger=reel_audio.__name__):
+        with pytest.raises(ReelAudioError):
+            await fetch_reel_audio(REEL, tmp_path)
+    assert "unavailable" in caplog.text

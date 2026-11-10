@@ -46,7 +46,10 @@ def test_error_codes_raised_by_the_pipeline_are_known():
         src = path.read_text(encoding="utf-8")
         for m in re.finditer(r"raise JobError\(", src):
             # Вызов бывает многострочным: код — последний строковый литерал до «)» в конце вызова.
-            call = src[m.end(): m.end() + 400].split("\n        )")[0].split(")\n")[0]
+            # Пустая строка — граница: вызов через неё не переходит, а окно в 400
+            # символов иначе дотягивалось до литералов соседней функции.
+            call = (src[m.end(): m.end() + 400].split("\n\n")[0]
+                    .split("\n        )")[0].split(")\n")[0])
             codes = re.findall(r'"([a-z_]+)"\s*,?\s*$', call.strip())
             if codes:
                 raised.add(codes[-1])

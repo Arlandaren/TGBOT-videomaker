@@ -680,3 +680,95 @@ async def test_a_job_without_music_gets_none(tmp_path, monkeypatch):
     with pytest.raises(tasks.JobError):
         await tasks.process_job({"redis": FakeRedis()}, "job-1")
     assert "music_file" in got and got["music_file"] is None
+
+
+# ------------------------------------------------- перерендер сводит звук
+
+
+def _rerender_harness(tmp_path, monkeypatch, *, music_key=None, mix_fails=False):
+    from types import SimpleNamespace
+
+    from src.pipeline.audio_post import AudioTrack
+    from src.worker import tasks
+
+    got: dict = {"mix": []}
+
+    async def fake_get_job(job_id):
+        return SimpleNamespace(id="job-1", edl=edl_of().model_dump(),
+                               options={"cut": False, "sfx": False},
+                               top_source_key=None, music_key=music_key)
+
+    async def fake_fetch(job, dst):
+        Path(dst).write_bytes(b"\0" * 1024)
+        return Path(dst)
+
+    class FakeStorage:
+        async def download(self, key, dst):
+            Path(dst).write_bytes(b"music")
+
+        async def upload(self, path, key, **k):
+            return key
+
+        def key_for(self, *parts):
+            return "/".join(parts)
+
+    def fake_crop(src, dst, **k):
+        shutil.copy2(src, dst)
+        return Path(dst)
+
+    def fake_mix(edl, video, out, **k):
+        got["mix"].append(k)
+        if k.get("music_file") is not None:  # рабочую папку перерендер потом убирает
+            got["music_bytes"] = Path(k["music_file"]).read_bytes()
+        if mix_fails:
+            raise RuntimeError("ffmpeg упал")
+        Path(out).write_bytes(b"wav")
+        return AudioTrack(path=Path(out), duration=12.0)
+
+    def fake_plan(edl, video, **k):
+        got["audio_path"] = k.get("audio_path")
+        return SimpleNamespace()
+
+    async def fake_render(plan, out, **k):
+        Path(out).write_bytes(b"\0" * 64)
+
+    monkeypatch.setattr(tasks, "settings", Settings(_env_file=None, work_dir=tmp_path))
+    monkeypatch.setattr(tasks.repo, "get_job", fake_get_job)
+    monkeypatch.setattr(tasks, "fetch_source", fake_fetch)
+    monkeypatch.setattr(tasks, "storage", FakeStorage())
+    monkeypatch.setattr("src.pipeline.probe.probe", lambda *a, **k: info_of())
+    monkeypatch.setattr("src.pipeline.crop.autocrop", fake_crop)
+    monkeypatch.setattr("src.pipeline.audio_post.build_audio", fake_mix)
+    monkeypatch.setattr("src.core.render_plan.build_plan", fake_plan)
+    monkeypatch.setattr("src.pipeline.render.arender_remotion", fake_render)
+
+    class FakeRedis:
+        async def set(self, *a, **k):
+            return None
+
+    return tasks, FakeRedis, got
+
+
+async def test_the_rerender_mixes_the_sound_like_the_first_pass(tmp_path, monkeypatch):
+    """Ролик в другой теме звучит как первый: громкость, эффекты — те же опции."""
+    tasks, FakeRedis, got = _rerender_harness(tmp_path, monkeypatch)
+    await tasks.rerender_job({"redis": FakeRedis()}, "job-1", "pulse")
+    assert len(got["mix"]) == 1, "сведение в перерендере не позвали"
+    mix = got["mix"][0]
+    assert mix["apply_cuts"] is False and mix["sfx"] is False
+    assert mix["music_file"] is None
+    assert got["audio_path"] is not None and Path(got["audio_path"]).name == "audio.wav"
+
+
+async def test_the_rerender_keeps_the_reel_music(tmp_path, monkeypatch):
+    tasks, FakeRedis, got = _rerender_harness(tmp_path, monkeypatch, music_key="sources/job-1/music.m4a")
+    await tasks.rerender_job({"redis": FakeRedis()}, "job-1", "pulse")
+    assert got["mix"][0]["music_file"] is not None
+    assert got["music_bytes"] == b"music"
+
+
+async def test_a_failed_mix_does_not_fail_the_rerender(tmp_path, monkeypatch):
+    tasks, FakeRedis, got = _rerender_harness(tmp_path, monkeypatch, mix_fails=True)
+    out = await tasks.rerender_job({"redis": FakeRedis()}, "job-1", "pulse")
+    assert out["result_key"]
+    assert got["audio_path"] is None

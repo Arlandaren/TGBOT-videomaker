@@ -330,6 +330,7 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
     from src.core.edl import EDL
     from src.core.preset import load_preset
     from src.core.render_plan import build_plan
+    from src.pipeline.audio_post import build_audio
     from src.core.track import load_track
     from src.pipeline.crop import autocrop, framing_spans
     from src.pipeline.cut import apply_cuts
@@ -388,6 +389,7 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
                     build_audio,
                     edl, cut_path, work / "audio.wav", preset=style,
                     apply_cuts=options.cut, sfx=options.sfx, cfg=settings,
+                    music_file=await fetch_music(job, work),
                 )
                 if track is not None:
                     audio_path = str(track.path)

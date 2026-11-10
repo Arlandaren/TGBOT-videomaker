@@ -193,7 +193,7 @@ git commit -m "Сведение: трек задачи из рилса, выро
 - [ ] **Step 1: Write the failing tests**
   - `test_money.py::test_the_music_track_is_kept_and_purged_with_the_job` — по образцу `test_the_top_source_is_kept_and_purged_with_the_job`: `music_key="sources/x/music.m4a"` сохраняется, после `mark_files_purged` равен `None`.
   - `test_retention.py`: задача с `music_key` → `purge_expired_files` удаляет и этот ключ (по образцу теста для `top_source_key`).
-  - `test_worker_loop.py`: (а) задача с `music_key` → `process_video` получил `music_file`, который существует и содержит байты из хранилища; (б) `storage.download` для музыки бросает `FileNotFoundError` → задача DONE, `music_file is None`; (в) задача без `music_key` → `music_file is None`.
+  - `test_worker_loop.py`: (а) задача с `music_key` → `process_video` получил `music_file`, который существует и содержит байты из хранилища; (а2) то же для задачи «Два видео» (`top_source_key` и `music_key` разом) → `process_video` получил и `top_src`, и `music_file`; (б) `storage.download` для музыки бросает `FileNotFoundError` → задача DONE, `music_file is None`; (в) задача без `music_key` → `music_file is None`.
   - Подпись: задача с `music_key` и `edl={"music": None, …}` → в `_caption` есть текст `video.caption_music_lost`. С `edl={"music": {"source": "reel", "track": "reel", …}}` — нет. Без `music_key` — нет.
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -331,7 +331,7 @@ git commit -m "API: проверка ссылки на рилс и привяз�
 - [ ] **Step 2: Headless check on the stand** (рецепт в памяти `miniapp-headless-preview`). Заглушка `api/music` отвечает `{"music_id": "…", "duration": 36.1}`. Снять шаг 2 в состояниях empty / checking / ready / error на ширинах 320 и 390 в обеих темах. Аудит из рецепта: нет `scrollWidth > clientWidth`, мишени ≥ 40 px, текст ≥ 12 px.
 Expected: по снимкам строка музыки на месте, ничего не вылезает. Снимки посмотреть глазами.
 
-- [ ] **Step 3: Check the finish body.** На стенде перехватить `fetch` и убедиться, что при `ready` в теле `finish` есть `music_id`, при `checking` и `error` его нет.
+- [ ] **Step 3: Check the finish body in both layouts.** На стенде перехватить `fetch` и убедиться, что при `ready` в теле `finish` есть `music_id`, при `checking` и `error` его нет. Проверить в «Одно видео» и в «Два видео»: в обоих поле музыки видно на шаге 2, и в «Двух видео» `music_id` уходит вместе с `top_upload_id`. Переключение раскладки трек не сбрасывает.
 
 - [ ] **Step 4: Commit** — только свои ханки трёх файлов.
 

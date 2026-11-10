@@ -36,7 +36,7 @@ from aiogram import Bot
 from aiogram.types import LabeledPrice
 from aiohttp import web
 
-from src.core.config import CLAIMED_PREFIX, UPLOAD_PREFIX, Settings
+from src.core.config import CLAIMED_PREFIX, MUSIC_PREFIX, UPLOAD_PREFIX, Settings
 from src.core.geometry import load_metrics
 from src.core.i18n import LANGS, error_text, lang_of, stage_title, t, tokens_text
 from src.core.options import ACCENTS, FONTS, JobOptions, theme_label
@@ -208,6 +208,87 @@ def _renew_finished_uploads(cfg: Settings, user_id: int, current: Path) -> None:
                 os.utime(data, (now, now))
         except (OSError, ValueError, AttributeError):
             continue  # папку убрали или забрали под сборку — не наше дело
+
+
+# ------------------------------------------------------------ музыка из рилса
+
+# Сколько ссылок в минуту проверяет один человек. Каждая проверка — поход
+# сервера в Instagram: без предела один аккаунт гонял бы его с нашего IP, пока
+# Instagram не закроет нам выгрузку для всех. Счёт в памяти: приложение — один
+# процесс (служба reelbot-bot).
+MUSIC_CHECKS_PER_MINUTE = 6
+# Сколько скачиваний идёт разом на весь сервер. Каждое — процесс yt-dlp.
+MAX_PARALLEL_FETCHES = 2
+MUSIC_CHECKS_KEY = web.AppKey("music_checks", dict)
+_fetch_gate = asyncio.Semaphore(MAX_PARALLEL_FETCHES)
+_MUSIC_STATUS = {"bad_link": 400, "no_audio": 422, "unavailable": 422,
+                 "instagram_down": 502, "too_big": 413}
+
+
+def _music_dir(cfg: Settings, music_id: str) -> Path:
+    return Path(cfg.work_dir) / f"{MUSIC_PREFIX}{music_id}"
+
+
+def _allow_music_check(checks: dict[int, list[float]], user_id: int) -> bool:
+    now = time.time()
+    recent = [t0 for t0 in checks.get(user_id, []) if now - t0 < 60]
+    allowed = len(recent) < MUSIC_CHECKS_PER_MINUTE
+    if allowed:
+        recent.append(now)
+    checks[user_id] = recent
+    return allowed
+
+
+def _own_music(cfg: Settings, user_id: int, music_id: Any) -> Path | None:
+    """Файл трека этого пользователя или None — чужой, неизвестный, убранный."""
+    if not isinstance(music_id, str) or not _UPLOAD_ID.match(music_id):
+        return None
+    folder = _music_dir(cfg, music_id)
+    try:
+        meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(meta, dict) or meta.get("user_id") != user_id:
+        return None
+    return next(iter(sorted(folder.glob("track.*"))), None)
+
+
+async def music_check(request: web.Request) -> web.Response:
+    """Ссылка на рилс → звук у нас в папке → `music_id` для `finish`.
+
+    Проверка сразу, а не в монтаже: человек видит «нет звука» или «закрыт»,
+    пока ещё на экране оформления, и может вставить другую ссылку.
+    """
+    from src.pipeline import reel_audio
+
+    cfg = request.app[CFG_KEY]
+    user: WebAppUser = request[USER_KEY]
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    if not _allow_music_check(request.app[MUSIC_CHECKS_KEY], user.id):
+        return await _fail(request, 429, "music.too_many")
+    link = reel_audio.parse_reel_link(str((body or {}).get("url") or "")[:2000])
+    if link is None:
+        return await _fail(request, 400, "music.bad_link")
+    music_id = uuid.uuid4().hex
+    folder = _music_dir(cfg, music_id)
+    try:
+        link = await reel_audio.resolve_share(link)
+        folder.mkdir(parents=True, exist_ok=True)
+        async with _fetch_gate:
+            track = await reel_audio.fetch_reel_audio(link.url, folder)
+        (folder / "meta.json").write_text(
+            json.dumps({"user_id": user.id, "duration": track.duration}), encoding="utf-8"
+        )
+    except reel_audio.ReelAudioError as e:
+        shutil.rmtree(folder, ignore_errors=True)
+        return await _fail(request, _MUSIC_STATUS.get(e.code, 502), f"music.{e.code}")
+    except Exception:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise
+    return web.json_response({"music_id": music_id, "duration": track.duration})
 
 
 def _promised_bytes(open_uploads: list[tuple[Path, dict[str, Any]]]) -> int:
@@ -663,6 +744,12 @@ async def upload_finish(request: web.Request) -> web.Response:
         received = (folder / "data").stat().st_size
         return await _fail(request, 409, "api.incomplete", extra={"received": received})
     body = await request.json()
+    # Трек «Музыки из рилса» отказов не порождает: монтаж мог быть запущен, пока
+    # ссылка ещё проверялась, или папку трека уже убрали. Тогда ролик просто
+    # без музыки, а приложение об этом скажет. Отказ здесь стоил бы человеку
+    # повторной заливки видео ради музыки.
+    want_music = body.get("music_id") is not None
+    music_path = _own_music(cfg, request[USER_KEY].id, body.get("music_id")) if want_music else None
     # «Два видео»: верхний приём проверяется ДО того, как забран нижний. Чужой
     # или недогруженный верхний — отказ, а свой нижний цел, и его можно
     # отправить снова с правильным верхним.
@@ -756,6 +843,19 @@ async def upload_finish(request: web.Request) -> web.Response:
                 top_key = storage.key_for(SOURCES, str(job.id), "top.mp4")
                 await storage.upload(top_folder / "data", top_key, content_type="video/mp4")
                 await repo.update_job(job.id, top_source_key=top_key)
+            music_attached = False
+            if music_path is not None:
+                try:
+                    music_key = storage.key_for(SOURCES, str(job.id), "music" + music_path.suffix)
+                    await storage.upload(music_path, music_key,
+                                         content_type="audio/mp4" if music_path.suffix == ".m4a"
+                                         else "application/octet-stream")
+                    await repo.update_job(job.id, music_key=music_key)
+                    music_attached = True
+                except Exception as e:  # noqa: BLE001 — без музыки ролик всё равно едет
+                    log.warning("задача %s: трек из рилса не залился: %s", job.id, e)
+                finally:
+                    shutil.rmtree(music_path.parent, ignore_errors=True)
             await repo.set_user_preset(user.id, preset)
             # Цвет и шрифт запоминаются между роликами, как и тема. Раньше
             # приложение каждый раз подставляло умолчание, и выбранная антиква
@@ -788,9 +888,12 @@ async def upload_finish(request: web.Request) -> web.Response:
     if status_id is not None:
         watch_job(bot, user.id, status_id, str(job.id), preset)
     fresh = await repo.get_job(job.id)
-    return web.json_response(
-        {"job": _job_view(fresh or job, live=None, secret=cfg.bot_token, lang=lang, cfg=cfg)}
-    )
+    view: dict[str, Any] = {
+        "job": _job_view(fresh or job, live=None, secret=cfg.bot_token, lang=lang, cfg=cfg)
+    }
+    if want_music and not music_attached:
+        view["music_dropped"] = True
+    return web.json_response(view)
 
 
 async def _live_progress(job_ids: list[str]) -> dict[str, dict[str, Any]]:
@@ -1177,6 +1280,7 @@ def create_app(bot: Bot, cfg: Settings) -> web.Application:
     )
     app[BOT_KEY] = bot
     app[CFG_KEY] = cfg
+    app[MUSIC_CHECKS_KEY] = {}
     app.router.add_get("/", index)
     app.router.add_static("/static/", STATIC)
     app.router.add_get("/media/{job_id}.mp4", media)
@@ -1185,6 +1289,7 @@ def create_app(bot: Bot, cfg: Settings) -> web.Application:
     app.router.add_post("/api/uploads", upload_start)
     app.router.add_put("/api/uploads/{upload_id}", upload_chunk)
     app.router.add_post("/api/uploads/{upload_id}/finish", upload_finish)
+    app.router.add_post("/api/music", music_check)
     app.router.add_get("/api/jobs", jobs_list)
     app.router.add_post("/api/jobs/{job_id}/send", job_send)
     app.router.add_post("/api/invoice", invoice)

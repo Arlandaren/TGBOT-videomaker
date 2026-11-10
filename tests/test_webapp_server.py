@@ -1072,3 +1072,209 @@ async def test_orders_sent_all_at_once_still_respect_the_limit(paying, monkeypat
     ))
     assert sorted(r.status for r in got) == [200] * 5 + [429] * 5
     assert len(fake.created) == 5
+
+
+# ------------------------------------------------------------ музыка из рилса
+
+REEL_URL = "https://www.instagram.com/reel/DfXkZV0Sbuu/?igsh=x"
+
+
+@pytest.fixture
+def reel_fetch(monkeypatch):
+    """Instagram без сети: «скачанный» трек — пара байт в папке приёма."""
+    from src.pipeline import reel_audio
+    from src.pipeline.reel_audio import ReelAudioError, ReelTrack
+
+    seen = {"urls": [], "fail": None}
+
+    async def fake_fetch(url, dst_dir):
+        seen["urls"].append(url)
+        if seen["fail"]:
+            raise ReelAudioError(seen["fail"])
+        path = Path(dst_dir) / "track.m4a"
+        path.write_bytes(b"m4a!")
+        return ReelTrack(path=path, duration=36.155)
+
+    monkeypatch.setattr(reel_audio, "fetch_reel_audio", fake_fetch)
+    return seen
+
+
+async def _music(client, url=REEL_URL, user_id=42):
+    return await client.post("/api/music", json={"url": url}, headers=auth(user_id))
+
+
+async def test_a_reel_link_gives_a_music_id(client, reel_fetch):
+    from src.webapp import server as mod
+
+    r = await _music(client)
+    assert r.status == 200
+    body = await r.json()
+    assert body["duration"] == pytest.approx(36.155)
+    folder = mod._music_dir(client.server.app[mod.CFG_KEY], body["music_id"])
+    assert (folder / "track.m4a").read_bytes() == b"m4a!"
+    assert json.loads((folder / "meta.json").read_text())["user_id"] == 42
+    assert reel_fetch["urls"] == ["https://www.instagram.com/reel/DfXkZV0Sbuu/"]
+
+
+async def test_a_non_instagram_link_is_refused_without_downloading(client, reel_fetch):
+    r = await _music(client, "https://evil.com/reel/DfXkZV0Sbuu/")
+    assert r.status == 400
+    assert reel_fetch["urls"] == []
+
+
+@pytest.mark.parametrize("code, status", [
+    ("no_audio", 422), ("unavailable", 422), ("instagram_down", 502), ("too_big", 413),
+])
+async def test_each_reel_failure_has_its_own_message(client, reel_fetch, code, status):
+    from src.core.i18n import t
+    from src.webapp import server as mod
+
+    reel_fetch["fail"] = code
+    r = await _music(client)
+    assert r.status == status
+    assert (await r.json())["error"] == t(f"music.{code}", "ru")
+    assert not list(Path(client.server.app[mod.CFG_KEY].work_dir).glob("music-*"))
+
+
+async def test_the_seventh_check_in_a_minute_is_refused(client, reel_fetch):
+    for _ in range(6):
+        assert (await _music(client)).status == 200
+    assert (await _music(client)).status == 429
+    assert (await _music(client, user_id=43)).status == 200, "лимит одного задел другого"
+
+
+@pytest.fixture
+def finish_ok(client, monkeypatch):
+    """`finish`, который доходит до очереди: задача создаётся, файлы «заливаются»."""
+    import uuid
+    from types import SimpleNamespace
+
+    from src.db import repo
+    from src.db.models import Job, JobStatus
+    from src.pipeline import probe as probe_mod
+    from src.webapp import server as mod
+    from src.worker import tasks
+
+    seen = {"uploads": {}, "updates": {}, "enqueued": 0}
+    job = Job(id=uuid.uuid4(), user_id=42, status=JobStatus.QUEUED, preset="glass", options={},
+              progress=0.0, delivered=False)
+
+    async def upsert_user(*a, **k):
+        return SimpleNamespace(id=42, is_blocked=False, is_admin=False, balance=3, lang="ru",
+                               language_code="ru", interface_lang=None)
+
+    async def zero(*a, **k):
+        return 0
+
+    async def create_job(*a, **k):
+        return job
+
+    async def update_job(job_id, **k):
+        seen["updates"].update(k)
+
+    async def noop(*a, **k):
+        return None
+
+    async def get_job(job_id):
+        return job
+
+    async def upload(path, key, **k):
+        seen["uploads"][key] = Path(path).read_bytes()
+        return key
+
+    class Queue:
+        async def enqueue_job(self, *a, **k):
+            seen["enqueued"] += 1
+
+        async def close(self):
+            return None
+
+    async def get_queue(*a, **k):
+        return Queue()
+
+    monkeypatch.setattr(repo, "upsert_user", upsert_user)
+    monkeypatch.setattr(repo, "active_jobs_count", zero)
+    monkeypatch.setattr(repo, "create_job", create_job)
+    monkeypatch.setattr(repo, "update_job", update_job)
+    monkeypatch.setattr(repo, "set_user_preset", noop)
+    monkeypatch.setattr(repo, "set_user_settings", noop)
+    monkeypatch.setattr(repo, "get_job", get_job)
+    monkeypatch.setattr(mod.storage, "upload", upload)
+    monkeypatch.setattr(tasks, "get_queue", get_queue)
+    monkeypatch.setattr(probe_mod, "probe", lambda p: SimpleNamespace(duration=20.0, has_audio=True))
+    return seen
+
+
+async def test_finish_attaches_the_music_to_the_job(client, reel_fetch, finish_ok):
+    from src.webapp import server as mod
+
+    music_id = (await (await _music(client)).json())["music_id"]
+    bottom = await _uploaded(client, b"abcd")
+    r = await client.post(f"/api/uploads/{bottom}/finish",
+                          json={"preset": "glass", "options": {}, "music_id": music_id},
+                          headers=auth())
+    assert r.status == 200
+    body = await r.json()
+    assert not body.get("music_dropped")
+    key = finish_ok["updates"]["music_key"]
+    assert key.endswith("/music.m4a")
+    assert finish_ok["uploads"][key] == b"m4a!"
+    assert not mod._music_dir(client.server.app[mod.CFG_KEY], music_id).exists()
+
+
+@pytest.mark.parametrize("which", ["foreign", "missing", "junk"])
+async def test_a_bad_music_id_only_drops_the_music(client, reel_fetch, finish_ok, which):
+    """Монтаж запущен, пока трек ещё проверялся, или папку трека уже убрали:
+    видео не перезаливается, ролик просто без музыки."""
+    music_id = {
+        "foreign": (await (await _music(client, user_id=43)).json())["music_id"],
+        "missing": "0" * 32,
+        "junk": "../x",
+    }[which]
+    bottom = await _uploaded(client, b"abcd")
+    r = await client.post(f"/api/uploads/{bottom}/finish",
+                          json={"preset": "glass", "options": {}, "music_id": music_id},
+                          headers=auth())
+    assert r.status == 200
+    assert (await r.json())["music_dropped"] is True
+    assert "music_key" not in finish_ok["updates"]
+    assert finish_ok["enqueued"] == 1
+
+
+async def test_a_music_upload_failure_costs_only_the_music(client, reel_fetch, finish_ok, monkeypatch):
+    from src.webapp import server as mod
+
+    real = mod.storage.upload
+
+    async def flaky(path, key, **k):
+        if key.endswith("music.m4a"):
+            raise RuntimeError("хранилище легло")
+        return await real(path, key, **k)
+
+    monkeypatch.setattr(mod.storage, "upload", flaky)
+    music_id = (await (await _music(client)).json())["music_id"]
+    bottom = await _uploaded(client, b"abcd")
+    r = await client.post(f"/api/uploads/{bottom}/finish",
+                          json={"preset": "glass", "options": {}, "music_id": music_id},
+                          headers=auth())
+    assert r.status == 200
+    assert (await r.json())["music_dropped"] is True
+    assert finish_ok["enqueued"] == 1
+
+
+async def test_an_abandoned_music_folder_is_swept_like_an_upload(tmp_path, monkeypatch):
+    import os
+    import time as _time
+
+    from src.worker import tasks
+
+    monkeypatch.setattr(tasks.settings, "work_dir", tmp_path)
+    old_dir, fresh_dir = tmp_path / "music-old", tmp_path / "music-fresh"
+    for d, age in ((old_dir, 3 * 3600), (fresh_dir, 3600)):
+        d.mkdir()
+        (d / "track.m4a").write_bytes(b"x")
+        t = _time.time() - age
+        os.utime(d, (t, t))
+    await tasks.cleanup_old_files({})
+    assert not old_dir.exists(), "брошенный трек пролежал бы сутки"
+    assert fresh_dir.exists()

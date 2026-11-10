@@ -297,6 +297,23 @@ TEXTS: dict[str, dict[str, str]] = {
     # Человек выбрал музыку из рилса, а в сведение она не попала (трек пропал
     # из хранилища или не читается). Ролик всё равно отдан — молчать об этом
     # нельзя: человек ждал музыку.
+    # «Музыка из рилса» в Mini App: почему звук по ссылке не достался.
+    "music.bad_link": {"ru": "Это не ссылка на рилс Instagram", "en": "That's not an Instagram reel link"},
+    "music.no_audio": {"ru": "В этом рилсе нет звука", "en": "This reel has no sound"},
+    "music.unavailable": {"ru": "Рилс закрыт или удалён", "en": "The reel is private or deleted"},
+    "music.instagram_down": {
+        "ru": "Instagram не ответил, попробуйте ещё раз",
+        "en": "Instagram didn't respond, try again",
+    },
+    "music.too_big": {"ru": "Звук в этом рилсе слишком большой", "en": "This reel's sound is too large"},
+    "music.too_many": {
+        "ru": "Слишком много ссылок подряд, подождите минуту",
+        "en": "Too many links in a row, wait a minute",
+    },
+    "music.dropped": {
+        "ru": "Музыка не успела подготовиться — ролик будет без неё",
+        "en": "The music wasn't ready — the video will have none",
+    },
     "video.caption_music_lost": {
         "ru": "Музыку из рилса подложить не удалось — ролик без неё.",
         "en": "Couldn't add the reel's music — the video has none.",

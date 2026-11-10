@@ -253,6 +253,25 @@ def _own_music(cfg: Settings, user_id: int, music_id: Any) -> Path | None:
     return next(iter(sorted(folder.glob("track.*"))), None)
 
 
+def _drop_older_tracks(cfg: Settings, user_id: int, *, keep: Path) -> None:
+    """У человека живёт один трек — последний проверенный.
+
+    Шесть проверок в минуту по 25 МБ, пока уборщик не пришёл через два часа, —
+    это гигабайты треков одного человека. Прежние ему уже не нужны: в `finish`
+    уходит только последний `music_id`.
+    """
+    root = Path(cfg.work_dir)
+    for folder in root.glob(f"{MUSIC_PREFIX}*"):
+        if folder == keep:
+            continue
+        try:
+            meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue  # недописанная папка соседней проверки — не трогаем
+        if isinstance(meta, dict) and meta.get("user_id") == user_id:
+            shutil.rmtree(folder, ignore_errors=True)
+
+
 async def music_check(request: web.Request) -> web.Response:
     """Ссылка на рилс → звук у нас в папке → `music_id` для `finish`.
 
@@ -267,11 +286,19 @@ async def music_check(request: web.Request) -> web.Response:
         body = await request.json()
     except ValueError:
         body = {}
+    db_user = await _db_user(request)
+    if db_user.is_blocked:
+        return await _fail(request, 403, "api.blocked")
     if not _allow_music_check(request.app[MUSIC_CHECKS_KEY], user.id):
         return await _fail(request, 429, "music.too_many")
     link = reel_audio.parse_reel_link(str((body or {}).get("url") or "")[:2000])
     if link is None:
         return await _fail(request, 400, "music.bad_link")
+    # Тот же запас диска, что у приёма видео: под базу и монтаж место остаётся
+    # при любом потоке ссылок.
+    free = shutil.disk_usage(cfg.work_dir).free - DISK_RESERVE_MB * 1024 * 1024
+    if free < reel_audio.REEL_MAX_BYTES:
+        return await _fail(request, 507, "api.no_space")
     music_id = uuid.uuid4().hex
     folder = _music_dir(cfg, music_id)
     try:
@@ -282,6 +309,7 @@ async def music_check(request: web.Request) -> web.Response:
         (folder / "meta.json").write_text(
             json.dumps({"user_id": user.id, "duration": track.duration}), encoding="utf-8"
         )
+        _drop_older_tracks(cfg, user.id, keep=folder)
     except reel_audio.ReelAudioError as e:
         shutil.rmtree(folder, ignore_errors=True)
         return await _fail(request, _MUSIC_STATUS.get(e.code, 502), f"music.{e.code}")

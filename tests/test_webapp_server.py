@@ -1085,7 +1085,17 @@ def reel_fetch(monkeypatch):
     from src.pipeline import reel_audio
     from src.pipeline.reel_audio import ReelAudioError, ReelTrack
 
+    from types import SimpleNamespace
+
+    from src.db import repo
+
     seen = {"urls": [], "fail": None}
+
+    async def upsert_user(user_id, **k):
+        return SimpleNamespace(id=user_id, is_blocked=False, is_admin=False, balance=3, lang="ru",
+                               language_code="ru", interface_lang=None)
+
+    monkeypatch.setattr(repo, "upsert_user", upsert_user)
 
     async def fake_fetch(url, dst_dir):
         seen["urls"].append(url)
@@ -1278,3 +1288,45 @@ async def test_an_abandoned_music_folder_is_swept_like_an_upload(tmp_path, monke
     await tasks.cleanup_old_files({})
     assert not old_dir.exists(), "брошенный трек пролежал бы сутки"
     assert fresh_dir.exists()
+
+
+async def test_a_new_track_replaces_the_users_previous_one(client, reel_fetch):
+    """Шесть проверок в минуту по 25 МБ за два часа до уборки — гигабайты чужих
+    треков. У человека живёт только последний: прежние ему уже не нужны."""
+    from src.webapp import server as mod
+
+    cfg = client.server.app[mod.CFG_KEY]
+    first = (await (await _music(client)).json())["music_id"]
+    other = (await (await _music(client, user_id=43)).json())["music_id"]
+    second = (await (await _music(client)).json())["music_id"]
+    assert not mod._music_dir(cfg, first).exists()
+    assert mod._music_dir(cfg, second).exists()
+    assert mod._music_dir(cfg, other).exists(), "снесли трек другого человека"
+
+
+async def test_a_blocked_user_cannot_check_links(client, reel_fetch, monkeypatch):
+    from types import SimpleNamespace
+
+    from src.db import repo
+
+    async def blocked(*a, **k):
+        return SimpleNamespace(id=42, is_blocked=True, is_admin=False, balance=0, lang="ru",
+                               language_code="ru", interface_lang=None)
+
+    monkeypatch.setattr(repo, "upsert_user", blocked)
+    r = await _music(client)
+    assert r.status == 403
+    assert reel_fetch["urls"] == []
+
+
+async def test_no_track_is_fetched_onto_a_full_disk(client, reel_fetch, monkeypatch):
+    import shutil as _shutil
+    from collections import namedtuple
+
+    from src.webapp import server as mod
+
+    usage = namedtuple("usage", "total used free")
+    monkeypatch.setattr(_shutil, "disk_usage", lambda p: usage(1, 1, mod.DISK_RESERVE_MB * 1024 * 1024))
+    r = await _music(client)
+    assert r.status == 507
+    assert reel_fetch["urls"] == []

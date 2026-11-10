@@ -346,7 +346,7 @@ def resolve_music(
             log.warning("трек из рилса %s не читается — ролик соберётся без музыки", music_file)
             return None
         return Path(music_file), Music(
-            source="reel", track="reel", gain_db=0.0, duck_db=preset.audio.duck_db
+            source="reel", track="reel", gain_db=0.0, duck_db=REEL_DUCK_DB
         )
     spec = edl.music
     if spec is not None and spec.source == "reel":
@@ -549,9 +549,13 @@ def sfx_marks(
 # --------------------------------------------------------------------------- сведение
 
 
-# Насколько трек из рилса тише голоса ДО дакинга. 16 LU — «фоном, но слышно»:
-# в паузах музыка различима, под речью дакинг уводит её ещё ниже.
-REEL_MUSIC_BELOW_VOICE_DB = 16.0
+# Насколько трек из рилса тише голоса ДО дакинга, и насколько он приседает под
+# речью. Человек просил «трек тихо играет фоном ПОД речью» — значит, его слышно
+# и пока говорят. Мерено на живой речи (samples/phase-0) с треком из рилса:
+# при 16 LU и дакинге темы −12 трек под голосом не добавлял к миксу ни десятой
+# децибела, то есть пропадал. 14 LU и −6 оставляют его на ~20 LU под голосом.
+REEL_MUSIC_BELOW_VOICE_DB = 14.0
+REEL_DUCK_DB = -6.0
 
 
 def duck_ratio(duck_db: float, *, target_lufs: float = -16.0) -> float:

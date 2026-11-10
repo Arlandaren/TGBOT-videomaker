@@ -18,6 +18,7 @@ from src.core.preset import load_preset
 from src.core.proc import capture, ffmpeg
 from src.pipeline.audio import measure_ebur128
 from src.pipeline.audio_post import (
+    REEL_DUCK_DB,
     REEL_MUSIC_BELOW_VOICE_DB,
     SFX_PROFILES,
     SFX_SWISH,
@@ -833,3 +834,16 @@ def test_a_reel_sheet_without_its_file_plays_without_music(tmp_path, voice_video
 def test_an_old_sheet_still_reads():
     old = Music.model_validate({"track": "x.mp3", "gain_db": -20, "duck_db": -12})
     assert old.source == "asset"
+
+
+def test_a_reel_track_stays_audible_under_the_voice(tmp_path, voice_video):
+    """«Тихо играет фоном под речью»: под голосом трек приседает на
+    REEL_DUCK_DB, а не уходит в тишину, как подложка темы с её −12."""
+    music = _sine(tmp_path / "m.wav", seconds=2.5)
+    preset = load_preset("glass")
+    assert abs(preset.audio.duck_db) > abs(REEL_DUCK_DB), "тест потерял смысл"
+    track = build_audio(simple_edl(), voice_video, tmp_path / "a.wav",
+                        preset=preset, cfg=cfg_with(tmp_path), music_file=music)
+    assert track is not None
+    drop = band_rms(track.path, MUSIC_HZ, 3.8, 1.5) - band_rms(track.path, MUSIC_HZ, 1.0, 1.5)
+    assert abs(drop - abs(REEL_DUCK_DB)) < 1.5, f"трек присел на {drop:.1f} дБ"

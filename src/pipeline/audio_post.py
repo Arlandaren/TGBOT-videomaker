@@ -332,11 +332,26 @@ def _find_asset(name: str, root: Path, suffixes: tuple[str, ...]) -> Path | None
 
 
 def resolve_music(
-    edl: EDL, *, preset: Preset, cfg: Settings | None = None
+    edl: EDL, *, preset: Preset, cfg: Settings | None = None, music_file: Path | None = None
 ) -> tuple[Path, Music] | None:
-    """Подложка для ролика: сначала EDL, потом пресет. None — играем без музыки."""
+    """Подложка для ролика: трек задачи, потом EDL, потом пресет. None — без музыки.
+
+    `music_file` — звук рилса, присланный человеком. Он главнее подложки темы:
+    человек выбрал его сам. Лист, где записан трек из рилса, без самого файла
+    играет без музыки — метку «reel» в assets/music не ищем.
+    """
     cfg = cfg or default_settings
+    if music_file is not None:
+        if _audio_duration(music_file) is None:
+            log.warning("трек из рилса %s не читается — ролик соберётся без музыки", music_file)
+            return None
+        return Path(music_file), Music(
+            source="reel", track="reel", gain_db=0.0, duck_db=preset.audio.duck_db
+        )
     spec = edl.music
+    if spec is not None and spec.source == "reel":
+        log.warning("в листе трек из рилса, а файла нет — ролик соберётся без музыки")
+        return None
     if spec is None and preset.audio.music:
         spec = Music(
             track=preset.audio.music,
@@ -534,6 +549,11 @@ def sfx_marks(
 # --------------------------------------------------------------------------- сведение
 
 
+# Насколько трек из рилса тише голоса ДО дакинга. 16 LU — «фоном, но слышно»:
+# в паузах музыка различима, под речью дакинг уводит её ещё ниже.
+REEL_MUSIC_BELOW_VOICE_DB = 16.0
+
+
 def duck_ratio(duck_db: float, *, target_lufs: float = -16.0) -> float:
     """Коэффициент компрессии, дающий примерно `duck_db` подавления музыки.
 
@@ -602,6 +622,7 @@ def build_audio(
     apply_cuts: bool = True,
     sfx: bool = True,
     cfg: Settings | None = None,
+    music_file: Path | None = None,
 ) -> AudioTrack | None:
     """Нарезанное видео + EDL → готовая звуковая дорожка. None, если звука нет.
 
@@ -655,7 +676,7 @@ def build_audio(
     elif not edl.sfx:
         edl.sfx = plan_sfx(edl, preset=preset, apply_cuts=apply_cuts)
     marks = sfx_marks(edl, edl.sfx, cfg=cfg, apply_cuts=apply_cuts)
-    music = resolve_music(edl, preset=preset, cfg=cfg)
+    music = resolve_music(edl, preset=preset, cfg=cfg, music_file=music_file)
     # edl.json — артефакт джоба, и он обязан описывать РЕАЛЬНЫЙ микс. Раньше
     # незарезолвленная подложка оставалась в EDL, и два артефакта одного джоба
     # противоречили друг другу: отчёт писал music=None, а edl.json — имя трека.
@@ -682,7 +703,19 @@ def build_audio(
         # -stream_loop вместо aloop: демуксер повторяет файл сам, без буфера в
         # памяти на всю длину трека.
         inputs += ["-stream_loop", "-1", "-i", str(path)]
-        chain = [AFORMAT, f"atrim=0:{total:.3f}", "asetpts=N/SR/TB", f"volume={spec.gain_db:g}dB"]
+        chain = [AFORMAT, f"atrim=0:{total:.3f}", "asetpts=N/SR/TB"]
+        if spec.source == "reel":
+            # Трендовые треки мастерят как попало: у одного −8 LUFS, у другого
+            # −20. Фиксированное «−20 дБ от исходного» давало бы то мешающий,
+            # то неслышный фон, поэтому трек сперва выравнивается к уровню на
+            # REEL_MUSIC_BELOW_VOICE_DB под голосом, а дакинг ниже приглушает
+            # его ещё, пока человек говорит.
+            chain += [
+                f"loudnorm=I={target - REEL_MUSIC_BELOW_VOICE_DB:g}:TP=-6:LRA=11",
+                AFORMAT,
+            ]
+        else:
+            chain.append(f"volume={spec.gain_db:g}dB")
         if fade > 0:
             chain.append(f"afade=t=in:st=0:d={fade:g}")
             chain.append(f"afade=t=out:st={max(0.0, total - fade):.3f}:d={fade:g}")

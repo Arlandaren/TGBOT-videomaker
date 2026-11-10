@@ -18,6 +18,7 @@ from src.core.preset import load_preset
 from src.core.proc import capture, ffmpeg
 from src.pipeline.audio import measure_ebur128
 from src.pipeline.audio_post import (
+    REEL_MUSIC_BELOW_VOICE_DB,
     SFX_PROFILES,
     SFX_SWISH,
     SFX_TICK,
@@ -754,3 +755,81 @@ def test_the_tick_lands_before_the_first_word(tmp_path, monkeypatch):
     second = marks[1]
     want = edl.words[3].start - CAPTION_SFX_LEAD_S - SFX_PROFILES[SFX_TICK].peak_at
     assert second.at == pytest.approx(want, abs=0.002)
+
+
+# ------------------------------------------------------------ музыка из рилса
+
+
+def _sine(path, *, seconds: float, gain_db: float = 0.0):
+    ffmpeg(["-f", "lavfi", "-i", f"sine=frequency={MUSIC_HZ}:duration={seconds:g}",
+            "-af", f"volume={gain_db:g}dB", "-c:a", "pcm_s16le", str(path)], timeout=60)
+    return path
+
+
+def test_a_reel_track_lands_in_the_edl_as_reel(tmp_path, voice_video, music_file):
+    """Трек из рилса — файл задачи, а не ассет: в листе метка, не путь машины."""
+    edl = simple_edl()
+    track = build_audio(edl, voice_video, tmp_path / "a.wav",
+                        cfg=cfg_with(tmp_path), music_file=music_file)
+    assert track is not None and track.music == "reel"
+    assert edl.music is not None
+    assert (edl.music.source, edl.music.track) == ("reel", "reel")
+
+
+def test_a_reel_track_is_levelled_whatever_its_loudness(tmp_path, silent_video):
+    """Трендовые треки мастерят как попало: тихий и громкий ложатся одинаково,
+    на 16 дБ под голосом."""
+    preset = load_preset("glass")
+    got = []
+    for gain in (-30.0, 0.0):
+        music = _sine(tmp_path / f"m{gain:g}.wav", seconds=2.5, gain_db=gain)
+        track = build_audio(simple_edl(), silent_video, tmp_path / f"a{gain:g}.wav",
+                            preset=preset, cfg=cfg_with(tmp_path), music_file=music)
+        assert track is not None
+        got.append(measure_ebur128(track.path)["i"])
+    quiet, loud = got
+    want = preset.audio.target_lufs - REEL_MUSIC_BELOW_VOICE_DB
+    assert abs(quiet - loud) < 3.0, f"тихий {quiet:.1f}, громкий {loud:.1f} LUFS"
+    for value in got:
+        assert value == pytest.approx(want, abs=3.0)
+
+
+@pytest.mark.parametrize("seconds", [0.6, 120.0])
+def test_a_reel_track_covers_the_whole_reel_exactly(tmp_path, silent_video, seconds):
+    """Длина дорожки с треком — ровно та же, что без него: трек не тянет и не
+    обрывает ролик, хоть короче секунды, хоть на две минуты."""
+    plain = build_audio(simple_edl(), silent_video, tmp_path / "plain.wav", cfg=cfg_with(tmp_path))
+    music = _sine(tmp_path / "m.wav", seconds=seconds)
+    track = build_audio(simple_edl(), silent_video, tmp_path / "a.wav",
+                        cfg=cfg_with(tmp_path), music_file=music)
+    assert track is not None and plain is not None
+    assert track.duration == pytest.approx(plain.duration, abs=0.02)
+    assert band_rms(track.path, MUSIC_HZ, 4.0, 1.0) > -60.0, "трек не пошёл по кругу"
+
+
+def test_an_unreadable_reel_track_costs_only_the_music(tmp_path, voice_video):
+    junk = tmp_path / "track.m4a"
+    junk.write_bytes(b"\x00not audio" * 100)
+    edl = simple_edl()
+    track = build_audio(edl, voice_video, tmp_path / "a.wav",
+                        cfg=cfg_with(tmp_path), music_file=junk)
+    assert track is not None and track.music is None
+    assert edl.music is None
+
+
+def test_a_reel_sheet_without_its_file_plays_without_music(tmp_path, voice_video, music_file):
+    """Метка «reel» — не имя ассета: файл с таким именем в assets/music не берётся."""
+    import shutil
+
+    cfg = cfg_with(tmp_path)
+    cfg.music_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(music_file, cfg.music_dir / "reel.wav")
+    edl = simple_edl()
+    edl.music = Music(source="reel", track="reel")
+    track = build_audio(edl, voice_video, tmp_path / "a.wav", cfg=cfg)
+    assert track is not None and track.music is None
+
+
+def test_an_old_sheet_still_reads():
+    old = Music.model_validate({"track": "x.mp3", "gain_db": -20, "duck_db": -12})
+    assert old.source == "asset"

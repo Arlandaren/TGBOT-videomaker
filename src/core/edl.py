@@ -238,7 +238,12 @@ class Music(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    track: str  # имя файла в assets/music
+    # `asset` — файл в assets/music, `track` — его имя. `reel` — звук рилса,
+    # который прислал человек (Mini App, «Музыка из рилса»): файл принадлежит
+    # задаче (`Job.music_key`) и приходит в сведение параметром, а `track` —
+    # просто метка «reel». Так лист не несёт путей конкретной машины.
+    source: Literal["asset", "reel"] = "asset"
+    track: str  # имя файла в assets/music; для source="reel" — метка "reel"
     gain_db: float = -20.0
     duck_db: float = -12.0
 

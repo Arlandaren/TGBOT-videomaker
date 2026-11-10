@@ -17,6 +17,7 @@ class FakeJob:
     source_key: str | None
     result_key: str | None
     top_source_key: str | None = None
+    music_key: str | None = None
 
 
 class FakeStorage:
@@ -109,3 +110,13 @@ async def test_purge_deletes_the_top_source_too(env, monkeypatch):
 
     assert "sources/a-top.mp4" in fake.deleted
     assert out["files"] == 4
+
+
+async def test_purge_deletes_the_reel_music_too(env, monkeypatch):
+    """Трек из рилса — тоже файл задачи: срок хранения на него распространяется."""
+    jobs, seen = env
+    jobs[0].music_key = "sources/a-music.m4a"
+    fake = FakeStorage()
+    monkeypatch.setattr(tasks, "storage", fake)
+    await tasks.purge_expired_files({})
+    assert "sources/a-music.m4a" in fake.deleted

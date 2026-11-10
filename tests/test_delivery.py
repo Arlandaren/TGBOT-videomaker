@@ -161,3 +161,25 @@ async def _none():
 
 async def _boom(message: str):
     raise RuntimeError(message)
+
+
+# ------------------------------------------------------------ музыка из рилса
+
+
+def _job_for_caption(**over):
+    from types import SimpleNamespace
+
+    base = dict(source_duration=30.0, result_duration=25.0, preset="pulse", music_key=None, edl={})
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+def test_the_caption_says_when_the_reel_music_was_lost():
+    from src.bot.handlers.video import _caption
+    from src.core.i18n import t
+
+    lost = t("video.caption_music_lost", "ru")
+    assert lost in _caption(_job_for_caption(music_key="k", edl={"music": None}), "ru")
+    used = {"music": {"source": "reel", "track": "reel", "gain_db": 0.0, "duck_db": -12.0}}
+    assert lost not in _caption(_job_for_caption(music_key="k", edl=used), "ru")
+    assert lost not in _caption(_job_for_caption(), "ru")

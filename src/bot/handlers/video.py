@@ -448,7 +448,22 @@ def _caption(job, lang: str | None = None) -> str:
         if saved > 0.5:
             parts.append(t("video.caption_saved", lang, n=f"{saved:.0f}"))
     parts.append(t("video.caption_style", lang, preset=theme_label(job.preset, lang, job.preset)))
-    return " · ".join(parts) + "\n" + t("video.caption_rebuild", lang)
+    text = " · ".join(parts)
+    if music_lost(job):
+        text += "\n" + t("video.caption_music_lost", lang)
+    return text + "\n" + t("video.caption_rebuild", lang)
+
+
+def music_lost(job) -> bool:
+    """Человек выбрал музыку из рилса, а в сведение она не попала.
+
+    Правда о миксе — лист: `build_audio` пишет в `edl.music` то, что реально
+    легло в дорожку, и сбрасывает в None, если трек не прочитался.
+    """
+    if not getattr(job, "music_key", None):
+        return False
+    music = (job.edl or {}).get("music") or {}
+    return music.get("source") != "reel"
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("rerender:"))

@@ -156,12 +156,16 @@ async def process_video(
     keep_work: bool | None = None,
     options: JobOptions | None = None,
     top_src: str | Path | None = None,
+    music_file: Path | None = None,
 ) -> JobResult:
     """Полный прогон: probe → asr → direct → broll → cut → crop → render.
 
     `top_src` — верхнее видео режима «Два видео» (`pipeline.split`): тогда
     картинок по смыслу нет вовсе, а вместо кропа кадр собирается из двух видео.
     Звук и речь — только у `src`.
+
+    `music_file` — звук рилса, выбранный фоном («Музыка из рилса»). Ложится
+    под голос в `build_audio`; не прочитался — ролик собирается без музыки.
 
     `options` — галочки пользователя (Mini App). Без них поведение прежнее: всё
     включено, цвет выделения — как в теме. Нарезка по-прежнему управляется
@@ -320,6 +324,7 @@ async def process_video(
                     build_audio,
                     edl, cut_path, work / "audio.wav", preset=style,
                     apply_cuts=cut_pauses, sfx=options.sfx, cfg=cfg,
+                    music_file=Path(music_file) if music_file is not None else None,
                 )
                 if track is not None:
                     audio_path = str(track.path)
@@ -459,6 +464,7 @@ async def process_from_edl(
     vertical: bool = True,
     cfg: Settings | None = None,
     top_src: str | Path | None = None,
+    music_file: Path | None = None,
 ) -> JobResult:
     """Пересборка ролика из готового EDL: без ASR и без LLM (§0.4).
 
@@ -516,6 +522,7 @@ async def process_from_edl(
             track = build_audio(
                 edl, cut_path, work / "audio.wav",
                 preset=style, apply_cuts=cut_pauses, cfg=cfg,
+                music_file=Path(music_file) if music_file is not None else None,
             )
             if track is not None:
                 audio_path = str(track.path)

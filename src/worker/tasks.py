@@ -155,6 +155,25 @@ async def fetch_top_source(job: Any, dst: Path) -> Path | None:
     return dst
 
 
+async def fetch_music(job: Any, dst_dir: Path) -> Path | None:
+    """Звук рилса, выбранный фоном, или `None`, если музыки нет.
+
+    В отличие от исходников, пропажа трека — не отказ: ролик собирается без
+    музыки, а подпись к нему говорит об этом (`music_lost`).
+    """
+    key = getattr(job, "music_key", None)
+    if not key:
+        return None
+    dst = Path(dst_dir) / ("music" + (Path(key).suffix or ".m4a"))
+    try:
+        await storage.download(key, dst)
+    except Exception as e:  # noqa: BLE001 — без музыки ролик всё равно едет
+        log.warning("задача %s: трек %s не скачался — ролик без музыки: %s", job.id, key, e)
+        dst.unlink(missing_ok=True)
+        return None
+    return dst
+
+
 # --------------------------------------------------------------------------- задача
 
 
@@ -204,6 +223,7 @@ async def process_job(ctx: dict[str, Any], job_id: str) -> dict[str, Any]:
             await publish("Скачиваю файл", 0.01, "download")
             src_path = await fetch_source(job, work / "source.mp4")
             top_path = await fetch_top_source(job, work / "top.mp4")
+            music_path = await fetch_music(job, work)
 
             options = JobOptions.from_stored(job.options)
             result = await process_video(
@@ -216,6 +236,7 @@ async def process_job(ctx: dict[str, Any], job_id: str) -> dict[str, Any]:
                 cfg=settings,
                 options=options,
                 top_src=top_path,
+                music_file=music_path,
             )
 
             await publish("Загружаю результат", 0.99, "upload")
@@ -615,7 +636,9 @@ async def purge_expired_files(ctx: dict[str, Any]) -> dict[str, int]:
     jobs = await repo.jobs_with_expired_files(cutoff)
     files = 0
     for job in jobs:
-        for key in {job.source_key, getattr(job, "top_source_key", None), job.result_key} - {None}:
+        keys = {job.source_key, getattr(job, "top_source_key", None),
+                getattr(job, "music_key", None), job.result_key}
+        for key in keys - {None}:
             try:
                 await storage.delete(key)
                 files += 1

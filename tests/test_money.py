@@ -280,3 +280,14 @@ def test_the_migration_rate_is_the_price_of_a_reel():
     mig = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mig)
     assert mig.RATE == COST
+
+
+async def test_the_music_track_is_kept_and_purged_with_the_job(user):
+    """Трек «Музыки из рилса» — файл задачи и уходит по сроку хранения вместе с
+    исходниками."""
+    job = await repo.create_job(1001, **job_args())
+    await repo.update_job(job.id, music_key="sources/x/music.m4a")
+    assert (await repo.get_job(job.id)).music_key == "sources/x/music.m4a"
+
+    await repo.mark_files_purged(job.id)
+    assert (await repo.get_job(job.id)).music_key is None

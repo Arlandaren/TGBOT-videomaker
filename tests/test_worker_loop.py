@@ -580,3 +580,103 @@ async def test_a_split_sheet_without_the_top_video_is_refused(harness, monkeypat
     with pytest.raises(JobError) as err:
         await process_from_edl(src, work, edl, cfg=Settings(_env_file=None, audio_post_enabled=False))
     assert err.value.code == "source_lost"
+
+
+# ------------------------------------------------------------ музыка из рилса
+
+
+def _music_harness(tmp_path, monkeypatch, *, music_key, top_key=None, broken=False):
+    """`process_job` до входа в пайплайн: что именно ему отдали."""
+    from types import SimpleNamespace
+
+    from src.worker import tasks
+
+    job = SimpleNamespace(id="job-1", user_id=42, preset="pulse", options=None, source_local_path=None,
+                          source_key="sources/job-1/source.mp4", top_source_key=top_key,
+                          music_key=music_key, edl=None)
+    got: dict = {}
+
+    async def fake_get_job(job_id):
+        return job
+
+    async def took(job_id, *, resume=False):
+        return True
+
+    async def noop(*a, **k):
+        return None
+
+    async def fake_fetch(j, dst):
+        Path(dst).write_bytes(b"video")
+        return Path(dst)
+
+    class FakeStorage:
+        async def download(self, key, dst):
+            if broken:
+                raise FileNotFoundError(key)
+            Path(dst).write_bytes(b"music:" + key.encode())
+
+    async def fake_process_video(src, work, **k):
+        got.update(k)
+        if k.get("music_file") is not None:
+            got["music_bytes"] = Path(k["music_file"]).read_bytes()
+        raise tasks.JobError("стоп", "too_short")
+
+    class FakeRedis:
+        async def set(self, *a, **k):
+            return None
+
+        async def delete(self, *a, **k):
+            return None
+
+    monkeypatch.setattr(tasks, "settings", Settings(_env_file=None, work_dir=tmp_path))
+    monkeypatch.setattr(tasks.repo, "get_job", fake_get_job)
+    monkeypatch.setattr(tasks.repo, "mark_running", took)
+    monkeypatch.setattr(tasks.repo, "update_job", noop)
+    monkeypatch.setattr(tasks.repo, "mark_failed", noop)
+    monkeypatch.setattr(tasks.repo, "refund_job", noop)
+    monkeypatch.setattr(tasks, "fetch_source", fake_fetch)
+    monkeypatch.setattr(tasks, "fetch_top_source", lambda j, dst: _maybe(fake_fetch, j, dst, top_key))
+    monkeypatch.setattr(tasks, "storage", FakeStorage())
+    monkeypatch.setattr(tasks, "process_video", fake_process_video)
+    return tasks, FakeRedis, got
+
+
+async def _maybe(fetch, job, dst, key):
+    return await fetch(job, dst) if key else None
+
+
+async def test_the_worker_hands_the_reel_music_to_the_pipeline(tmp_path, monkeypatch):
+    tasks, FakeRedis, got = _music_harness(tmp_path, monkeypatch, music_key="sources/job-1/music.m4a")
+    with pytest.raises(tasks.JobError):
+        await tasks.process_job({"redis": FakeRedis()}, "job-1")
+    assert got.get("music_file") is not None
+    assert got["music_bytes"] == b"music:sources/job-1/music.m4a"
+    assert Path(got["music_file"]).suffix == ".m4a"
+
+
+async def test_a_split_job_gets_both_the_top_video_and_the_music(tmp_path, monkeypatch):
+    """«Два видео» и музыка вместе: звук нижнего плюс трек, верх по-прежнему немой."""
+    tasks, FakeRedis, got = _music_harness(
+        tmp_path, monkeypatch, music_key="sources/job-1/music.m4a", top_key="sources/job-1/top.mp4"
+    )
+    with pytest.raises(tasks.JobError):
+        await tasks.process_job({"redis": FakeRedis()}, "job-1")
+    assert got.get("top_src") is not None
+    assert got.get("music_file") is not None
+
+
+async def test_a_lost_music_file_does_not_stop_the_reel(tmp_path, monkeypatch):
+    tasks, FakeRedis, got = _music_harness(
+        tmp_path, monkeypatch, music_key="sources/job-1/music.m4a", broken=True
+    )
+    with pytest.raises(tasks.JobError) as e:
+        await tasks.process_job({"redis": FakeRedis()}, "job-1")
+    assert e.value.code == "too_short", "до пайплайна не дошло — музыка уронила задачу"
+    assert got.get("music_file") is None
+
+
+async def test_a_job_without_music_gets_none(tmp_path, monkeypatch):
+    tasks, FakeRedis, got = _music_harness(tmp_path, monkeypatch, music_key=None)
+    with pytest.raises(tasks.JobError):
+        await tasks.process_job({"redis": FakeRedis()}, "job-1")
+    assert "music_file" in got and got["music_file"] is None

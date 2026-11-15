@@ -474,13 +474,18 @@ def _pay_methods_view(cfg: Settings) -> list[dict[str, Any]]:
     """Способы в «Тарифах». Цена у PayHot — рубли пакета (карту PayHot выставит
     в евро по своему курсу, итог покажет на странице оплаты), у звёзд — звёзды."""
     out: list[dict[str, Any]] = []
+    wallets: list[dict[str, Any]] = []
     for m in payhot_mod.methods(cfg):
         min_rub = m.min_amount_minor // 100 if m.currency == "RUB" and m.min_amount_minor else 0
-        # Карта выставляется в евро по курсу PayHot: рубли — ориентир («≈»).
-        out.append({"key": m.key, "kind": "payhot", "min_rub": min_rub,
-                    "approx": m.currency != "RUB"})
+        # Карта и кошельки выставляются в евро по курсу PayHot: рубли — ориентир («≈»).
+        view = {"key": m.key, "kind": "payhot", "min_rub": min_rub, "approx": m.currency != "RUB"}
+        (wallets if m.key in WALLETS else out).append(view)
     out.append({"key": "stars", "kind": "stars", "min_rub": 0})
-    return out
+    # Apple Pay и Google Pay — в самом конце, после звёзд (порядок владельца).
+    return out + wallets
+
+
+WALLETS = ("applepay", "googlepay")
 
 
 def _day_start(request: web.Request, now: datetime | None = None) -> datetime:

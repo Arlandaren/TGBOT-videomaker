@@ -836,8 +836,9 @@ async def paying(tmp_path, monkeypatch):
 async def test_bootstrap_lists_the_payhot_methods_and_stars(paying):
     c, _, _ = paying
     body = await (await c.get("/api/bootstrap", headers=auth())).json()
+    # Кошельки — в самом конце, после звёзд (просьба владельца 16.11.2026).
     assert [m["key"] for m in body["pay_methods"]] == [
-        "applepay", "sbp", "card", "googlepay", "crypto", "stars"]
+        "sbp", "card", "crypto", "stars", "applepay", "googlepay"]
 
 
 async def test_bootstrap_without_a_key_offers_only_stars(booted):

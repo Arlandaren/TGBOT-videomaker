@@ -338,6 +338,8 @@ def public_dns(monkeypatch):
         return table[host]
 
     monkeypatch.setattr(reel_audio, "_resolve", resolve)
+    # MockTransport не даёт адрес соединения — в тестах это публичный адрес.
+    monkeypatch.setattr(reel_audio, "_peer_ip", lambda resp: "93.184.216.34")
     return table
 
 
@@ -419,3 +421,46 @@ async def test_a_huge_file_is_cut_off(tmp_path, public_dns, monkeypatch, declare
             await fetch_file_audio("https://cdn.example.com/big.mp4", tmp_path, client=c)
     assert e.value.code == "too_big"
     assert not list(tmp_path.glob("track.*"))
+
+
+
+async def test_a_connection_that_lands_on_an_internal_address_is_dropped(tmp_path, public_dns, monkeypatch, audio_m4a):
+    """DNS rebinding: проверка увидела публичный адрес, а соединение ушло на
+    внутренний. Сверяем адрес, к которому реально подключились."""
+    monkeypatch.setattr(reel_audio, "_peer_ip", lambda resp: "127.0.0.1")
+    body = audio_m4a.read_bytes()
+    async with _file_client(lambda r: httpx.Response(200, headers={"content-type": "audio/mp4"},
+                                                     content=body)) as c:
+        with pytest.raises(ReelAudioError) as e:
+            await fetch_file_audio("https://cdn.example.com/a.m4a", tmp_path, client=c)
+    assert e.value.code == "bad_link"
+    assert not list(tmp_path.glob("track.*"))
+
+
+async def test_an_unknown_peer_address_is_refused(tmp_path, public_dns, monkeypatch, audio_m4a):
+    monkeypatch.setattr(reel_audio, "_peer_ip", lambda resp: None)
+    async with _file_client(lambda r: httpx.Response(200, headers={"content-type": "audio/mp4"},
+                                                     content=audio_m4a.read_bytes())) as c:
+        with pytest.raises(ReelAudioError) as e:
+            await fetch_file_audio("https://cdn.example.com/a.m4a", tmp_path, client=c)
+    assert e.value.code == "bad_link"
+
+
+async def test_a_playlist_posing_as_media_is_never_opened(tmp_path, public_dns):
+    """HLS-плейлист под видом видео заставил бы ffmpeg читать файлы сервера и
+    ходить по ссылкам. Такой «файл» отклоняется по формату."""
+    playlist = b"#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nfile:///etc/passwd\n#EXT-X-ENDLIST\n"
+    async with _file_client(lambda r: httpx.Response(200, headers={"content-type": "application/octet-stream"},
+                                                     content=playlist)) as c:
+        with pytest.raises(ReelAudioError) as e:
+            await fetch_file_audio("https://cdn.example.com/a.mp4", tmp_path, client=c)
+    assert e.value.code == "not_media"
+    assert not list(tmp_path.glob("track.*"))
+
+
+def test_the_probe_reads_only_the_local_file(tmp_path):
+    """Даже на плейлисте ffprobe не выходит за пределы файла."""
+    pl = tmp_path / "x.bin"
+    pl.write_bytes(b"#EXTM3U\n#EXTINF:1,\nhttp://169.254.169.254/latest\n#EXT-X-ENDLIST\n")
+    fmt, dur = reel_audio._probe_media(pl)
+    assert fmt not in reel_audio.ALLOWED_FORMATS

@@ -215,6 +215,10 @@ async def fetch_reel_audio(url: str, dst_dir: Path, *, extractors: str = "Instag
             f.unlink(missing_ok=True)
         raise ReelAudioError(code, stderr.strip()[-200:])
     path = files[0]
+    fmt, _ = await asyncio.to_thread(_probe_media, path)
+    if not _allowed_format(fmt):
+        path.unlink(missing_ok=True)
+        raise ReelAudioError("not_media", f"формат {fmt}")
     duration = await asyncio.to_thread(_audio_duration, path)
     if duration is None:
         path.unlink(missing_ok=True)
@@ -295,6 +299,67 @@ def parse_link(raw: str) -> AnyLink | None:
     return None
 
 
+# Форматы, которые пускаем дальше ffprobe. Без списка ffprobe/ffmpeg угадывают
+# формат сами, и HLS-плейлист под видом «видео» заставил бы их читать файлы
+# сервера и ходить по ссылкам из плейлиста.
+ALLOWED_FORMATS = {"mp3", "mov", "mp4", "m4a", "3gp", "ogg", "wav", "matroska", "webm", "aac", "flac"}
+
+
+def _probe_media(path: Path) -> tuple[str | None, float | None]:
+    """(формат, длительность) скачанного файла. ffprobe читает ТОЛЬКО сам файл
+    (`-protocol_whitelist file`), никаких ссылок изнутри."""
+    from src.core.proc import capture
+
+    code, out, _ = capture(
+        ["ffprobe", "-v", "error", "-protocol_whitelist", "file",
+         "-show_entries", "format=format_name,duration", "-of", "default=nw=1", str(path)],
+        timeout=30,
+    )
+    if code != 0:
+        return None, None
+    fmt = dur = None
+    for line in out.splitlines():
+        key, _, value = line.partition("=")
+        if key == "format_name":
+            fmt = value.strip()
+        elif key == "duration":
+            try:
+                dur = float(value)
+            except ValueError:
+                pass
+    return fmt, dur
+
+
+def _allowed_format(fmt: str | None) -> bool:
+    return bool(fmt) and bool(set(fmt.split(",")) & ALLOWED_FORMATS)
+
+
+def _peer_ip(resp: httpx.Response) -> str | None:
+    """Адрес, к которому соединение подключилось на самом деле."""
+    try:
+        stream = resp.extensions["network_stream"]
+        addr = stream.get_extra_info("server_addr")
+        return str(addr[0]) if addr else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _check_peer(resp: httpx.Response) -> None:
+    """Проверка по факту соединения. `_check_public` смотрит DNS до подключения,
+    а подключение спрашивает DNS заново: домен с подменой (DNS rebinding) мог бы
+    ответить публичным адресом на проверку и внутренним — на подключение."""
+    import ipaddress
+
+    ip = _peer_ip(resp)
+    try:
+        ok = ip is not None and ipaddress.ip_address(ip).is_global
+    except ValueError:
+        ok = False
+    if not ok:
+        log.warning("reel_audio: соединение ушло на непубличный адрес %s — отклонено", ip)
+        raise ReelAudioError("bad_link", "непубличный адрес соединения")
+
+
 async def _resolve(host: str) -> list[str]:
     infos = await asyncio.get_running_loop().getaddrinfo(host, None)
     return sorted({info[4][0] for info in infos})
@@ -331,14 +396,16 @@ async def fetch_file_audio(url: str, dst_dir: Path, *, client: httpx.AsyncClient
     from src.pipeline.audio_post import _audio_duration
 
     own = client is None
+    # trust_env=False: прокси из окружения сервера не должен обходить проверки адресов.
     client = client or httpx.AsyncClient(timeout=httpx.Timeout(REEL_FETCH_TIMEOUT_S, connect=10),
-                                         headers={"User-Agent": BROWSER_UA})
+                                         headers={"User-Agent": BROWSER_UA}, trust_env=False)
     dst = dst_dir / "track.bin"
     try:
         async with asyncio.timeout(REEL_FETCH_TIMEOUT_S):
             for _ in range(FILE_HOPS + 1):
                 await _check_public(url)
                 async with client.stream("GET", url, follow_redirects=False) as resp:
+                    _check_peer(resp)
                     if resp.status_code in (301, 302, 303, 307, 308) and resp.headers.get("location"):
                         url = str(httpx.URL(url).join(resp.headers["location"]))
                         continue
@@ -371,6 +438,11 @@ async def fetch_file_audio(url: str, dst_dir: Path, *, client: httpx.AsyncClient
     finally:
         if own:
             await client.aclose()
+    fmt, _ = await asyncio.to_thread(_probe_media, dst)
+    if not _allowed_format(fmt):
+        dst.unlink(missing_ok=True)
+        log.warning("reel_audio: формат %r не из списка — отклонён", fmt)
+        raise ReelAudioError("not_media", f"формат {fmt}")
     duration = await asyncio.to_thread(_audio_duration, dst)
     if duration is None:
         dst.unlink(missing_ok=True)

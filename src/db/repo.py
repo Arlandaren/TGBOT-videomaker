@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import JSONB, insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.core.config import Settings, settings as default_settings
-from src.db.models import Base, Job, JobStatus, LLMCall, Payment, User
+from src.db.models import Base, Job, JobStatus, LLMCall, Payment, PayhotOrder, User
 from src.llm.client import Usage
 
 log = logging.getLogger(__name__)
@@ -440,6 +440,7 @@ async def credit_payment(
     tokens: int,
     payload: str,
     referral_percent: int | None = None,
+    rub: int = 0,
 ) -> bool:
     """Зачисляет оплату. False — этот платёж уже зачислен (повторный апдейт).
 
@@ -465,6 +466,7 @@ async def credit_payment(
                     telegram_charge_id=charge_id,
                     stars=stars,
                     tokens=tokens,
+                    rub=rub,
                     payload=payload[:128],
                     ref_bonus=bonus,
                     created_at=datetime.now(timezone.utc),
@@ -770,3 +772,62 @@ async def cost_report(days: int = 7) -> list[dict[str, Any]]:
             .order_by(func.sum(LLMCall.cost_usd).desc())
         )
         return [dict(row._mapping) for row in (await s.execute(q)).all()]
+
+
+# ------------------------------------------------------------------ PayHot
+
+
+async def create_payhot_order(
+    *, user_id: int, tokens: int, rub: int, method: str, currency: str, amount_minor: int
+) -> PayhotOrder:
+    async with session() as s:
+        order = PayhotOrder(user_id=user_id, tokens=tokens, rub=rub, method=method,
+                            currency=currency, amount_minor=amount_minor)
+        s.add(order)
+        await s.flush()
+        await s.refresh(order)
+        return order
+
+
+async def set_payhot_payment(order_id: uuid.UUID | str, payment_id: str) -> None:
+    async with session() as s:
+        await s.execute(
+            update(PayhotOrder).where(PayhotOrder.id == uuid.UUID(str(order_id)))
+            .values(payment_id=payment_id)
+        )
+
+
+async def get_payhot_order(order_id: uuid.UUID | str) -> PayhotOrder | None:
+    async with session() as s:
+        return await s.get(PayhotOrder, uuid.UUID(str(order_id)))
+
+
+async def set_payhot_status(order_id: uuid.UUID | str, status: str, *, credited: bool | None = None) -> None:
+    values: dict[str, Any] = {"status": status[:32]}
+    if credited is not None:
+        values["credited"] = credited
+    async with session() as s:
+        await s.execute(
+            update(PayhotOrder).where(PayhotOrder.id == uuid.UUID(str(order_id))).values(**values)
+        )
+
+
+# Статусы, после которых PayHot заказ уже не меняет так, чтобы мы что-то
+# зачисляли: оплачено (и уже зачислено), отменено, ошибка, наш mismatch.
+PAYHOT_FINAL = ("succeeded", "cancelled", "failed", "refunded", "mismatch")
+
+
+async def payhot_orders_to_check(*, since: datetime) -> list[PayhotOrder]:
+    """Открытые заказы со счётом, созданные после `since`, — для фонового опроса."""
+    async with session() as s:
+        q = (
+            select(PayhotOrder)
+            .where(
+                PayhotOrder.created_at >= since,
+                PayhotOrder.payment_id.is_not(None),
+                PayhotOrder.credited.is_(False),
+                PayhotOrder.status.not_in(PAYHOT_FINAL),
+            )
+            .order_by(PayhotOrder.created_at)
+        )
+        return list((await s.execute(q)).scalars())

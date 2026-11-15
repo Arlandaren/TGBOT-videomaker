@@ -43,6 +43,7 @@ from src.core.preset import available, load_preset
 from src.core.referral import code_of
 from src.db import repo
 from src.db.models import Job, JobStatus
+from src.payments import payhot as payhot_mod
 from src.storage.s3 import SOURCES, storage
 from src.webapp.auth import AuthError, WebAppUser, validate_init_data
 
@@ -411,6 +412,8 @@ async def bootstrap(request: web.Request) -> web.Response:
                 for k, (titles, choice) in FONTS.items()
             ],
             "packages": _packages_view(cfg),
+            # Способы оплаты по порядку показа: включённые способы PayHot и звёзды.
+            "pay_methods": _pay_methods_view(cfg),
             # Цена ролика в токенах: приложение по ней решает, хватает ли баланса.
             "video_cost": cfg.tokens_per_video,
             # Монтаж сейчас бесплатный для всех: кнопка не ведёт в тарифы и не
@@ -464,6 +467,17 @@ def _packages_view(cfg: Settings) -> list[dict[str, Any]]:
         }
         for p in packs
     ]
+
+
+def _pay_methods_view(cfg: Settings) -> list[dict[str, Any]]:
+    """Способы в «Тарифах». Цена у PayHot — рубли пакета (карту PayHot выставит
+    в евро по своему курсу, итог покажет на странице оплаты), у звёзд — звёзды."""
+    out: list[dict[str, Any]] = []
+    for m in payhot_mod.methods(cfg):
+        min_rub = m.min_amount_minor // 100 if m.currency == "RUB" and m.min_amount_minor else 0
+        out.append({"key": m.key, "kind": "payhot", "min_rub": min_rub})
+    out.append({"key": "stars", "kind": "stars", "min_rub": 0})
+    return out
 
 
 def _day_start(request: web.Request, now: datetime | None = None) -> datetime:
@@ -524,7 +538,8 @@ async def payments_history(request: web.Request) -> web.Response:
     paid = await repo.user_payments(user.id)
     bonuses = await repo.referral_bonuses(user.id)
     items = [
-        {"kind": "payment", "at": p.created_at.isoformat(), "tokens": p.tokens, "stars": p.stars}
+        {"kind": "payment", "at": p.created_at.isoformat(), "tokens": p.tokens, "stars": p.stars,
+         "rub": p.rub}
         for p in paid
     ] + [{"kind": "bonus", "at": at.isoformat(), "share": share} for at, share in bonuses]
     items.sort(key=lambda x: x["at"], reverse=True)
@@ -841,6 +856,151 @@ async def _own_job(request: web.Request, user: WebAppUser) -> Job | None:
     return job
 
 
+# ------------------------------------------------------------------ PayHot
+
+PAYHOT_KEY = web.AppKey("payhot", object)
+
+
+async def _payhot_return_url(request: web.Request) -> str:
+    cfg = request.app[CFG_KEY]
+    if cfg.payhot_return_url.strip():
+        return cfg.payhot_return_url.strip()
+    me = await request.app[BOT_KEY].me()
+    return f"https://t.me/{me.username}"
+
+
+async def payhot_order(request: web.Request) -> web.Response:
+    """Пакет + способ → заказ у нас → счёт PayHot → ссылка оплаты.
+
+    Сумма — только из пакета на сервере; клиент присылает лишь «какой пакет» и
+    «каким способом». Оплату подтверждает `payhot_order_status` по API PayHot.
+    """
+    cfg = request.app[CFG_KEY]
+    user: WebAppUser = request[USER_KEY]
+    client = request.app.get(PAYHOT_KEY)
+    db_user = await _db_user(request)
+    request[LANG_KEY] = lang_of(db_user)
+    if db_user.is_blocked:
+        return await _fail(request, 403, "api.blocked")
+    try:
+        body = await request.json()
+        tokens = int(body.get("tokens"))
+    except (TypeError, ValueError, AttributeError):
+        return await _fail(request, 400, "api.no_package")
+    package = cfg.package(tokens)
+    if package is None or not package.rub:
+        return await _fail(request, 400, "api.unknown_package")
+    method = payhot_mod.method(cfg, str(body.get("method") or ""))
+    if method is None or client is None:
+        return await _fail(request, 400, "api.unknown_method")
+    if not method.allows_rub(package.rub):
+        return await _fail(request, 400, "api.below_minimum", rub=method.min_amount_minor // 100)
+    try:
+        if method.currency == "EUR":
+            amount = await client.euro_for_rubles(package.rub * 100)
+            if method.min_amount_minor and amount < method.min_amount_minor:
+                return await _fail(request, 400, "api.below_minimum", rub=package.rub)
+        else:
+            amount = package.rub * 100
+        order = await repo.create_payhot_order(
+            user_id=user.id, tokens=package.tokens, rub=package.rub, method=method.key,
+            currency=method.currency, amount_minor=amount,
+        )
+        created = await client.create_payment(
+            order_ref=str(order.id), amount_minor=amount, currency=method.currency,
+            method=method.payhot_method, customer_id=f"tg-{user.id}",
+            success_url=await _payhot_return_url(request),
+        )
+    except payhot_mod.PayHotError as e:
+        log.warning("payhot: счёт для %s не создан (%s, %s): %s", user.id, method.key, tokens, e)
+        return await _fail(request, 502, "api.payhot_failed")
+    await repo.set_payhot_payment(order.id, created.payment_id)
+    log.info("payhot: заказ %s — %s, %d токенов, %d %s", order.id, method.key, package.tokens,
+             amount, method.currency)
+    return web.json_response({"order_id": str(order.id), "url": created.checkout_url})
+
+
+async def payhot_order_status(request: web.Request) -> web.Response:
+    """Статус заказа из PayHot; оплачен — токены зачисляются здесь же (один раз)."""
+    from src.payments import orders
+
+    user: WebAppUser = request[USER_KEY]
+    raw = request.match_info["order_id"]
+    try:
+        uuid.UUID(raw)
+    except ValueError:
+        return await _fail(request, 404, "api.order_not_found")
+    order = await repo.get_payhot_order(raw)
+    if order is None or order.user_id != user.id:
+        return await _fail(request, 404, "api.order_not_found")
+    client = request.app.get(PAYHOT_KEY)
+    if client is None:
+        return web.json_response({"status": order.status, "final": True, "credited": False})
+    got = await orders.settle(order.id, client)
+    if got.credited:
+        await _notify_payhot_credit(request.app[BOT_KEY], got)
+    return web.json_response({"status": got.status, "final": got.final, "credited": got.credited})
+
+
+async def _notify_payhot_credit(bot: Any, got: Any) -> None:
+    """Сообщение в чат о зачислении. Деньги уже на месте — это только весть."""
+    try:
+        db_user = await repo.get_user(got.user_id)
+        lang = lang_of(db_user) if db_user else "ru"
+        await bot.send_message(got.user_id, t(
+            "pay.credited", lang, tokens=tokens_text(got.tokens, lang),
+            balance=tokens_text(db_user.balance if db_user else got.tokens, lang),
+        ))
+    except Exception as e:  # noqa: BLE001
+        log.info("payhot: весть о зачислении %s не ушла: %s", got.user_id, e)
+
+
+async def payhot_poll_once(app: web.Application) -> int:
+    """Один проход фонового опроса: открытые заказы последних часов. → сколько зачислено."""
+    from src.payments import orders
+
+    cfg = app[CFG_KEY]
+    client = app.get(PAYHOT_KEY)
+    if client is None:
+        return 0
+    since = datetime.now(timezone.utc) - timedelta(hours=cfg.payhot_order_hours)
+    credited = 0
+    for order in await repo.payhot_orders_to_check(since=since):
+        try:
+            got = await orders.settle(order.id, client)
+        except Exception:  # noqa: BLE001 — один битый заказ не должен стопорить остальные
+            log.exception("payhot: опрос заказа %s упал", order.id)
+            continue
+        if got.credited:
+            credited += 1
+            await _notify_payhot_credit(app[BOT_KEY], got)
+    return credited
+
+
+async def _payhot_lifecycle(app: web.Application):
+    """Клиент PayHot и фоновый опрос живут столько же, сколько приложение."""
+    cfg = app[CFG_KEY]
+    task = None
+    if PAYHOT_KEY not in app and cfg.payhot_api_key.strip():
+        app[PAYHOT_KEY] = payhot_mod.PayHotClient.from_settings(cfg)
+    if PAYHOT_KEY in app and cfg.payhot_poll_s > 0:
+        async def loop() -> None:
+            while True:
+                await asyncio.sleep(cfg.payhot_poll_s)
+                try:
+                    await payhot_poll_once(app)
+                except Exception:  # noqa: BLE001
+                    log.exception("payhot: проход опроса упал")
+
+        task = asyncio.create_task(loop())
+    yield
+    if task is not None:
+        task.cancel()
+    client = app.get(PAYHOT_KEY)
+    if client is not None and hasattr(client, "aclose"):
+        await client.aclose()
+
+
 async def invoice(request: web.Request) -> web.Response:
     cfg = request.app[CFG_KEY]
     bot = request.app[BOT_KEY]
@@ -992,6 +1152,9 @@ def create_app(bot: Bot, cfg: Settings) -> web.Application:
     app.router.add_get("/api/jobs", jobs_list)
     app.router.add_post("/api/jobs/{job_id}/send", job_send)
     app.router.add_post("/api/invoice", invoice)
+    app.router.add_post("/api/payhot/orders", payhot_order)
+    app.router.add_get("/api/payhot/orders/{order_id}", payhot_order_status)
+    app.cleanup_ctx.append(_payhot_lifecycle)
     app.router.add_post("/api/language", set_language)
     app.router.add_get("/api/referrals", referrals)
     app.router.add_get("/api/payments", payments_history)

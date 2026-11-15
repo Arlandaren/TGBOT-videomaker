@@ -226,4 +226,31 @@ class Payment(Base):
     # оплаты, а не пересчитывается по текущему проценту: смена процента не
     # должна переписывать прошлое на экране «Приглашения».
     ref_bonus: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    # Оплата рублями через PayHot: сколько рублей стоил пакет (у звёзд — 0, у
+    # рублёвых оплат `stars` — 0). Для истории в «Тарифах».
+    rub: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class PayhotOrder(Base):
+    """Заказ пакета через PayHot. `id` — наш номер заказа и ключ идемпотентности.
+
+    Статус — последнее, что сказал PayHot (`created` — ещё ни разу не спрашивали),
+    плюс наш `mismatch`: оплачено не то, что заказано. Зачисление — в `payments`
+    с `telegram_charge_id = "payhot:<payment_id>"`: та же уникальность, что у
+    звёзд, не даёт зачислить одну оплату дважды.
+    """
+
+    __tablename__ = "payhot_orders"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    rub: Mapped[int] = mapped_column(Integer, nullable=False)
+    method: Mapped[str] = mapped_column(String(16), nullable=False)
+    currency: Mapped[str] = mapped_column(String(16), nullable=False)
+    amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payment_id: Mapped[str | None] = mapped_column(String(64), unique=True)
+    status: Mapped[str] = mapped_column(String(32), default="created", server_default="created", nullable=False)
+    credited: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)

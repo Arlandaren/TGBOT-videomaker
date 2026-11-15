@@ -582,8 +582,12 @@ svg { flex: none; }
 }
 .radio.is-on { border-color: var(--text); }
 .radio.is-on::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--text); }
-.pay-method { display: flex; align-items: center; gap: 14px; min-height: 60px; padding: 0 16px; }
-.pay-method__name { flex: 1; display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.pay-methods { padding: 0; overflow: hidden; }
+.pay-method { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 60px; padding: 0 16px; text-align: left; }
+.pay-method + .pay-method { border-top: 1px solid var(--line); }
+.pay-method__name { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.pay-method__price { flex: none; white-space: nowrap; }
+.pay-method.is-off { opacity: 0.45; cursor: default; }
 .star { color: #ffb800; }
 
 .history-row { display: flex; align-items: center; gap: 12px; min-height: 58px; }

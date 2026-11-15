@@ -72,7 +72,11 @@ const I18N = {
     "jobs.send": "Прислать в чат", "jobs.sent": "Отправил в чат.", "jobs.not_sent": "Не отправилось",
     "tariffs.balance": "Баланс", "tariffs.history": "История", "tariffs.package": "Пакет", "tariffs.method": "Способ оплаты",
     "pkg.per": "до {n} {w}", "pkg.rub": "≈ {n} ₽", "pkg.popular": "популярный", "pkg.save": "выгода −{n}%",
-    "pay.button": "Оплатить {n} ⭐", "pay.sub": "{n} {w} на баланс",
+    "pay.button": "Оплатить {n} ⭐", "pay.button_rub": "Оплатить {n} ₽", "pay.sub": "{n} {w} на баланс",
+    "method.card": "Visa / Mastercard 🌍", "method.sbp": "Карта РФ / СБП 💳", "method.crypto": "Криптовалюта 🪙",
+    "method.stars": "Telegram Stars ⭐", "method.from": "от {n} ₽",
+    "pay.opening": "Открываю оплату…", "pay.waiting": "Ждём оплату — после оплаты вернитесь в приложение",
+    "pay.not_paid": "Оплата не прошла. Деньги не списаны — попробуйте ещё раз или другим способом.",
     "pay.title": "Оплата", "pay.update": "Обновите Telegram — эта версия не умеет оплату звёздами.",
     "pay.failed": "Оплата не прошла", "pay.failed_text": "Звёзды не списаны. Попробуйте ещё раз.",
     "pay.crediting": "Оплачено. Зачисляю…", "pay.credited": "Зачислено: {n} {w}.", "pay.later": "Оплата прошла, баланс обновится через минуту.",
@@ -163,7 +167,11 @@ const I18N = {
     "jobs.send": "Send to chat", "jobs.sent": "Sent to the chat.", "jobs.not_sent": "Couldn't send",
     "tariffs.balance": "Balance", "tariffs.history": "History", "tariffs.package": "Package", "tariffs.method": "Payment method",
     "pkg.per": "up to {n} {w}", "pkg.rub": "≈ {n} ₽", "pkg.popular": "popular", "pkg.save": "save {n}%",
-    "pay.button": "Pay {n} ⭐", "pay.sub": "{n} {w} to your balance",
+    "pay.button": "Pay {n} ⭐", "pay.button_rub": "Pay {n} ₽", "pay.sub": "{n} {w} to your balance",
+    "method.card": "Visa / Mastercard 🌍", "method.sbp": "Russian card / SBP 💳", "method.crypto": "Crypto 🪙",
+    "method.stars": "Telegram Stars ⭐", "method.from": "from {n} ₽",
+    "pay.opening": "Opening the payment page…", "pay.waiting": "Waiting for the payment — come back to the app after paying",
+    "pay.not_paid": "The payment didn't go through. Nothing was charged — try again or another method.",
     "pay.title": "Payment", "pay.update": "Please update Telegram — this version can't pay with Stars.",
     "pay.failed": "Payment failed", "pay.failed_text": "No Stars were charged. Please try again.",
     "pay.crediting": "Paid. Adding to your balance…", "pay.credited": "Added: {n} {w}.", "pay.later": "Payment received; your balance will update in a minute.",
@@ -236,6 +244,7 @@ const state = {
   history: [],
   step: 1,
   pkg: null,
+  payMethod: null,
   refDays: 30,
   refs: null,
 };
@@ -1329,10 +1338,93 @@ function renderTariffs() {
     ]);
   }));
   const chosen = facts.find((p) => p.tokens === state.pkg);
-  $("#pay-method-price").textContent = chosen ? `${chosen.stars} ⭐` : "";
-  $("#pay-title").textContent = chosen ? tr("pay.button", { n: chosen.stars }) : "";
+  const method = renderPayMethods(chosen);
+  const stars = method && method.key === "stars";
+  $("#pay-title").textContent = !chosen || !method ? ""
+    : (stars ? tr("pay.button", { n: chosen.stars }) : tr("pay.button_rub", { n: fmtRub(chosen.rub) }));
   $("#pay-sub").textContent = chosen ? tr("pay.sub", { n: chosen.tokens, w: tokensWord(chosen.tokens) }) : "";
-  $("#pay").hidden = !chosen;
+  $("#pay").hidden = !chosen || !method;
+}
+
+// Способы оплаты как их прислал сервер: PayHot (карта, СБП, крипта) и звёзды.
+// Способ с порогом выше цены пакета виден, но выбрать его нельзя — подпись
+// «от N ₽» объясняет почему. → выбранный способ или null.
+function renderPayMethods(pkg) {
+  const list = state.boot.pay_methods || [{ key: "stars", kind: "stars", min_rub: 0 }];
+  const usable = (m) => !pkg || !m.min_rub || (pkg.rub || 0) >= m.min_rub;
+  if (!list.some((m) => m.key === state.payMethod && usable(m))) {
+    const first = list.find(usable);
+    state.payMethod = first ? first.key : null;
+  }
+  $("#pay-methods").replaceChildren(...list.map((m) => {
+    const ok = usable(m);
+    const on = ok && m.key === state.payMethod;
+    const price = !pkg ? "" : (m.kind === "stars" ? `${pkg.stars} ⭐` : (pkg.rub ? `${fmtRub(pkg.rub)} ₽` : ""));
+    return el("button", {
+      class: `pay-method${ok ? "" : " is-off"}`, type: "button", role: "radio",
+      "aria-checked": on ? "true" : "false", "aria-disabled": ok ? "false" : "true",
+      onclick: () => { if (!ok) return; state.payMethod = m.key; haptic(); renderTariffs(); },
+    }, [
+      el("span", { class: `radio${on ? " is-on" : ""}` }),
+      el("span", { class: "pay-method__name", text: tr(`method.${m.key}`) }),
+      el("span", { class: "muted pay-method__price", text: ok ? price : tr("method.from", { n: fmtRub(m.min_rub) }) }),
+    ]);
+  }));
+  return list.find((m) => m.key === state.payMethod) || null;
+}
+
+// Оплата через PayHot: счёт на сервере → страница оплаты в браузере → статус
+// спрашиваем у сервера, а тот — у PayHot. Возврат из браузера сам по себе
+// ничего не подтверждает; зачисляет сервер (и фоновый опрос в боте, если
+// приложение закроют).
+let payhotWatch = null;
+async function buyPayhot(tokens, method) {
+  haptic();
+  toast(tr("pay.opening"));
+  let order;
+  try {
+    order = await api("/api/payhot/orders", { method: "POST", body: { tokens, method } });
+  } catch (e) {
+    popup(tr("err.title"), e.message);
+    return;
+  }
+  if (tg && tg.openLink) tg.openLink(order.url);
+  else window.open(order.url, "_blank");
+  watchPayhot(order.order_id, tokens);
+}
+
+function watchPayhot(orderId, tokens) {
+  if (payhotWatch) payhotWatch.stop();
+  const started = Date.now();
+  let timer = null;
+  let stopped = false;
+  const stop = () => { stopped = true; clearTimeout(timer); document.removeEventListener("visibilitychange", now); };
+  const check = async () => {
+    if (stopped) return;
+    try {
+      const st = await api(`/api/payhot/orders/${orderId}`);
+      if (st.status === "succeeded") {
+        stop();
+        haptic("success");
+        await refreshBoot();
+        toast(tr("pay.credited", { n: tokens, w: tokensWord(tokens) }));
+        return;
+      }
+      if (st.final) {
+        stop();
+        if (st.status !== "mismatch") popup(tr("pay.failed"), tr("pay.not_paid"));
+        return;
+      }
+    } catch (_) { /* сеть мигнула — спросим ещё раз */ }
+    // Счёт PayHot живёт до часа; дальше доспросит фоновый опрос в боте.
+    if (Date.now() - started < 60 * 60 * 1000) timer = setTimeout(check, 4000);
+  };
+  // Вернулись из браузера — спрашиваем сразу, не дожидаясь таймера.
+  const now = () => { if (document.visibilityState === "visible") { clearTimeout(timer); check(); } };
+  document.addEventListener("visibilitychange", now);
+  payhotWatch = { stop };
+  toast(tr("pay.waiting"));
+  timer = setTimeout(check, 4000);
 }
 
 async function buy(tokens) {
@@ -1408,7 +1500,7 @@ async function openHistory() {
       ]),
       el("span", { class: "list-row__end" }, [
         el("b", { class: "pos", text: bonus ? `+${fmtShare(it.share)}` : `+${it.tokens}` }),
-        el("span", { class: "muted", text: bonus ? tokensWord(2) : `${it.stars} ⭐` }),
+        el("span", { class: "muted", text: bonus ? tokensWord(2) : (it.stars ? `${it.stars} ⭐` : `${fmtRub(it.rub || 0)} ₽`) }),
       ]),
     ]);
   }));
@@ -1791,7 +1883,11 @@ async function main() {
   for (const n of $$("[data-sheet-close]")) n.addEventListener("click", () => closeSheet());
   addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeSheet(); });
   $("#history-open").addEventListener("click", openHistory);
-  $("#pay").addEventListener("click", () => { if (state.pkg) buy(state.pkg); });
+  $("#pay").addEventListener("click", () => {
+    if (!state.pkg || !state.payMethod) return;
+    if (state.payMethod === "stars") buy(state.pkg);
+    else buyPayhot(state.pkg, state.payMethod);
+  });
   $("#invite-copy").addEventListener("click", async () => {
     const ok = await copyText(referralLink());
     haptic(ok ? "success" : "error");

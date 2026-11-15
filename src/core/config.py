@@ -443,6 +443,34 @@ class Settings(BaseSettings):
     # Ноль выключает программу целиком: и бонусы, и раздел в приложении.
     referral_percent: int = Field(default=10, ge=0, le=100)
 
+    # ------------------------------------------------------------------ PayHot
+    # Оплата пакетов деньгами через PayHot (`src/payments/payhot.py`) — рядом со
+    # звёздами. Без ключа способов PayHot нет вовсе. Ключ — серверный секрет: в
+    # приложение и в журналы он не уходит.
+    payhot_base_url: str = "https://app.pay.hot"
+    payhot_api_key: str = ""
+    # Код кассы в кабинете. API берёт кассу из самого ключа, здесь — для сверки
+    # человеком и журналов.
+    payhot_terminal_ref: str = "main"
+    # Переключатели способов. Проверено на кассе 15 ноября 2026: карта в RUB
+    # маршрута не имеет, поэтому «карта» — это Visa/Mastercard в EUR; СБП и
+    # криптовалюта — в RUB. PAYMENT_ENABLED включает СБП.
+    payhot_payment_enabled: bool = False
+    payhot_card_enabled: bool = True
+    payhot_crypto_enabled: bool = True
+    # Нижние пороги в копейках/центах валюты способа: карта — в EUR (500 = €5),
+    # крипта — в RUB (100000 = 1000 ₽). Пакет дешевле порога этим способом не
+    # продаётся.
+    payhot_card_min_amount_minor: int = 500
+    payhot_crypto_min_amount_minor: int = 100000
+    # Куда PayHot вернёт человека после оплаты. Пусто — в чат с ботом.
+    payhot_return_url: str = ""
+    # Как часто бот сам спрашивает PayHot о неоплаченных заказах, секунд; 0 —
+    # не спрашивать (только приложение, пока открыто). Сколько часов заказ
+    # считается живым — счёт PayHot живёт меньше часа, три часа с запасом.
+    payhot_poll_s: int = 30
+    payhot_order_hours: int = 3
+
     # ------------------------------------------------------------------ прочее
     debug: bool = False
     log_level: str = "INFO"

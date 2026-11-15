@@ -374,6 +374,16 @@ TEXTS: dict[str, dict[str, str]] = {
     },
     "api.no_package": {"ru": "Не выбран пакет.", "en": "No package selected."},
     "api.unknown_package": {"ru": "Такого пакета нет.", "en": "No such package."},
+    "api.unknown_method": {"ru": "Этот способ оплаты недоступен.", "en": "This payment method isn't available."},
+    "api.below_minimum": {
+        "ru": "Этим способом можно оплатить пакет от {rub} ₽. Выберите пакет побольше или другой способ.",
+        "en": "This method takes packages from {rub} ₽. Pick a bigger package or another method.",
+    },
+    "api.payhot_failed": {
+        "ru": "Платёжная система не ответила. Попробуйте ещё раз или выберите другой способ.",
+        "en": "The payment system didn't respond. Try again or pick another method.",
+    },
+    "api.order_not_found": {"ru": "Заказ не найден.", "en": "Order not found."},
     "api.link_expired": {"ru": "Ссылка устарела.", "en": "The link has expired."},
     "api.font_not_found": {"ru": "Шрифт не найден.", "en": "Font not found."},
 }

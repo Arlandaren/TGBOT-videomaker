@@ -753,3 +753,214 @@ async def test_an_invoice_is_for_tokens_at_the_current_price(booted):
 
     r = await booted.post("/api/invoice", json={"tokens": 300}, headers=auth())
     assert r.status == 400
+
+
+# ------------------------------------------------------------------ PayHot
+
+
+class FakePayHotClient:
+    def __init__(self):
+        self.created = []
+        self.euro_asked = []
+
+    async def create_payment(self, **k):
+        from src.payments.payhot import Created
+
+        self.created.append(k)
+        return Created(payment_id="pay-9", checkout_url="https://go.pay.hot/pay/x#t=s")
+
+    async def euro_for_rubles(self, rub_minor):
+        self.euro_asked.append(rub_minor)
+        return 1309
+
+    async def get_payment(self, payment_id):
+        from src.payments.payhot import Status
+
+        return Status(status="succeeded", amount_minor=109900, currency="RUB", order_ref="")
+
+
+@pytest.fixture
+async def paying(tmp_path, monkeypatch):
+    """Приложение с ключом PayHot, двойником его API и базы."""
+    import uuid
+    from types import SimpleNamespace
+
+    from src.db import repo
+    from src.webapp import server as mod
+    from src.webapp.server import create_app
+
+    store: dict = {"orders": {}, "settled": []}
+
+    async def upsert(user_id, **f):
+        return SimpleNamespace(id=user_id, balance=0, videos_done=0, preset="pulse", settings={},
+                               lang="ru", ref_credit=0, is_blocked=False,
+                               username=None, first_name="Т", language_code="ru",
+                               is_admin=False)
+
+    async def no_user(_):
+        return None
+
+    async def create_order(**k):
+        order = SimpleNamespace(id=uuid.uuid4(), payment_id=None, status="created", credited=False, **k)
+        store["orders"][order.id] = order
+        return order
+
+    async def set_payment(order_id, payment_id):
+        store["orders"][uuid.UUID(str(order_id))].payment_id = payment_id
+
+    async def get_order(order_id):
+        return store["orders"].get(uuid.UUID(str(order_id)))
+
+    async def me():
+        return SimpleNamespace(username="ClipLy_app", first_name="ClipLy")
+
+    monkeypatch.setattr(repo, "upsert_user", upsert)
+    monkeypatch.setattr(repo, "get_user", no_user)
+    monkeypatch.setattr(repo, "create_payhot_order", create_order)
+    monkeypatch.setattr(repo, "set_payhot_payment", set_payment)
+    monkeypatch.setattr(repo, "get_payhot_order", get_order)
+    fake = FakePayHotClient()
+    cfg = Settings(_env_file=None, bot_token=TOKEN, work_dir=tmp_path, payhot_api_key="phk_test",
+                   payhot_card_enabled=True, payhot_crypto_enabled=True, payhot_payment_enabled=False,
+                   payhot_poll_s=0)
+    app = create_app(bot=SimpleNamespace(me=me), cfg=cfg)  # type: ignore[arg-type]
+    app[mod.PAYHOT_KEY] = fake
+    async with TestClient(TestServer(app)) as c:
+        yield c, fake, store
+
+
+async def test_bootstrap_lists_the_payhot_methods_and_stars(paying):
+    c, _, _ = paying
+    body = await (await c.get("/api/bootstrap", headers=auth())).json()
+    assert [m["key"] for m in body["pay_methods"]] == ["card", "crypto", "stars"]
+
+
+async def test_bootstrap_without_a_key_offers_only_stars(booted):
+    body = await (await booted.get("/api/bootstrap", headers=auth())).json()
+    assert [m["key"] for m in body["pay_methods"]] == ["stars"]
+
+
+async def test_a_crypto_order_is_billed_in_the_package_rubles(paying):
+    c, fake, store = paying
+    r = await c.post("/api/payhot/orders", json={"tokens": 240, "method": "crypto"}, headers=auth())
+    assert r.status == 200
+    body = await r.json()
+    assert body["url"] == "https://go.pay.hot/pay/x#t=s"
+    [order] = store["orders"].values()
+    assert str(order.id) == body["order_id"]
+    assert (order.user_id, order.tokens, order.rub, order.method, order.currency, order.amount_minor) == (
+        42, 240, 1099, "crypto", "RUB", 109900)
+    assert order.payment_id == "pay-9"
+    [k] = fake.created
+    assert k["order_ref"] == str(order.id) and k["amount_minor"] == 109900 and k["currency"] == "RUB"
+    assert k["method"] == "crypto" and k["customer_id"] == "tg-42"
+    assert k["success_url"] == "https://t.me/ClipLy_app"
+
+
+async def test_a_card_order_is_billed_in_euros_from_payhots_estimate(paying):
+    c, fake, store = paying
+    r = await c.post("/api/payhot/orders", json={"tokens": 590, "method": "card"}, headers=auth())
+    assert r.status == 200
+    [order] = store["orders"].values()
+    assert fake.euro_asked == [279900]
+    assert (order.currency, order.amount_minor, order.rub) == ("EUR", 1309, 2799)
+
+
+@pytest.mark.parametrize("body", [
+    {"tokens": 300, "method": "crypto"},     # нет такого пакета
+    {"tokens": 240, "method": "sbp"},        # СБП выключен
+    {"tokens": 240, "method": "stars"},      # звёзды — другой путь
+    {"tokens": "x", "method": "crypto"},
+])
+async def test_a_wrong_order_is_refused_before_payhot(paying, body):
+    c, fake, store = paying
+    r = await c.post("/api/payhot/orders", json=body, headers=auth())
+    assert r.status == 400
+    assert fake.created == [] and store["orders"] == {}
+
+
+async def test_crypto_below_its_minimum_is_refused(paying, monkeypatch):
+    from src.webapp import server as mod
+
+    c, fake, store = paying
+    cfg = c.server.app[mod.CFG_KEY]
+    monkeypatch.setattr(cfg, "payhot_crypto_min_amount_minor", 200000)
+    r = await c.post("/api/payhot/orders", json={"tokens": 240, "method": "crypto"}, headers=auth())
+    assert r.status == 400 and fake.created == []
+
+
+async def test_the_order_status_settles_the_payment(paying, monkeypatch):
+    from src.payments import orders
+    from src.payments.orders import Settled
+
+    c, fake, store = paying
+    order_id = (await (await c.post("/api/payhot/orders", json={"tokens": 240, "method": "crypto"},
+                                    headers=auth())).json())["order_id"]
+    seen = []
+
+    async def settle(oid, client):
+        seen.append((str(oid), client))
+        return Settled("succeeded", True, True, 240, 42)
+
+    monkeypatch.setattr(orders, "settle", settle)
+    r = await c.get(f"/api/payhot/orders/{order_id}", headers=auth())
+    assert r.status == 200
+    assert (await r.json())["status"] == "succeeded"
+    assert seen == [(order_id, fake)]
+
+
+async def test_someone_elses_order_is_not_found(paying):
+    c, _, _ = paying
+    order_id = (await (await c.post("/api/payhot/orders", json={"tokens": 240, "method": "crypto"},
+                                    headers=auth())).json())["order_id"]
+    assert (await c.get(f"/api/payhot/orders/{order_id}", headers=auth(43))).status == 404
+    assert (await c.get("/api/payhot/orders/not-a-uuid", headers=auth())).status == 404
+
+
+async def test_a_payhot_refusal_is_a_clear_error(paying):
+    from src.payments.payhot import PayHotError
+
+    c, fake, store = paying
+
+    async def refuse(**k):
+        raise PayHotError("payment_route_unavailable", "no route")
+
+    fake.create_payment = refuse
+    r = await c.post("/api/payhot/orders", json={"tokens": 240, "method": "crypto"}, headers=auth())
+    assert r.status == 502
+    assert "error" in await r.json()
+
+
+async def test_the_background_poll_credits_and_tells_the_user(paying, monkeypatch):
+    """Человек оплатил и закрыл приложение — токены всё равно придут, и бот скажет."""
+    from types import SimpleNamespace
+
+    from src.db import repo
+    from src.payments import orders
+    from src.payments.orders import Settled
+    from src.webapp import server as mod
+
+    c, fake, store = paying
+    app = c.server.app
+    sent = []
+
+    async def send_message(chat_id, text):
+        sent.append((chat_id, text))
+
+    app[mod.BOT_KEY].send_message = send_message
+    o1, o2, o3 = (SimpleNamespace(id=f"o{i}") for i in range(3))
+
+    async def to_check(*, since):
+        return [o1, o2, o3]
+
+    async def settle(oid, client):
+        if oid == "o2":
+            raise RuntimeError("битый заказ")
+        if oid == "o1":
+            return Settled("succeeded", True, True, 240, 42)
+        return Settled("processing", False, False, 240, 42)
+
+    monkeypatch.setattr(repo, "payhot_orders_to_check", to_check)
+    monkeypatch.setattr(orders, "settle", settle)
+    assert await mod.payhot_poll_once(app) == 1
+    assert len(sent) == 1 and sent[0][0] == 42 and "240" in sent[0][1]

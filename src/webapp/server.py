@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import gzip
 import hashlib
 import hmac
@@ -475,7 +476,9 @@ def _pay_methods_view(cfg: Settings) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for m in payhot_mod.methods(cfg):
         min_rub = m.min_amount_minor // 100 if m.currency == "RUB" and m.min_amount_minor else 0
-        out.append({"key": m.key, "kind": "payhot", "min_rub": min_rub})
+        # Карта выставляется в евро по курсу PayHot: рубли — ориентир («≈»).
+        out.append({"key": m.key, "kind": "payhot", "min_rub": min_rub,
+                    "approx": m.currency != "RUB"})
     out.append({"key": "stars", "kind": "stars", "min_rub": 0})
     return out
 
@@ -859,6 +862,12 @@ async def _own_job(request: web.Request, user: WebAppUser) -> Job | None:
 # ------------------------------------------------------------------ PayHot
 
 PAYHOT_KEY = web.AppKey("payhot", object)
+# Не больше стольких счетов на человека за окно: каждый — настоящий платёж в
+# PayHot и работа для фонового опроса.
+PAYHOT_ORDERS_PER_WINDOW = 5
+PAYHOT_ORDER_WINDOW = timedelta(minutes=10)
+# Заказ старше часа опрашивается раз в столько проходов (≈10 минут при 30 с).
+PAYHOT_SLOW_EVERY = 20
 
 
 async def _payhot_return_url(request: web.Request) -> str:
@@ -895,11 +904,14 @@ async def payhot_order(request: web.Request) -> web.Response:
         return await _fail(request, 400, "api.unknown_method")
     if not method.allows_rub(package.rub):
         return await _fail(request, 400, "api.below_minimum", rub=method.min_amount_minor // 100)
+    since = datetime.now(timezone.utc) - PAYHOT_ORDER_WINDOW
+    if await repo.count_payhot_orders(user.id, since=since) >= PAYHOT_ORDERS_PER_WINDOW:
+        return await _fail(request, 429, "api.too_many_orders")
     try:
         if method.currency == "EUR":
             amount = await client.euro_for_rubles(package.rub * 100)
             if method.min_amount_minor and amount < method.min_amount_minor:
-                return await _fail(request, 400, "api.below_minimum", rub=package.rub)
+                return await _fail(request, 400, "api.method_not_for_package")
         else:
             amount = package.rub * 100
         order = await repo.create_payhot_order(
@@ -955,17 +967,26 @@ async def _notify_payhot_credit(bot: Any, got: Any) -> None:
         log.info("payhot: весть о зачислении %s не ушла: %s", got.user_id, e)
 
 
-async def payhot_poll_once(app: web.Application) -> int:
-    """Один проход фонового опроса: открытые заказы последних часов. → сколько зачислено."""
+async def payhot_poll_once(app: web.Application, *, pass_no: int = 0) -> int:
+    """Один проход фонового опроса. → сколько зачислено.
+
+    Свежие заказы (до часа) — каждый проход; старше — раз в `PAYHOT_SLOW_EVERY`
+    проходов, до `payhot_order_hours`: поздняя оплата должна дойти, но неделя
+    брошенных счетов не должна растягивать каждый проход.
+    """
     from src.payments import orders
 
     cfg = app[CFG_KEY]
     client = app.get(PAYHOT_KEY)
     if client is None:
         return 0
-    since = datetime.now(timezone.utc) - timedelta(hours=cfg.payhot_order_hours)
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(hours=cfg.payhot_order_hours)
+    slow_turn = pass_no % PAYHOT_SLOW_EVERY == 0
     credited = 0
     for order in await repo.payhot_orders_to_check(since=since):
+        if now - order.created_at > timedelta(hours=1) and not slow_turn:
+            continue
         try:
             got = await orders.settle(order.id, client)
         except Exception:  # noqa: BLE001 — один битый заказ не должен стопорить остальные
@@ -985,17 +1006,21 @@ async def _payhot_lifecycle(app: web.Application):
         app[PAYHOT_KEY] = payhot_mod.PayHotClient.from_settings(cfg)
     if PAYHOT_KEY in app and cfg.payhot_poll_s > 0:
         async def loop() -> None:
+            pass_no = 0
             while True:
                 await asyncio.sleep(cfg.payhot_poll_s)
                 try:
-                    await payhot_poll_once(app)
+                    await payhot_poll_once(app, pass_no=pass_no)
                 except Exception:  # noqa: BLE001
                     log.exception("payhot: проход опроса упал")
+                pass_no += 1
 
         task = asyncio.create_task(loop())
     yield
     if task is not None:
         task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
     client = app.get(PAYHOT_KEY)
     if client is not None and hasattr(client, "aclose"):
         await client.aclose()

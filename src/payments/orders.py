@@ -19,9 +19,10 @@ from src.payments.payhot import PayHotError, Status
 log = logging.getLogger(__name__)
 
 PAID = "succeeded"
-# Неуспех без шансов: PayHot сам пишет, что после позднего подтверждения
-# `failed`/`cancelled` могут уточниться, — фоновый опрос держит такие заказы
-# закрытыми, но приложение может спросить ещё раз по кнопке.
+# Неуспех «на сейчас»: приложению — конец ожидания, но PayHot сам пишет, что
+# после позднего подтверждения `failed`/`cancelled` уточняются до succeeded.
+# Поэтому заказ остаётся в фоновом опросе (`repo.payhot_orders_to_check`), и
+# поздняя оплата всё равно приходит токенами с вестью в чат.
 FAILED = ("cancelled", "failed")
 
 
@@ -42,7 +43,7 @@ async def settle(order_id: uuid.UUID | str, payhot: StatusSource) -> Settled:
     order = await repo.get_payhot_order(order_id)
     if order is None:
         return Settled("missing", False, True)
-    if order.credited or order.status in repo.PAYHOT_FINAL:
+    if order.credited or order.status in repo.PAYHOT_CLOSED:
         return Settled(order.status, False, True, order.tokens, order.user_id)
     if not order.payment_id:
         return Settled(order.status, False, False, order.tokens, order.user_id)
@@ -53,7 +54,8 @@ async def settle(order_id: uuid.UUID | str, payhot: StatusSource) -> Settled:
         return Settled(order.status, False, False, order.tokens, order.user_id)
 
     if st.status == PAID:
-        if st.amount_minor != order.amount_minor or st.currency != order.currency:
+        foreign = bool(st.order_ref) and st.order_ref != str(order.id)
+        if foreign or st.amount_minor != order.amount_minor or st.currency != order.currency:
             # Оплачено не то, что заказано. Токены не выдаём: это либо подмена
             # суммы, либо ошибка, которую должен разобрать человек.
             log.error("payhot: заказ %s оплачен на %s %s вместо %s %s — на сверку",

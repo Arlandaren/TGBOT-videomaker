@@ -819,6 +819,11 @@ async def paying(tmp_path, monkeypatch):
     monkeypatch.setattr(repo, "create_payhot_order", create_order)
     monkeypatch.setattr(repo, "set_payhot_payment", set_payment)
     monkeypatch.setattr(repo, "get_payhot_order", get_order)
+
+    async def no_recent_orders(user_id, *, since):
+        return 0
+
+    monkeypatch.setattr(repo, "count_payhot_orders", no_recent_orders)
     fake = FakePayHotClient()
     cfg = Settings(_env_file=None, bot_token=TOKEN, work_dir=tmp_path, payhot_api_key="phk_test",
                    payhot_card_enabled=True, payhot_crypto_enabled=True, payhot_payment_enabled=False,
@@ -948,7 +953,9 @@ async def test_the_background_poll_credits_and_tells_the_user(paying, monkeypatc
         sent.append((chat_id, text))
 
     app[mod.BOT_KEY].send_message = send_message
-    o1, o2, o3 = (SimpleNamespace(id=f"o{i}") for i in range(3))
+    from datetime import datetime, timezone
+
+    o1, o2, o3 = (SimpleNamespace(id=f"o{i}", created_at=datetime.now(timezone.utc)) for i in range(3))
 
     async def to_check(*, since):
         return [o1, o2, o3]
@@ -964,3 +971,62 @@ async def test_the_background_poll_credits_and_tells_the_user(paying, monkeypatc
     monkeypatch.setattr(orders, "settle", settle)
     assert await mod.payhot_poll_once(app) == 1
     assert len(sent) == 1 and sent[0][0] == 42 and "240" in sent[0][1]
+
+
+async def test_too_many_orders_in_a_row_are_refused(paying, monkeypatch):
+    """Каждый заказ — настоящий счёт в PayHot и работа для фонового опроса."""
+    from src.db import repo
+
+    c, fake, store = paying
+
+    async def count(user_id, *, since):
+        return len(store["orders"])
+
+    monkeypatch.setattr(repo, "count_payhot_orders", count)
+    for _ in range(5):
+        assert (await c.post("/api/payhot/orders", json={"tokens": 240, "method": "crypto"},
+                             headers=auth())).status == 200
+    assert (await c.post("/api/payhot/orders", json={"tokens": 240, "method": "crypto"},
+                         headers=auth())).status == 429
+    assert len(fake.created) == 5
+
+
+def test_an_http_return_url_is_a_config_error():
+    with pytest.raises(ValueError):
+        Settings(_env_file=None, payhot_return_url="http://example.com")
+
+
+async def test_old_orders_are_polled_rarely_not_never(paying, monkeypatch):
+    """Свежие — каждый проход; старше часа — раз в несколько проходов, но до
+    недели: оплата, подтверждённая поздно или пока бот лежал, всё равно дойдёт."""
+    from datetime import datetime, timedelta, timezone
+    from types import SimpleNamespace
+
+    from src.db import repo
+    from src.payments import orders
+    from src.payments.orders import Settled
+    from src.webapp import server as mod
+
+    c, fake, store = paying
+    now = datetime.now(timezone.utc)
+    fresh = SimpleNamespace(id="fresh", created_at=now - timedelta(minutes=5))
+    old = SimpleNamespace(id="old", created_at=now - timedelta(days=2))
+    seen_since = []
+
+    async def to_check(*, since):
+        seen_since.append(since)
+        return [fresh, old]
+
+    asked = []
+
+    async def settle(oid, client):
+        asked.append(oid)
+        return Settled("processing", False, False, 240, 42)
+
+    monkeypatch.setattr(repo, "payhot_orders_to_check", to_check)
+    monkeypatch.setattr(orders, "settle", settle)
+    for n in range(mod.PAYHOT_SLOW_EVERY):
+        await mod.payhot_poll_once(c.server.app, pass_no=n)
+    assert asked.count("fresh") == mod.PAYHOT_SLOW_EVERY
+    assert asked.count("old") == 1
+    assert now - seen_since[0] >= timedelta(days=6), "окно опроса короче недели"

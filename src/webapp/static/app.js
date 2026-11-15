@@ -1341,7 +1341,8 @@ function renderTariffs() {
   const method = renderPayMethods(chosen);
   const stars = method && method.key === "stars";
   $("#pay-title").textContent = !chosen || !method ? ""
-    : (stars ? tr("pay.button", { n: chosen.stars }) : tr("pay.button_rub", { n: fmtRub(chosen.rub) }));
+    : (stars ? tr("pay.button", { n: chosen.stars })
+      : tr("pay.button_rub", { n: `${method.approx ? "≈ " : ""}${fmtRub(chosen.rub)}` }));
   $("#pay-sub").textContent = chosen ? tr("pay.sub", { n: chosen.tokens, w: tokensWord(chosen.tokens) }) : "";
   $("#pay").hidden = !chosen || !method;
 }
@@ -1359,7 +1360,8 @@ function renderPayMethods(pkg) {
   $("#pay-methods").replaceChildren(...list.map((m) => {
     const ok = usable(m);
     const on = ok && m.key === state.payMethod;
-    const price = !pkg ? "" : (m.kind === "stars" ? `${pkg.stars} ⭐` : (pkg.rub ? `${fmtRub(pkg.rub)} ₽` : ""));
+    const rub = pkg && pkg.rub ? `${m.approx ? "≈ " : ""}${fmtRub(pkg.rub)} ₽` : "";
+    const price = !pkg ? "" : (m.kind === "stars" ? `${pkg.stars} ⭐` : rub);
     return el("button", {
       class: `pay-method${ok ? "" : " is-off"}`, type: "button", role: "radio",
       "aria-checked": on ? "true" : "false", "aria-disabled": ok ? "false" : "true",

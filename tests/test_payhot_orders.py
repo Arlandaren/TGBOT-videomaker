@@ -138,3 +138,58 @@ async def test_the_poller_sees_only_open_recent_orders(user):
     ids = {o.id for o in await repo.payhot_orders_to_check(
         since=datetime.now(timezone.utc) - timedelta(hours=3))}
     assert ids == {fresh.id}
+
+
+# ------------------------------------------------------------------ после проверки
+
+
+@pytest.mark.parametrize("first", ["cancelled", "failed"])
+async def test_a_late_confirmation_after_a_refusal_is_still_credited(user, first):
+    """PayHot прямо пишет: failed/cancelled могут уточниться до succeeded (крипта
+    пришла после истечения счёта). Такой заказ обязан дождаться своих токенов."""
+    order = await new_order()
+    await orders.settle(order.id, FakePayHot(status=first))
+    got = await orders.settle(order.id, FakePayHot(status="succeeded"))
+    assert got.credited is True
+    assert await balance_of() == 240
+
+
+async def test_a_refused_order_stays_in_the_poll(user):
+    from datetime import datetime, timedelta, timezone
+
+    order = await new_order()
+    await orders.settle(order.id, FakePayHot(status="cancelled"))
+    ids = {o.id for o in await repo.payhot_orders_to_check(
+        since=datetime.now(timezone.utc) - timedelta(hours=1))}
+    assert order.id in ids
+
+
+async def test_a_stale_status_never_overwrites_a_credited_order(user):
+    """Опрос прочитал «processing», а приложение тем временем зачислило: запись
+    опроса не имеет права превратить зачисленный заказ обратно в незавершённый."""
+    order = await new_order()
+    await orders.settle(order.id, FakePayHot())
+    await repo.set_payhot_status(order.id, "failed")
+    fresh = await repo.get_payhot_order(order.id)
+    assert (fresh.status, fresh.credited) == ("succeeded", True)
+
+
+async def test_open_orders_are_counted_per_user(user):
+    from datetime import datetime, timedelta, timezone
+
+    for i in range(3):
+        await new_order(f"pay-{i}")
+    since = datetime.now(timezone.utc) - timedelta(minutes=10)
+    assert await repo.count_payhot_orders(1001, since=since) == 3
+    assert await repo.count_payhot_orders(1002, since=since) == 0
+
+
+async def test_a_payment_for_another_order_is_not_credited(user):
+    class Other(FakePayHot):
+        async def get_payment(self, pid):
+            st = await super().get_payment(pid)
+            return Status(st.status, st.amount_minor, st.currency, order_ref="someone-else")
+
+    order = await new_order()
+    got = await orders.settle(order.id, Other())
+    assert got.credited is False and await balance_of() == 0

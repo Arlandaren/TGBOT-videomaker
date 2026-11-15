@@ -469,11 +469,22 @@ class Settings(BaseSettings):
     # не спрашивать (только приложение, пока открыто). Сколько часов заказ
     # считается живым — счёт PayHot живёт меньше часа, три часа с запасом.
     payhot_poll_s: int = 30
-    payhot_order_hours: int = 3
+    # Неделя, а не часы: оплата, подтверждённая поздно (manual_reconciliation,
+    # крипта после истечения счёта) или пока бот лежал, обязана дойти. Заказы
+    # старше часа опрашиваются реже (`server.PAYHOT_SLOW_EVERY`).
+    payhot_order_hours: int = 168
 
     # ------------------------------------------------------------------ прочее
     debug: bool = False
     log_level: str = "INFO"
+
+    @field_validator("payhot_return_url")
+    @classmethod
+    def _https_return_url(cls, v: str) -> str:
+        # PayHot принимает только непустой HTTPS-адрес; иначе каждый счёт падал бы с 502.
+        if v.strip() and not v.strip().startswith("https://"):
+            raise ValueError("PAYHOT_RETURN_URL: нужен https://-адрес")
+        return v
 
     @field_validator("token_packages", mode="before")
     @classmethod

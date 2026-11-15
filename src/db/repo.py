@@ -803,22 +803,32 @@ async def get_payhot_order(order_id: uuid.UUID | str) -> PayhotOrder | None:
 
 
 async def set_payhot_status(order_id: uuid.UUID | str, status: str, *, credited: bool | None = None) -> None:
+    """Статус заказа — только пока он не зачислен.
+
+    Без этого условия запоздалая запись опроса («processing», прочитанное до
+    оплаты) превращала зачисленный заказ обратно в незавершённый, и приложение
+    говорило оплатившему «оплата не прошла».
+    """
     values: dict[str, Any] = {"status": status[:32]}
     if credited is not None:
         values["credited"] = credited
     async with session() as s:
         await s.execute(
-            update(PayhotOrder).where(PayhotOrder.id == uuid.UUID(str(order_id))).values(**values)
+            update(PayhotOrder)
+            .where(PayhotOrder.id == uuid.UUID(str(order_id)), PayhotOrder.credited.is_(False))
+            .values(**values)
         )
 
 
-# Статусы, после которых PayHot заказ уже не меняет так, чтобы мы что-то
-# зачисляли: оплачено (и уже зачислено), отменено, ошибка, наш mismatch.
-PAYHOT_FINAL = ("succeeded", "cancelled", "failed", "refunded", "mismatch")
+# Статусы, после которых заказ больше не спрашивают: наш mismatch (оплачено не
+# то — разбирает человек) и возврат. `cancelled` и `failed` сюда НЕ входят:
+# PayHot пишет, что после позднего подтверждения они уточняются до succeeded
+# (крипта пришла после истечения счёта), и такой заказ обязан дождаться токенов.
+PAYHOT_CLOSED = ("mismatch", "refunded")
 
 
 async def payhot_orders_to_check(*, since: datetime) -> list[PayhotOrder]:
-    """Открытые заказы со счётом, созданные после `since`, — для фонового опроса."""
+    """Незачисленные заказы со счётом, созданные после `since`, — для фонового опроса."""
     async with session() as s:
         q = (
             select(PayhotOrder)
@@ -826,8 +836,16 @@ async def payhot_orders_to_check(*, since: datetime) -> list[PayhotOrder]:
                 PayhotOrder.created_at >= since,
                 PayhotOrder.payment_id.is_not(None),
                 PayhotOrder.credited.is_(False),
-                PayhotOrder.status.not_in(PAYHOT_FINAL),
+                PayhotOrder.status.not_in(PAYHOT_CLOSED),
             )
             .order_by(PayhotOrder.created_at)
         )
         return list((await s.execute(q)).scalars())
+
+
+async def count_payhot_orders(user_id: int, *, since: datetime) -> int:
+    async with session() as s:
+        q = select(func.count()).select_from(PayhotOrder).where(
+            PayhotOrder.user_id == user_id, PayhotOrder.created_at >= since
+        )
+        return int((await s.execute(q)).scalar_one())

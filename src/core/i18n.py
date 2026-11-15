@@ -384,6 +384,14 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "The payment system didn't respond. Try again or pick another method.",
     },
     "api.order_not_found": {"ru": "Заказ не найден.", "en": "Order not found."},
+    "api.too_many_orders": {
+        "ru": "Слишком много счетов подряд. Оплатите открытый или подождите несколько минут.",
+        "en": "Too many invoices in a row. Pay the open one or wait a few minutes.",
+    },
+    "api.method_not_for_package": {
+        "ru": "Этим способом этот пакет не оплатить. Выберите пакет побольше или другой способ.",
+        "en": "This package can't be paid this way. Pick a bigger package or another method.",
+    },
     "api.link_expired": {"ru": "Ссылка устарела.", "en": "The link has expired."},
     "api.font_not_found": {"ru": "Шрифт не найден.", "en": "Font not found."},
 }

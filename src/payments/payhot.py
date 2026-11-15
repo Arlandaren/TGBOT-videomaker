@@ -62,17 +62,17 @@ class Method:
 
 
 def methods(cfg: Settings) -> list[Method]:
-    """Включённые способы PayHot в порядке показа. Без ключа — ни одного."""
+    """Включённые способы PayHot в порядке показа (порядок владельца). Без ключа — ни одного."""
     if not cfg.payhot_api_key.strip():
         return []
-    out: list[Method] = []
-    if cfg.payhot_payment_enabled:
-        out.append(Method("sbp", "sbp", "RUB"))
-    if cfg.payhot_card_enabled:
-        out.append(Method("card", "card", "EUR", cfg.payhot_card_min_amount_minor))
-    if cfg.payhot_crypto_enabled:
-        out.append(Method("crypto", "crypto", "RUB", cfg.payhot_crypto_min_amount_minor))
-    return out
+    candidates = [
+        (cfg.payhot_applepay_enabled, Method("applepay", "applepay", "EUR", cfg.payhot_card_min_amount_minor)),
+        (cfg.payhot_payment_enabled, Method("sbp", "sbp", "RUB")),
+        (cfg.payhot_card_enabled, Method("card", "card", "EUR", cfg.payhot_card_min_amount_minor)),
+        (cfg.payhot_googlepay_enabled, Method("googlepay", "googlepay", "EUR", cfg.payhot_card_min_amount_minor)),
+        (cfg.payhot_crypto_enabled, Method("crypto", "crypto", "RUB", cfg.payhot_crypto_min_amount_minor)),
+    ]
+    return [m for on, m in candidates if on]
 
 
 def method(cfg: Settings, key: str) -> Method | None:
@@ -152,7 +152,7 @@ class PayHotClient:
         except (KeyError, ValueError) as e:
             raise PayHotError("bad_response", f"статус без полей: {e}") from e
 
-    async def euro_for_rubles(self, rub_minor: int) -> int:
+    async def euro_for_rubles(self, rub_minor: int, method: str = "card") -> int:
         """Сумма счёта в евроцентах, при которой зачисление — `rub_minor` копеек.
 
         Курс и комиссию считает сам PayHot: свой расчёт по курсу разошёлся бы с
@@ -160,7 +160,7 @@ class PayHotClient:
         """
         data = await self._call("GET", "/api/v2/payment-estimates", params={
             "currency": "EUR", "target_currency": "RUB",
-            "target_amount_minor": str(int(rub_minor)), "payment_method": "card",
+            "target_amount_minor": str(int(rub_minor)), "payment_method": method,
         })
         try:
             return int(data["amount_minor"])

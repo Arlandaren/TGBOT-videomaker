@@ -910,7 +910,7 @@ async def payhot_order(request: web.Request) -> web.Response:
         return await _fail(request, 400, "api.below_minimum", rub=method.min_amount_minor // 100)
     try:
         if method.currency == "EUR":
-            amount = await client.euro_for_rubles(package.rub * 100)
+            amount = await client.euro_for_rubles(package.rub * 100, method=method.payhot_method)
             if method.min_amount_minor and amount < method.min_amount_minor:
                 return await _fail(request, 400, "api.method_not_for_package")
         else:

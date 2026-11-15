@@ -452,11 +452,14 @@ class Settings(BaseSettings):
     # Код кассы в кабинете. API берёт кассу из самого ключа, здесь — для сверки
     # человеком и журналов.
     payhot_terminal_ref: str = "main"
-    # Переключатели способов. Проверено на кассе 15 ноября 2026: карта в RUB
-    # маршрута не имеет, поэтому «карта» — это Visa/Mastercard в EUR; СБП и
-    # криптовалюта — в RUB. PAYMENT_ENABLED включает СБП.
-    payhot_payment_enabled: bool = False
+    # Переключатели способов. Проверено на кассе 15–16 ноября 2026 пробными
+    # счетами: карта в RUB маршрута не имеет, поэтому «карта» — Visa/Mastercard
+    # в EUR; Apple Pay и Google Pay — тоже EUR; СБП и криптовалюта — в RUB.
+    # PAYMENT_ENABLED включает СБП (имя — из настроек владельца).
+    payhot_applepay_enabled: bool = True
+    payhot_payment_enabled: bool = True
     payhot_card_enabled: bool = True
+    payhot_googlepay_enabled: bool = True
     payhot_crypto_enabled: bool = True
     # Нижние пороги в копейках/центах валюты способа: карта — в EUR (500 = €5),
     # крипта — в RUB (100000 = 1000 ₽). Пакет дешевле порога этим способом не

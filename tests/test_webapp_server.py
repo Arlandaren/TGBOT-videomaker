@@ -769,9 +769,9 @@ class FakePayHotClient:
         self.created.append(k)
         return Created(payment_id="pay-9", checkout_url="https://go.pay.hot/pay/x#t=s")
 
-    async def euro_for_rubles(self, rub_minor):
-        self.euro_asked.append(rub_minor)
-        return 1309
+    async def euro_for_rubles(self, rub_minor, method="card"):
+        self.euro_asked.append((rub_minor, method))
+        return 1309 if method == "card" else 1434
 
     async def get_payment(self, payment_id):
         from src.payments.payhot import Status
@@ -826,7 +826,6 @@ async def paying(tmp_path, monkeypatch):
     monkeypatch.setattr(repo, "count_payhot_orders", no_recent_orders)
     fake = FakePayHotClient()
     cfg = Settings(_env_file=None, bot_token=TOKEN, work_dir=tmp_path, payhot_api_key="phk_test",
-                   payhot_card_enabled=True, payhot_crypto_enabled=True, payhot_payment_enabled=False,
                    payhot_poll_s=0)
     app = create_app(bot=SimpleNamespace(me=me), cfg=cfg)  # type: ignore[arg-type]
     app[mod.PAYHOT_KEY] = fake
@@ -837,7 +836,8 @@ async def paying(tmp_path, monkeypatch):
 async def test_bootstrap_lists_the_payhot_methods_and_stars(paying):
     c, _, _ = paying
     body = await (await c.get("/api/bootstrap", headers=auth())).json()
-    assert [m["key"] for m in body["pay_methods"]] == ["card", "crypto", "stars"]
+    assert [m["key"] for m in body["pay_methods"]] == [
+        "applepay", "sbp", "card", "googlepay", "crypto", "stars"]
 
 
 async def test_bootstrap_without_a_key_offers_only_stars(booted):
@@ -867,13 +867,24 @@ async def test_a_card_order_is_billed_in_euros_from_payhots_estimate(paying):
     r = await c.post("/api/payhot/orders", json={"tokens": 590, "method": "card"}, headers=auth())
     assert r.status == 200
     [order] = store["orders"].values()
-    assert fake.euro_asked == [279900]
+    assert fake.euro_asked == [(279900, "card")]
     assert (order.currency, order.amount_minor, order.rub) == ("EUR", 1309, 2799)
+
+
+@pytest.mark.parametrize("method", ["applepay", "googlepay"])
+async def test_a_wallet_order_is_its_own_method_in_euros(paying, method):
+    c, fake, store = paying
+    r = await c.post("/api/payhot/orders", json={"tokens": 240, "method": method}, headers=auth())
+    assert r.status == 200
+    [order] = store["orders"].values()
+    assert fake.euro_asked == [(109900, method)]
+    assert (order.method, order.currency, order.amount_minor) == (method, "EUR", 1434)
+    assert fake.created[0]["method"] == method
 
 
 @pytest.mark.parametrize("body", [
     {"tokens": 300, "method": "crypto"},     # нет такого пакета
-    {"tokens": 240, "method": "sbp"},        # СБП выключен
+    {"tokens": 240, "method": "bank"},       # такого способа нет
     {"tokens": 240, "method": "stars"},      # звёзды — другой путь
     {"tokens": "x", "method": "crypto"},
 ])

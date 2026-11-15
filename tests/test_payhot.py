@@ -81,6 +81,15 @@ async def test_the_euro_amount_for_a_ruble_price_comes_from_payhot():
         assert await c.euro_for_rubles(109900) == 1309
 
 
+async def test_the_wallet_estimate_asks_for_the_wallet_method():
+    def handler(request):
+        assert dict(request.url.params)["payment_method"] == "applepay"
+        return httpx.Response(200, json={"status": "estimated", "currency": "EUR", "amount_minor": "1434"})
+
+    async with client_with(handler) as c:
+        assert await c.euro_for_rubles(109900, method="applepay") == 1434
+
+
 @pytest.mark.parametrize("status, body, code", [
     (422, {"error": {"code": "payment_route_unavailable", "message": "no route"}}, "payment_route_unavailable"),
     (401, {"error": {"code": "authentication_failed"}}, "authentication_failed"),
@@ -103,25 +112,28 @@ async def test_a_network_failure_is_a_payhot_error():
     assert e.value.code == "network"
 
 
-def test_methods_follow_the_switches():
-    """Карта и крипта — по флагам владельца; СБП — флаг PAYHOT_PAYMENT_ENABLED.
-    Без ключа PayHot нет ни одного способа, кроме звёзд."""
-    cfg = Settings(_env_file=None, payhot_api_key=KEY, payhot_payment_enabled=False,
-                   payhot_card_enabled=True, payhot_crypto_enabled=True)
+def test_methods_come_in_the_owners_order():
+    """Порядок владельца: Apple Pay, СБП, Visa/Mastercard (Европа), Google Pay,
+    крипта. Кошельки и карта — в EUR (рублёвых маршрутов у кассы нет), СБП и
+    крипта — в RUB. Проверено пробными счетами 15–16 ноября 2026."""
+    cfg = Settings(_env_file=None, payhot_api_key=KEY)
+    got = [(m.key, m.payhot_method, m.currency) for m in methods(cfg)]
+    assert got == [
+        ("applepay", "applepay", "EUR"), ("sbp", "sbp", "RUB"), ("card", "card", "EUR"),
+        ("googlepay", "googlepay", "EUR"), ("crypto", "crypto", "RUB"),
+    ]
+
+
+def test_each_method_has_its_own_switch():
+    cfg = Settings(_env_file=None, payhot_api_key=KEY, payhot_applepay_enabled=False,
+                   payhot_payment_enabled=False, payhot_googlepay_enabled=False)
     assert [m.key for m in methods(cfg)] == ["card", "crypto"]
-    card, crypto = methods(cfg)
-    assert (card.payhot_method, card.currency) == ("card", "EUR")
-    assert (crypto.payhot_method, crypto.currency) == ("crypto", "RUB")
-
-    on = cfg.model_copy(update={"payhot_payment_enabled": True})
-    assert [m.key for m in methods(on)] == ["sbp", "card", "crypto"]
-
     assert methods(cfg.model_copy(update={"payhot_api_key": ""})) == []
 
 
 def test_a_minimum_hides_a_method_for_a_small_package():
     cfg = Settings(_env_file=None, payhot_api_key=KEY, payhot_crypto_enabled=True,
                    payhot_card_enabled=False, payhot_crypto_min_amount_minor=200000)
-    crypto = methods(cfg)[0]
+    crypto = payhot.method(cfg, "crypto")
     assert crypto.allows_rub(1099) is False
     assert crypto.allows_rub(2799) is True

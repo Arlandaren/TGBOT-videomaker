@@ -138,10 +138,6 @@ TEXTS: dict[str, dict[str, str]] = {
     # «240 токенов за 1099 ₽ (749 ⭐)»: рубли — ориентир, платят звёздами.
     "start.pack": {"ru": "{tokens} за {rub} ₽ ({stars} ⭐)", "en": "{tokens} for {rub} ₽ ({stars} ⭐)"},
     "start.pack_stars": {"ru": "{tokens} за {stars} ⭐", "en": "{tokens} for {stars} ⭐"},
-    "start.offer_free": {
-        "ru": "🎁 Сейчас монтаж бесплатный.",
-        "en": "🎁 Editing is free right now.",
-    },
     "btn.open_app": {"ru": "Открыть приложение", "en": "Open the app"},
     "btn.menu": {"ru": "Приложение ✨", "en": "App ✨"},
     # Нижняя клавиатура. Эмодзи — часть подписи: по ним кнопку узнают быстрее,
@@ -189,17 +185,12 @@ TEXTS: dict[str, dict[str, str]] = {
         "ru": "Вопрос или что-то сломалось — напишите {contact}.",
         "en": "A question or something broken — write to {contact}.",
     },
+    # Контакт поддержки не задан (SUPPORT_CONTACT пуст и у владельца нет
+    # @username). Покупателю — без служебных подробностей; владельцу об этом
+    # пишет лог (`menu._support_contact`).
     "menu.support_unset": {
-        "ru": (
-            "Контакт поддержки пока не настроен.\n"
-            "Владельцу: задайте SUPPORT_CONTACT в .env или откройте бота с аккаунта "
-            "из ADMIN_IDS, у которого есть @username."
-        ),
-        "en": (
-            "The support contact isn't set up yet.\n"
-            "Owner: set SUPPORT_CONTACT in .env, or open the bot from an ADMIN_IDS "
-            "account that has a @username."
-        ),
+        "ru": "Поддержка скоро ответит здесь. А пока загляните в «Мои ролики» — там статус каждого монтажа.",
+        "en": "Support will reply here soon. Meanwhile, check “My reels” — each edit's status is there.",
     },
     "help.text": {
         "ru": (
@@ -290,7 +281,10 @@ TEXTS: dict[str, dict[str, str]] = {
     },
     "video.done": {"ru": "Готово.", "en": "Done."},
     "video.result_lost": {"ru": "Ролик готов, но файл потерялся. Напишите нам.", "en": "The reel is ready, but the file got lost. Please contact us."},
-    "video.not_sent": {"ru": "Ролик готов, но не отправился: {error}", "en": "The reel is ready but couldn't be sent: {error}"},
+    "video.not_sent": {
+        "ru": "Ролик готов, но в чат не отправился. Он есть в приложении — «Мои ролики».",
+        "en": "The reel is ready but couldn't be sent to the chat. It's in the app under “My reels”.",
+    },
     "video.caption_durations": {"ru": "{src} с → {res} с", "en": "{src} s → {res} s"},
     "video.caption_saved": {"ru": "вырезано {n} с пауз", "en": "{n} s of pauses cut"},
     "video.caption_style": {"ru": "стиль: {preset}", "en": "style: {preset}"},
@@ -367,7 +361,7 @@ TEXTS: dict[str, dict[str, str]] = {
     "api.blocked": {"ru": "Доступ закрыт.", "en": "Access denied."},
     "api.top_unreadable": {"ru": "Не получилось прочитать верхнее видео. Пришлите mp4 или mov.", "en": "Couldn't read the top video. Please upload an mp4 or mov."},
     "api.unreadable": {"ru": "Не получилось прочитать видео. Пришлите mp4 или mov.", "en": "Couldn't read the video. Please upload an mp4 or mov."},
-    "api.no_balance": {"ru": "На балансе нет роликов.", "en": "Your balance is empty."},
+    "api.no_balance": {"ru": "На балансе не хватает токенов на ролик.", "en": "Not enough tokens for a reel."},
     "api.enqueue_failed": {"ru": "Не получилось поставить ролик в очередь. Баланс не списан.", "en": "Couldn't queue the video. Your balance was not charged."},
     "api.video_not_found": {"ru": "Ролик не найден.", "en": "Video not found."},
     "api.not_ready": {"ru": "Ролик ещё не готов.", "en": "The video isn't ready yet."},

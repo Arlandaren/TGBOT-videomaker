@@ -113,3 +113,35 @@ def test_the_old_reply_keyboard_buttons_are_recognised(text, action):
     from src.bot.handlers.fallback import legacy_action
 
     assert legacy_action(text) == action
+
+
+def test_no_text_announces_free_editing():
+    """Готовый продукт: ни бот, ни приложение не объявляют «монтаж бесплатный»
+    (просьба владельца 16.11.2026). Пробный первый ролик — другое: это
+    предложение продукта, оно остаётся. Тексты для владельца бота тоже."""
+    from pathlib import Path
+
+    from src.core.i18n import TEXTS
+
+    banned = ("монтаж бесплатный", "editing is free right now", "монтаж бесплатно")
+    for key, by_lang in TEXTS.items():
+        for text in by_lang.values():
+            assert not any(b in text.lower() for b in banned), key
+    app = (Path(__file__).resolve().parents[1] / "src/webapp/static/app.js").read_text(encoding="utf-8")
+    for key in ("home.offer_free", "cta.free_all", "balance.note_free"):
+        assert f'"{key}"' not in app, key
+
+
+def test_customer_texts_show_no_internals():
+    """Покупатель не видит ни настроек сервера, ни сырых ошибок, ни роликов
+    вместо токенов. Тексты только для владельца (/stats) — отдельно."""
+    from src.core.i18n import TEXTS
+
+    owner_only = {k for k in TEXTS if k.startswith("stats.cost") or k.startswith("stats.funnel")}
+    for key, by_lang in TEXTS.items():
+        if key in owner_only:
+            continue
+        for text in by_lang.values():
+            for leak in (".env", "ADMIN_IDS", "SUPPORT_CONTACT", "{error}"):
+                assert leak not in text, (key, leak)
+    assert "роликов" not in TEXTS["api.no_balance"]["ru"], "баланс — в токенах"

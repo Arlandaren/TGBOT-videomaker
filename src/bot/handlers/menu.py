@@ -78,6 +78,7 @@ async def _support_contact() -> str | None:
         user = await repo.get_user(admin_id)
         if user and user.username:
             return f"@{user.username}"
+    log.warning("контакт поддержки не задан: SUPPORT_CONTACT пуст и у владельца нет @username")
     return None
 
 

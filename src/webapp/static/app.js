@@ -18,7 +18,6 @@ const I18N = {
     "home.empty": "Роликов пока нет", "home.empty_sub": "Первый ролик появится здесь",
     "home.offer_trial": "Первый ролик — бесплатно. Дальше ролик — {cost}",
     "home.offer_paid": "Ролик — {cost}, пакеты от {pack}",
-    "home.offer_free": "Сейчас монтаж бесплатный",
     "preview.pause": "Пауза", "preview.play": "Воспроизвести",
     "preview.s1": ["это", "пример", "субтитров", "в", "стиле"],
     "preview.s2": ["паузы", "уже", "вырезаны"],
@@ -53,7 +52,7 @@ const I18N = {
     "split.need_both": "добавьте оба видео", "split.top_role": "Сверху", "split.bottom_role": "Снизу",
     "edit.s1_lead_split": "Сверху — то, что показываете, снизу — вы в кадре. Соберём из двух видео ролик с субтитрами.",
     "cta.topup": "Пополнить баланс", "cta.missing": "на ролик не хватает {n}",
-    "cta.free": "бесплатно для владельца", "cta.free_all": "сейчас монтаж бесплатный", "cta.pick": "сначала выберите видео", "cta.charge": "спишется {c} из {n}",
+    "cta.free": "бесплатно для владельца", "cta.ready": "готовый ролик придёт в чат", "cta.pick": "сначала выберите видео", "cta.charge": "спишется {c} из {n}",
     "cta.uploading": "Загрузка {p}%", "cta.checking": "Проверяю видео…", "cta.keep_open": "не закрывайте приложение до конца загрузки",
     "upload.lost": "Связь оборвалась во время загрузки. Попробуйте ещё раз.",
     "toast.accepted": "Видео принято. Готовый ролик придёт в чат, а прогресс — в «Результатах».",
@@ -61,7 +60,6 @@ const I18N = {
     "balance.unlimited": "без ограничений",
     "balance.note": "Один ролик — {c}. Если монтаж не получится, токены вернутся на баланс.",
     "balance.note_admin": "Вы владелец бота: монтаж бесплатный, баланс не списывается.",
-    "balance.note_free": "Сейчас монтаж бесплатный: токены с баланса не списываются.",
     "status.queued": "в очереди", "status.running": "монтируется", "status.done": "готов", "status.failed": "не получилось", "status.cancelled": "отменён",
     "jobs.all": "Все", "jobs.done": "Готовые", "jobs.active": "В работе",
     "jobs.empty": "Роликов пока нет", "jobs.empty_hint": "Загрузите видео — готовый ролик придёт в чат и появится здесь.",
@@ -114,7 +112,6 @@ const I18N = {
     "home.empty": "No videos yet", "home.empty_sub": "Your first reel will show up here",
     "home.offer_trial": "Your first reel is free. After that a reel is {cost}",
     "home.offer_paid": "A reel is {cost}, packs from {pack}",
-    "home.offer_free": "Editing is free right now",
     "preview.pause": "Pause", "preview.play": "Play",
     "preview.s1": ["this", "is", "captions", "in", "style"],
     "preview.s2": ["pauses", "are", "gone"],
@@ -149,7 +146,7 @@ const I18N = {
     "split.need_both": "add both videos", "split.top_role": "Top", "split.bottom_role": "Bottom",
     "edit.s1_lead_split": "On top — what you show, below — you on camera. We'll turn the two videos into a reel with captions.",
     "cta.topup": "Top up balance", "cta.missing": "{n} short of a reel",
-    "cta.free": "free for the owner", "cta.free_all": "editing is free right now", "cta.pick": "pick a video first", "cta.charge": "uses {c} of your {n}",
+    "cta.free": "free for the owner", "cta.ready": "the finished reel arrives in the chat", "cta.pick": "pick a video first", "cta.charge": "uses {c} of your {n}",
     "cta.uploading": "Uploading {p}%", "cta.checking": "Checking the video…", "cta.keep_open": "keep the app open until the upload finishes",
     "upload.lost": "The connection dropped during upload. Please try again.",
     "toast.accepted": "Video received. The finished reel will arrive in the chat; track progress in “Results”.",
@@ -157,7 +154,6 @@ const I18N = {
     "balance.unlimited": "unlimited",
     "balance.note": "One reel is {c}. If editing fails, the tokens go back to your balance.",
     "balance.note_admin": "You own this bot: editing is free and your balance isn't used.",
-    "balance.note_free": "Editing is free right now: no tokens are taken.",
     "status.queued": "queued", "status.running": "editing", "status.done": "ready", "status.failed": "failed", "status.cancelled": "cancelled",
     "jobs.all": "All", "jobs.done": "Ready", "jobs.active": "In progress",
     "jobs.empty": "No videos yet", "jobs.empty_hint": "Upload a video — the finished reel will arrive in the chat and show up here.",
@@ -1074,7 +1070,9 @@ function renderCta(progressText, share) {
     // Пока файла нет, нажатие открывает выбор файла, а не запускает монтаж —
     // так кнопка и должна называться.
     title.textContent = tr(ready() ? "cta.edit" : "cta.choose");
-    const free = u.is_admin ? "cta.free" : "cta.free_all";
+    // Владельцу — что монтаж ему ничего не стоит; остальным в бесплатном режиме —
+    // нейтральная подсказка, без «бесплатно»: продукт выглядит готовым к продаже.
+    const free = u.is_admin ? "cta.free" : "cta.ready";
     sub.textContent = !ready()
       ? tr(state.layout === "split" ? "split.need_both" : "cta.pick")
       : (pays(u) ? tr("cta.charge", { c: tokensText(videoCost()), n: u.balance }) : tr(free));
@@ -1661,7 +1659,7 @@ function renderBalance() {
   for (const node of $$("[data-balance-unit]")) node.textContent = u.is_admin ? tr("balance.unlimited") : tokensWord(n);
   for (const node of $$("[data-balance-count]")) node.textContent = u.is_admin ? "∞" : n;
   $("#balance-note").textContent = tr(
-    u.is_admin ? "balance.note_admin" : (pays(u) ? "balance.note" : "balance.note_free"),
+    u.is_admin ? "balance.note_admin" : "balance.note",
     { c: tokensText(videoCost()) },
   );
   renderCta();

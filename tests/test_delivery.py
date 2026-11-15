@@ -149,7 +149,10 @@ async def test_a_failure_report_survives_the_html_parser(tmp_path, monkeypatch):
     await mod._deliver(Bot(), 1, 2, "job-1", "glass")
 
     assert edits, "сообщение пользователю не прошло разметку и потерялось"
-    assert "aiohttp.Timeout" in edits[-1], "причина потерялась вместе с разметкой"
+    # Причина — в лог, не покупателю: сырое исключение в чате выглядит как
+    # сломанный продукт (16.11.2026).
+    assert "aiohttp" not in edits[-1]
+    assert edits[-1] == mod.t("video.not_sent", None)
 
 
 async def _none():

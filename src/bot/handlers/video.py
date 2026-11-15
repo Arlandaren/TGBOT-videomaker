@@ -6,7 +6,6 @@ import asyncio
 import contextlib
 import json
 import logging
-from html import escape
 from pathlib import Path
 
 from aiogram import Bot, F, Router
@@ -427,14 +426,12 @@ async def _deliver(bot: Bot, chat_id: int, message_id: int, job_id: str, preset:
         # задача должна остаться в очереди на доставку.
         await repo.mark_delivered(job_id)
         await _safe_edit(bot, chat_id, message_id, t("video.done", lang))
-    except Exception as e:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         log.exception("не отдал результат")
-        # Экранирование обязательно: бот говорит с Telegram в режиме HTML, а в
-        # тексте исключения сплошь угловые скобки («<class 'aiohttp...'>»).
-        # Невалидную разметку Telegram отклоняет, `_safe_edit` отказ глотает — и
-        # пользователь остаётся смотреть на полосу прогресса, не узнав, что
-        # ролик готов и его можно забрать кнопкой.
-        await _safe_edit(bot, chat_id, message_id, t("video.not_sent", lang, error=escape(str(e))))
+        # Причина — в лог, покупателю — понятный текст без исключения: сырое
+        # «<class 'aiohttp...'>» и ломало HTML-разметку Telegram (сообщение
+        # терялось), и выглядело как сломанный продукт.
+        await _safe_edit(bot, chat_id, message_id, t("video.not_sent", lang))
     finally:
         dst.unlink(missing_ok=True)
         dst.with_suffix(".thumb.jpg").unlink(missing_ok=True)
@@ -585,9 +582,9 @@ async def _deliver_rerender(
             filename=f"reel-{preset}.mp4",
         )
         await _safe_edit(bot, chat_id, message_id, t("video.done", lang))
-    except Exception as e:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         log.exception("не отдал перерендер")
-        await _safe_edit(bot, chat_id, message_id, t("video.not_sent", lang, error=escape(str(e))))
+        await _safe_edit(bot, chat_id, message_id, t("video.not_sent", lang))
     finally:
         dst.unlink(missing_ok=True)
         dst.with_suffix(".thumb.jpg").unlink(missing_ok=True)

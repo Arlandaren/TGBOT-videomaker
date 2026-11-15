@@ -203,3 +203,95 @@ async def test_the_channel_button_opens_the_channel(monkeypatch):
     await menu.on_button(Msg(), bot=None)
     text, markup = sent[-1]
     assert markup is None and text == t("menu.channel_soon", "ru")
+
+
+# ------------------------------------------------ /start без строки-носителя
+
+
+class _Chat:
+    id = 5
+
+
+class _StartMsg:
+    """Сообщение-двойник: собирает всё, что бот отправил в ответ."""
+
+    def __init__(self):
+        from types import SimpleNamespace
+
+        self.from_user = SimpleNamespace(id=5, username=None, first_name="Т", language_code="ru")
+        self.chat = _Chat()
+        self.sent: list[tuple[str, object]] = []
+        self.deleted = False
+
+    async def answer(self, text, **k):
+        self.sent.append((text, k.get("reply_markup")))
+
+    async def delete(self):
+        self.deleted = True
+
+
+def _patch_db(monkeypatch, lang="ru"):
+    from types import SimpleNamespace
+
+    from src.bot.handlers import common
+    from src.db import repo
+
+    saved: list[dict] = []
+
+    async def upsert(*a, **k):
+        return SimpleNamespace(id=5, lang=lang, language_code="ru", interface_lang=lang, balance=0)
+
+    async def set_settings(_uid, **values):
+        saved.append(values)
+
+    async def set_lang(*a, **k):
+        return None
+
+    monkeypatch.setattr(common, "_upsert", upsert)
+    monkeypatch.setattr(repo, "set_user_settings", set_settings)
+    monkeypatch.setattr(repo, "set_user_lang", set_lang)
+    return saved
+
+
+async def test_start_sends_one_welcome_carrying_the_menu(monkeypatch):
+    """Кнопки меню едут вместе с приветствием: строки «Кнопки внизу — для
+    быстрых действий» больше нет (просьба владельца 16.11.2026)."""
+    from aiogram.types import ReplyKeyboardMarkup
+
+    from src.bot.handlers import common
+
+    saved = _patch_db(monkeypatch)
+    msg = _StartMsg()
+    await common.on_start(msg, None)
+    assert len(msg.sent) == 1, [s[0][:30] for s in msg.sent]
+    text, markup = msg.sent[0]
+    assert text == common.welcome_text("ru")
+    assert isinstance(markup, ReplyKeyboardMarkup)
+    assert {menu.SEEN_FLAG: 1} in saved, "иначе разовая доставка пришлёт клавиатуру ещё раз"
+
+
+async def test_picking_a_language_greets_with_the_menu_too(monkeypatch):
+    from types import SimpleNamespace
+
+    from aiogram.types import ReplyKeyboardMarkup
+
+    from src.bot.handlers import common
+
+    saved = _patch_db(monkeypatch)
+    msg = _StartMsg()
+    monkeypatch.setattr(common, "Message", _StartMsg)
+
+    async def apply_menu(*a, **k):
+        return None
+
+    monkeypatch.setattr(common, "apply_menu_button", apply_menu)
+
+    async def answer(*a, **k):
+        return None
+
+    callback = SimpleNamespace(data="lang:ru", from_user=msg.from_user, message=msg, answer=answer)
+    await common.on_language_pick(callback, bot=None)
+    assert msg.deleted, "сообщение с выбором языка убирается, а не висит рядом с приветствием"
+    assert [type(m) for _, m in msg.sent] == [ReplyKeyboardMarkup]
+    assert msg.sent[0][0] == common.welcome_text("ru")
+    assert {menu.SEEN_FLAG: 1} in saved

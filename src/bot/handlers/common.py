@@ -9,7 +9,7 @@ from aiogram import Bot, Router
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import CallbackQuery, Message, User
 
-from src.bot.keyboards import language_keyboard, presets_keyboard, webapp_url, welcome_keyboard
+from src.bot.keyboards import language_keyboard, presets_keyboard, webapp_url
 from src.core.config import settings
 from src.core.i18n import DEFAULT_LANG, LANGS, lang_of, t, tokens_text, videos_word
 from src.core.options import theme_label
@@ -134,10 +134,25 @@ async def on_start(message: Message, command: CommandObject | None = None) -> No
         # Первый запуск: сначала язык, приветствие — уже на нём.
         await message.answer(t("lang.pick", lang_of(db_user)), reply_markup=language_keyboard())
         return
-    await message.answer(welcome_text(db_user.lang), reply_markup=welcome_keyboard(db_user.lang))
-    from src.bot.handlers import menu  # круговой импорт: menu тянет common
+    await greet_with_menu(message, db_user.lang)
 
-    await menu.show_keyboard(message, db_user.lang)
+
+async def greet_with_menu(message: Message, lang: str) -> None:
+    """Приветствие одним сообщением вместе с нижним меню.
+
+    Раньше меню ехало отдельной строкой «Кнопки внизу — для быстрых действий»:
+    к приветствию с инлайн-кнопками реплай-клавиатуру не прицепить (разметка у
+    сообщения одна). Владелец попросил строку убрать (16.11.2026), поэтому
+    приветствие несёт само меню, а приложение открывается кнопкой у поля ввода
+    и «Начать монтаж». Отметка `SEEN_FLAG` — чтобы разовая доставка клавиатуры
+    (`menu.KeyboardOnce`) не прислала её следом ещё раз.
+    """
+    from src.bot.handlers import menu  # круговой импорт: menu тянет common
+    from src.bot.keyboards import main_keyboard
+
+    await message.answer(welcome_text(lang), reply_markup=main_keyboard(lang))
+    with contextlib.suppress(Exception):  # отметка — удобство, приветствие уже ушло
+        await repo.set_user_settings(message.chat.id, **{menu.SEEN_FLAG: 1})
 
 
 @router.message(Command("language"))
@@ -161,16 +176,12 @@ async def on_language_pick(callback: CallbackQuery, bot: Bot) -> None:
     await repo.set_user_lang(callback.from_user.id, lang)
     await callback.answer(t("lang.set", lang))
     if isinstance(callback.message, Message):
-        # Сообщение с выбором превращается в приветствие на выбранном языке:
-        # никаких лишних сообщений в чате и сразу видно, что выбор применился.
+        # Выбор языка убирается, на его месте — приветствие на выбранном языке
+        # вместе с нижним меню, одним сообщением.
         with contextlib.suppress(Exception):
-            await callback.message.edit_text(welcome_text(lang), reply_markup=welcome_keyboard(lang))
+            await callback.message.delete()
         await apply_menu_button(bot, callback.message.chat.id, lang)
-        # Клавиатура приезжает на выбранном языке — своим сообщением:
-        # у отредактированного разметка инлайновая, и реплай к ней не прицепить.
-        from src.bot.handlers import menu  # круговой импорт: menu тянет common
-
-        await menu.show_keyboard(callback.message, lang)
+        await greet_with_menu(callback.message, lang)
 
 
 @router.message(Command("help"))

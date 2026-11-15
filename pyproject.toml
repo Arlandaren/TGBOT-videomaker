@@ -40,6 +40,9 @@ dependencies = [
     # и yt-dlp чинят частыми выпусками: версию поднимать коммитом, а не
     # автообновлением — непроверенный код с PyPI не должен попадать в бой сам.
     "yt-dlp==2026.10.26",
+    # Без него TikTok отвечает yt-dlp «Unexpected response»: yt-dlp с curl_cffi
+    # притворяется браузером (проверено 16.11.2026 с сервера).
+    "curl_cffi==0.17.0",
 ]
 
 [project.optional-dependencies]

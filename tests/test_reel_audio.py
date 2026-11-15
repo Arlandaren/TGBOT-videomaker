@@ -278,3 +278,144 @@ async def test_every_failure_is_logged_with_its_code(tmp_path, fake_ytdlp, caplo
         with pytest.raises(ReelAudioError):
             await fetch_reel_audio(REEL, tmp_path)
     assert "unavailable" in caplog.text
+
+
+# ------------------------------------------------ любая ссылка со звуком
+
+from src.pipeline.reel_audio import AnyLink, fetch_file_audio, parse_link  # noqa: E402
+
+
+@pytest.mark.parametrize("raw, kind, url", [
+    ("https://www.instagram.com/reel/DfXkZV0Sbuu/?igsh=x", "instagram", "https://www.instagram.com/reel/DfXkZV0Sbuu/"),
+    ("https://www.instagram.com/share/reel/BAabc123/", "instagram_share", "https://www.instagram.com/share/reel/BAabc123/"),
+    ("https://www.tiktok.com/@audible/video/7537416115673173278?is_from_webapp=1",
+     "tiktok", "https://www.tiktok.com/@audible/video/7537416115673173278"),
+    ("смотри https://vm.tiktok.com/ZMabc123/ огонь", "tiktok", "https://vm.tiktok.com/ZMabc123/"),
+    ("https://vt.tiktok.com/ZSxyz9/", "tiktok", "https://vt.tiktok.com/ZSxyz9/"),
+    ("https://www.youtube.com/watch?v=jNQXAC9IVRw", "youtube", ""),
+    ("https://youtu.be/jNQXAC9IVRw", "youtube", ""),
+    ("https://www.youtube.com/shorts/BGQWPY4IigY", "youtube", ""),
+    ("https://cdn.example.com/music/track.mp3?sig=1", "file", "https://cdn.example.com/music/track.mp3?sig=1"),
+    ("http://example.com/clip.mp4", "file", "http://example.com/clip.mp4"),
+])
+def test_any_link_is_recognised(raw, kind, url):
+    got = parse_link(raw)
+    assert got is not None and got.kind == kind
+    if url:
+        assert got.url == url
+
+
+@pytest.mark.parametrize("raw", [
+    "", "просто текст", "file:///etc/passwd", "ftp://example.com/a.mp3",
+    "https://user:pw@example.com/a.mp3", "https://example.com:8443/a.mp3",
+    "https://www.tiktok.com/@audible", "https://www.tiktok.com/../../x",
+    "https://www.insta", "https://example.com/",
+])
+def test_no_usable_link(raw):
+    assert parse_link(raw) is None
+
+
+async def test_platform_links_run_only_their_own_extractors(tmp_path, fake_ytdlp):
+    """Без универсального режима yt-dlp: он сходил бы по любому адресу."""
+    argv_file = fake_ytdlp("ok")
+    await fetch_reel_audio(REEL, tmp_path, extractors="TikTok,vm.tiktok")
+    argv = json.loads(argv_file.read_text())
+    assert argv[argv.index("--use-extractors") + 1] == "TikTok,vm.tiktok"
+    assert argv[argv.index("-f") + 1].endswith("/b"), "файл без явного звука тоже берём и проверяем сами"
+
+
+# --- прямой файл: качаем сами, только с публичных адресов
+
+
+@pytest.fixture
+def public_dns(monkeypatch):
+    table = {"cdn.example.com": ["93.184.216.34"], "evil.example.com": ["127.0.0.1"],
+             "lan.example.com": ["10.0.0.5"], "meta.example.com": ["169.254.169.254"]}
+
+    async def resolve(host):
+        if host not in table:
+            raise OSError("no such host")
+        return table[host]
+
+    monkeypatch.setattr(reel_audio, "_resolve", resolve)
+    return table
+
+
+def _file_client(handler):
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+async def test_a_direct_audio_file_is_downloaded(tmp_path, public_dns, audio_m4a):
+    body = audio_m4a.read_bytes()
+
+    def handler(request):
+        assert request.url.host == "cdn.example.com"
+        return httpx.Response(200, headers={"content-type": "audio/mp4"}, content=body)
+
+    async with _file_client(handler) as c:
+        got = await fetch_file_audio("https://cdn.example.com/a.m4a", tmp_path, client=c)
+    assert got.path.parent == tmp_path and got.duration == pytest.approx(3.0, abs=0.1)
+
+
+@pytest.mark.parametrize("host", ["evil.example.com", "lan.example.com", "meta.example.com"])
+async def test_internal_addresses_are_never_requested(tmp_path, public_dns, host):
+    asked = []
+
+    async with _file_client(lambda r: asked.append(r) or httpx.Response(200)) as c:
+        with pytest.raises(ReelAudioError) as e:
+            await fetch_file_audio(f"https://{host}/a.mp3", tmp_path, client=c)
+    assert e.value.code == "bad_link" and asked == []
+
+
+async def test_a_redirect_into_the_internal_network_is_refused(tmp_path, public_dns):
+    asked = []
+
+    def handler(request):
+        asked.append(str(request.url))
+        return httpx.Response(302, headers={"location": "http://evil.example.com/admin"})
+
+    async with _file_client(handler) as c:
+        with pytest.raises(ReelAudioError) as e:
+            await fetch_file_audio("https://cdn.example.com/a.mp3", tmp_path, client=c)
+    assert e.value.code == "bad_link"
+    assert asked == ["https://cdn.example.com/a.mp3"], "по внутреннему адресу не ходили"
+
+
+async def test_our_own_client_introduces_itself_as_a_browser(tmp_path, public_dns, audio_m4a, monkeypatch):
+    seen = {}
+    body = audio_m4a.read_bytes()
+
+    def handler(request):
+        seen["ua"] = request.headers.get("user-agent")
+        return httpx.Response(200, headers={"content-type": "audio/mp4"}, content=body)
+
+    real = httpx.AsyncClient
+
+    def patched(**k):
+        return real(transport=httpx.MockTransport(handler), **k)
+
+    monkeypatch.setattr(reel_audio.httpx, "AsyncClient", patched)
+    await fetch_file_audio("https://cdn.example.com/a.m4a", tmp_path)
+    assert seen["ua"] == reel_audio.BROWSER_UA
+
+
+async def test_a_web_page_is_not_a_media_file(tmp_path, public_dns):
+    async with _file_client(lambda r: httpx.Response(200, headers={"content-type": "text/html"},
+                                                     content=b"<html>")) as c:
+        with pytest.raises(ReelAudioError) as e:
+            await fetch_file_audio("https://cdn.example.com/page", tmp_path, client=c)
+    assert e.value.code == "not_media"
+
+
+@pytest.mark.parametrize("declared", [True, False])
+async def test_a_huge_file_is_cut_off(tmp_path, public_dns, monkeypatch, declared):
+    monkeypatch.setattr(reel_audio, "REEL_MAX_BYTES", 1000)
+    headers = {"content-type": "video/mp4"}
+    if declared:
+        headers["content-length"] = "5000"
+
+    async with _file_client(lambda r: httpx.Response(200, headers=headers, content=b"x" * 5000)) as c:
+        with pytest.raises(ReelAudioError) as e:
+            await fetch_file_audio("https://cdn.example.com/big.mp4", tmp_path, client=c)
+    assert e.value.code == "too_big"
+    assert not list(tmp_path.glob("track.*"))

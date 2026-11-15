@@ -298,14 +298,16 @@ TEXTS: dict[str, dict[str, str]] = {
     # из хранилища или не читается). Ролик всё равно отдан — молчать об этом
     # нельзя: человек ждал музыку.
     # «Музыка из рилса» в Mini App: почему звук по ссылке не достался.
-    "music.bad_link": {"ru": "Это не ссылка на рилс Instagram", "en": "That's not an Instagram reel link"},
-    "music.no_audio": {"ru": "В этом рилсе нет звука", "en": "This reel has no sound"},
-    "music.unavailable": {"ru": "Рилс закрыт или удалён", "en": "The reel is private or deleted"},
-    "music.instagram_down": {
-        "ru": "Instagram не ответил, попробуйте ещё раз",
-        "en": "Instagram didn't respond, try again",
+    "music.bad_link": {"ru": "Не похоже на ссылку. Подойдут Instagram, TikTok или прямая ссылка на аудио- или видеофайл.", "en": "That doesn't look like a link. Instagram, TikTok or a direct link to an audio or video file will do."},
+    "music.no_audio": {"ru": "В этом видео нет звука.", "en": "This video has no sound."},
+    "music.unavailable": {"ru": "Не получилось открыть: видео закрыто, удалено или недоступно.", "en": "Couldn't open it: the video is private, deleted or unavailable."},
+    "music.instagram_down": {"ru": "Сайт не ответил, попробуйте ещё раз.", "en": "The site didn't respond, try again."},
+    "music.too_big": {"ru": "Звук по этой ссылке слишком большой.", "en": "The sound at this link is too large."},
+    "music.unsupported": {
+        "ru": "YouTube пока не поддерживается — пришлите ссылку на рилс, TikTok или файл.",
+        "en": "YouTube isn't supported yet — send a reel, TikTok or file link.",
     },
-    "music.too_big": {"ru": "Звук в этом рилсе слишком большой", "en": "This reel's sound is too large"},
+    "music.not_media": {"ru": "По ссылке не аудио и не видео.", "en": "The link isn't an audio or video file."},
     "music.too_many": {
         "ru": "Слишком много ссылок подряд, подождите минуту",
         "en": "Too many links in a row, wait a minute",

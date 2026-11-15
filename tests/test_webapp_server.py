@@ -1089,7 +1089,7 @@ def reel_fetch(monkeypatch):
 
     from src.db import repo
 
-    seen = {"urls": [], "fail": None}
+    seen = {"urls": [], "fail": None, "extractors": [], "files": []}
 
     async def upsert_user(user_id, **k):
         return SimpleNamespace(id=user_id, is_blocked=False, is_admin=False, balance=3, lang="ru",
@@ -1097,15 +1097,23 @@ def reel_fetch(monkeypatch):
 
     monkeypatch.setattr(repo, "upsert_user", upsert_user)
 
-    async def fake_fetch(url, dst_dir):
+    async def fake_fetch(url, dst_dir, extractors="Instagram"):
         seen["urls"].append(url)
+        seen["extractors"].append(extractors)
         if seen["fail"]:
             raise ReelAudioError(seen["fail"])
         path = Path(dst_dir) / "track.m4a"
         path.write_bytes(b"m4a!")
         return ReelTrack(path=path, duration=36.155)
 
+    async def fake_file(url, dst_dir, client=None):
+        seen["files"].append(url)
+        path = Path(dst_dir) / "track.bin"
+        path.write_bytes(b"mp3!")
+        return ReelTrack(path=path, duration=12.0)
+
     monkeypatch.setattr(reel_audio, "fetch_reel_audio", fake_fetch)
+    monkeypatch.setattr(reel_audio, "fetch_file_audio", fake_file)
     return seen
 
 
@@ -1126,10 +1134,13 @@ async def test_a_reel_link_gives_a_music_id(client, reel_fetch):
     assert reel_fetch["urls"] == ["https://www.instagram.com/reel/DfXkZV0Sbuu/"]
 
 
-async def test_a_non_instagram_link_is_refused_without_downloading(client, reel_fetch):
-    r = await _music(client, "https://evil.com/reel/DfXkZV0Sbuu/")
+@pytest.mark.parametrize("url", ["ftp://example.com/a.mp3", "file:///etc/passwd", "https://example.com"])
+async def test_a_link_we_cannot_use_is_refused_without_downloading(client, reel_fetch, url):
+    """Любая http(s)-ссылка на файл теперь допустима (её качает свой загрузчик с
+    проверкой адресов), а не-http и ссылки без пути — нет."""
+    r = await _music(client, url)
     assert r.status == 400
-    assert reel_fetch["urls"] == []
+    assert reel_fetch["urls"] == [] and reel_fetch["files"] == []
 
 
 @pytest.mark.parametrize("code, status", [
@@ -1343,7 +1354,7 @@ async def test_a_slow_earlier_check_does_not_delete_the_newer_track(client, reel
 
     release_a = asyncio.Event()
 
-    async def fake_fetch(url, dst_dir):
+    async def fake_fetch(url, dst_dir, extractors="Instagram"):
         if "AAAAAAA" in url:
             await release_a.wait()
         path = Path(dst_dir) / "track.m4a"
@@ -1364,3 +1375,26 @@ async def test_typing_a_link_does_not_use_up_the_limit(client, reel_fetch):
     for partial in ["h", "https://www.insta", "https://www.instagram.com/re", "x", "y", "z", "w"]:
         assert (await _music(client, partial)).status == 400
     assert (await _music(client)).status == 200
+
+
+
+async def test_a_tiktok_link_runs_the_tiktok_extractors(client, reel_fetch):
+    r = await _music(client, "https://www.tiktok.com/@audible/video/7537416115673173278?lang=ru")
+    assert r.status == 200
+    assert reel_fetch["urls"] == ["https://www.tiktok.com/@audible/video/7537416115673173278"]
+    assert reel_fetch["extractors"] == ["TikTok,vm.tiktok"]
+
+
+async def test_a_direct_file_link_is_fetched_by_our_own_downloader(client, reel_fetch):
+    r = await _music(client, "https://cdn.example.com/track.mp3")
+    assert r.status == 200 and (await r.json())["duration"] == 12.0
+    assert reel_fetch["files"] == ["https://cdn.example.com/track.mp3"] and reel_fetch["urls"] == []
+
+
+async def test_youtube_is_declined_with_a_clear_message(client, reel_fetch):
+    from src.core.i18n import t
+
+    r = await _music(client, "https://youtu.be/jNQXAC9IVRw")
+    assert r.status == 422
+    assert (await r.json())["error"] == t("music.unsupported", "ru")
+    assert reel_fetch["urls"] == [] and reel_fetch["files"] == []

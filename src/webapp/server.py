@@ -222,7 +222,7 @@ MAX_PARALLEL_FETCHES = 2
 MUSIC_CHECKS_KEY = web.AppKey("music_checks", dict)
 _fetch_gate = asyncio.Semaphore(MAX_PARALLEL_FETCHES)
 _MUSIC_STATUS = {"bad_link": 400, "no_audio": 422, "unavailable": 422,
-                 "instagram_down": 502, "too_big": 413}
+                 "instagram_down": 502, "too_big": 413, "unsupported": 422, "not_media": 422}
 
 
 def _music_dir(cfg: Settings, music_id: str) -> Path:
@@ -295,11 +295,15 @@ async def music_check(request: web.Request) -> web.Response:
     db_user = await _db_user(request)
     if db_user.is_blocked:
         return await _fail(request, 403, "api.blocked")
-    link = reel_audio.parse_reel_link(str((body or {}).get("url") or "")[:2000])
+    link = reel_audio.parse_link(str((body or {}).get("url") or "")[:2000])
     if link is None:
         # До лимита: недописанная ссылка, пока её набирают, — не поход в
-        # Instagram, и съедать ею проверки настоящей ссылки нельзя.
+        # сеть, и съедать ею проверки настоящей ссылки нельзя.
         return await _fail(request, 400, "music.bad_link")
+    if link.kind == "youtube":
+        # YouTube не пускает серверы без входа в Google-аккаунт (проверено
+        # 16.11.2026) — честно говорим сразу, а не после минуты ожидания.
+        return await _fail(request, 422, "music.unsupported")
     if not _allow_music_check(request.app[MUSIC_CHECKS_KEY], user.id):
         return await _fail(request, 429, "music.too_many")
     # Тот же запас диска, что у приёма видео: под базу и монтаж место остаётся
@@ -311,10 +315,17 @@ async def music_check(request: web.Request) -> web.Response:
     folder = _music_dir(cfg, music_id)
     started = time.time()
     try:
-        link = await reel_audio.resolve_share(link)
         folder.mkdir(parents=True, exist_ok=True)
         async with _fetch_gate:
-            track = await reel_audio.fetch_reel_audio(link.url, folder)
+            if link.kind == "file":
+                track = await reel_audio.fetch_file_audio(link.url, folder)
+            else:
+                url = link.url
+                if link.kind == "instagram_share":
+                    url = (await reel_audio.resolve_share(reel_audio.ReelLink("share", url))).url
+                platform = "tiktok" if link.kind == "tiktok" else "instagram"
+                track = await reel_audio.fetch_reel_audio(
+                    url, folder, extractors=reel_audio.EXTRACTORS[platform])
         (folder / "meta.json").write_text(
             json.dumps({"user_id": user.id, "duration": track.duration, "started": started}),
             encoding="utf-8",

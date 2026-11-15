@@ -1030,3 +1030,33 @@ async def test_old_orders_are_polled_rarely_not_never(paying, monkeypatch):
     assert asked.count("fresh") == mod.PAYHOT_SLOW_EVERY
     assert asked.count("old") == 1
     assert now - seen_since[0] >= timedelta(days=6), "окно опроса короче недели"
+
+
+async def test_orders_sent_all_at_once_still_respect_the_limit(paying, monkeypatch):
+    """Проверка лимита и создание счёта разделены походом в PayHot. Десять
+    запросов разом не должны все пройти проверку до первой записи."""
+    import asyncio
+
+    from src.db import repo
+
+    c, fake, store = paying
+
+    async def count(user_id, *, since):
+        n = len(store["orders"])
+        await asyncio.sleep(0.01)  # как настоящая база: пока считаем, приходят соседние запросы
+        return n
+
+    real_create = fake.create_payment
+
+    async def slow_create(**k):
+        await asyncio.sleep(0.05)
+        return await real_create(**k)
+
+    monkeypatch.setattr(repo, "count_payhot_orders", count)
+    fake.create_payment = slow_create
+    got = await asyncio.gather(*(
+        c.post("/api/payhot/orders", json={"tokens": 240, "method": "crypto"}, headers=auth())
+        for _ in range(10)
+    ))
+    assert sorted(r.status for r in got) == [200] * 5 + [429] * 5
+    assert len(fake.created) == 5

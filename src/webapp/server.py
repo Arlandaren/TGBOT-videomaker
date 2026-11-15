@@ -868,6 +868,10 @@ PAYHOT_ORDERS_PER_WINDOW = 5
 PAYHOT_ORDER_WINDOW = timedelta(minutes=10)
 # Заказ старше часа опрашивается раз в столько проходов (≈10 минут при 30 с).
 PAYHOT_SLOW_EVERY = 20
+# Замок на человека вокруг «посчитать заказы → записать новый». Без него
+# десять запросов разом проходили проверку лимита до первой записи. Приложение
+# — один процесс (служба reelbot-bot), поэтому замка в памяти достаточно.
+PAYHOT_LOCKS_KEY = web.AppKey("payhot_locks", dict)
 
 
 async def _payhot_return_url(request: web.Request) -> str:
@@ -904,9 +908,6 @@ async def payhot_order(request: web.Request) -> web.Response:
         return await _fail(request, 400, "api.unknown_method")
     if not method.allows_rub(package.rub):
         return await _fail(request, 400, "api.below_minimum", rub=method.min_amount_minor // 100)
-    since = datetime.now(timezone.utc) - PAYHOT_ORDER_WINDOW
-    if await repo.count_payhot_orders(user.id, since=since) >= PAYHOT_ORDERS_PER_WINDOW:
-        return await _fail(request, 429, "api.too_many_orders")
     try:
         if method.currency == "EUR":
             amount = await client.euro_for_rubles(package.rub * 100)
@@ -914,10 +915,15 @@ async def payhot_order(request: web.Request) -> web.Response:
                 return await _fail(request, 400, "api.method_not_for_package")
         else:
             amount = package.rub * 100
-        order = await repo.create_payhot_order(
-            user_id=user.id, tokens=package.tokens, rub=package.rub, method=method.key,
-            currency=method.currency, amount_minor=amount,
-        )
+        lock = request.app[PAYHOT_LOCKS_KEY].setdefault(user.id, asyncio.Lock())
+        async with lock:
+            since = datetime.now(timezone.utc) - PAYHOT_ORDER_WINDOW
+            if await repo.count_payhot_orders(user.id, since=since) >= PAYHOT_ORDERS_PER_WINDOW:
+                return await _fail(request, 429, "api.too_many_orders")
+            order = await repo.create_payhot_order(
+                user_id=user.id, tokens=package.tokens, rub=package.rub, method=method.key,
+                currency=method.currency, amount_minor=amount,
+            )
         created = await client.create_payment(
             order_ref=str(order.id), amount_minor=amount, currency=method.currency,
             method=method.payhot_method, customer_id=f"tg-{user.id}",
@@ -1177,6 +1183,7 @@ def create_app(bot: Bot, cfg: Settings) -> web.Application:
     app.router.add_get("/api/jobs", jobs_list)
     app.router.add_post("/api/jobs/{job_id}/send", job_send)
     app.router.add_post("/api/invoice", invoice)
+    app[PAYHOT_LOCKS_KEY] = {}
     app.router.add_post("/api/payhot/orders", payhot_order)
     app.router.add_get("/api/payhot/orders/{order_id}", payhot_order_status)
     app.cleanup_ctx.append(_payhot_lifecycle)

@@ -38,7 +38,9 @@ def offer_text(lang: str) -> str:
     прислал видео и получил «на балансе нет роликов».
     """
     if settings.free_videos:
-        return t("start.offer_free", lang)
+        # Строку «Сейчас монтаж бесплатный» владелец попросил убрать (15.11.2026):
+        # режим работает, но в приветствии о нём не говорим.
+        return ""
     packages = settings.token_packages
     if not packages:
         return ""

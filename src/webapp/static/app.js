@@ -1633,7 +1633,8 @@ function renderUser() {
 function offerText() {
   const boot = state.boot;
   if (boot.user.is_admin) return "";
-  if (boot.free) return tr("home.offer_free");
+  // Бесплатный режим — без строки об этом, как и в приветствии бота.
+  if (boot.free) return "";
   const packs = boot.packages || [];
   if (!packs.length) return "";
   const first = packs[0];

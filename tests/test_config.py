@@ -287,8 +287,11 @@ def test_the_first_screen_states_the_terms(monkeypatch):
     monkeypatch.setattr(common.settings, "trial_videos", 0)
     assert "бесплатно" not in common.offer_text("ru") and "23 токена" in common.offer_text("ru")
 
+    # Бесплатный режим — без строки об этом: владелец попросил её убрать
+    # (15 ноября 2026). Режим работает, просто о нём не объявляем.
     monkeypatch.setattr(common.settings, "free_videos", True)
-    assert "⭐" not in common.offer_text("ru")
+    assert common.offer_text("ru") == ""
+    assert "бесплатн" not in common.welcome_text("ru")
 
 
 def test_upsert_does_not_overwrite_the_theme_of_an_existing_user():

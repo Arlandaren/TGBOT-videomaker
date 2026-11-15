@@ -334,7 +334,6 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
     from src.core.track import load_track
     from src.pipeline.crop import autocrop, framing_spans
     from src.pipeline.cut import apply_cuts
-    from src.pipeline.audio_post import build_audio
     from src.pipeline.job import _measure_luma
     from src.pipeline.probe import probe
     from src.pipeline.render import arender_remotion, render_ass

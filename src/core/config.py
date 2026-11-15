@@ -413,6 +413,9 @@ class Settings(BaseSettings):
     # первого владельца из ADMIN_IDS, а если и его нет, честно скажет,
     # что контакт не настроен (выдуманный адрес хуже отсутствующего).
     support_contact: str = ""
+    # Канал продукта для кнопки «Наш канал» в нижнем меню (https://t.me/…).
+    # Пусто — кнопка отвечает, что канал скоро появится.
+    channel_url: str = ""
     webapp_tunnel: bool = False
     webapp_port: int = 8080
     webapp_host: str = "127.0.0.1"

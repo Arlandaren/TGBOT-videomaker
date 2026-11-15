@@ -14,6 +14,7 @@ import logging
 
 from aiogram import BaseMiddleware, Bot, F, Router
 from aiogram.types import Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from src.bot.handlers import common
 from src.bot.keyboards import app_keyboard, main_keyboard
@@ -25,7 +26,7 @@ from src.db import repo
 log = logging.getLogger(__name__)
 router = Router(name="menu")
 
-ACTIONS = ("start", "balance", "videos", "referral", "support")
+ACTIONS = ("start", "balance", "videos", "referral", "support", "channel")
 
 
 def _norm(text: str | None) -> str:
@@ -119,6 +120,16 @@ async def on_button(message: Message, bot: Bot) -> None:
                 ),
                 disable_web_page_preview=True,
             )
+    elif action == "channel":
+        # Ссылку на канал владелец пришлёт позже: до тех пор кнопка честно
+        # говорит, что канал скоро появится, а не ведёт в никуда.
+        url = settings.channel_url.strip()
+        if url:
+            kb = InlineKeyboardBuilder()
+            kb.button(text=t("btn.open_channel", lang), url=url)
+            await message.answer(t("menu.channel", lang), reply_markup=kb.as_markup())
+        else:
+            await message.answer(t("menu.channel_soon", lang))
     else:
         contact = await _support_contact()
         await message.answer(
@@ -133,9 +144,9 @@ async def show_keyboard(message: Message, lang: str) -> None:
 
 
 # Отметка в `users.settings`: клавиатуру этому человеку уже присылали.
-# «kb2» — клавиатура со значками. У кого отметка «kb» (прежняя, с цветными
-# эмодзи в подписи), тот получит новую один раз на следующем сообщении.
-SEEN_FLAG = "kb2"
+# «kb3» — клавиатура со значками и кнопкой «Наш канал». У кого отметка «kb» или
+# «kb2» (прежние клавиатуры), тот получит новую один раз на следующем сообщении.
+SEEN_FLAG = "kb3"
 
 
 class KeyboardOnce(BaseMiddleware):

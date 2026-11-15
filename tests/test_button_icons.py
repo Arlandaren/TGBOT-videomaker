@@ -49,13 +49,13 @@ def test_old_emoji_labels_still_work_in_every_language():
     """Клавиатура с «▶️ Начать монтаж» остаётся у людей, пока бот не пришлёт
     новую. Нажатие на неё обязано делать то же, что и раньше."""
     for lang in LANGS:
-        for action in menu.ACTIONS:
+        for action in menu.PREVIOUS_LABELS:  # у «Нашего канала» прежней подписи не было
             assert menu.action_for(menu.PREVIOUS_LABELS[action][lang]) == action
 
 
 def test_the_new_keyboard_is_delivered_once_more():
     """Кто уже получил клавиатуру с цветными эмодзи, получит новую — отметка другая."""
-    assert menu.SEEN_FLAG != "kb"
+    assert menu.SEEN_FLAG not in ("kb", "kb2")
 
 
 def test_icons_can_be_switched_off():

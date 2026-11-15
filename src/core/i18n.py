@@ -153,6 +153,13 @@ TEXTS: dict[str, dict[str, str]] = {
     "kb.videos": {"ru": "Мои ролики", "en": "My reels"},
     "kb.referral": {"ru": "Реф. программа", "en": "Referrals"},
     "kb.support": {"ru": "Поддержка", "en": "Support"},
+    "kb.channel": {"ru": "Наш канал", "en": "Our channel"},
+    "menu.channel": {
+        "ru": "Новости, примеры роликов и советы по съёмке — в нашем канале.",
+        "en": "News, example reels and filming tips — in our channel.",
+    },
+    "menu.channel_soon": {"ru": "Наш канал скоро появится — следите за новостями.", "en": "Our channel is coming soon."},
+    "btn.open_channel": {"ru": "Открыть канал", "en": "Open the channel"},
     "kb.ready": {
         "ru": "Кнопки внизу — для быстрых действий.",
         "en": "The buttons below are your shortcuts.",

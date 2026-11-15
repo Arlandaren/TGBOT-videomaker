@@ -112,6 +112,7 @@ MAIN_BUTTONS: tuple[tuple[str, ...], ...] = (
     ("start",),
     ("balance", "videos"),
     ("referral", "support"),
+    ("channel",),
 )
 
 

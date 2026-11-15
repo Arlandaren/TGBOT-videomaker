@@ -25,10 +25,11 @@ def _tunnel_url():
 def test_the_keyboard_has_five_buttons_in_one_two_two():
     """Раскладка — часть задачи: первая кнопка во всю ширину, дальше парами."""
     kb = main_keyboard("ru")
-    assert [len(row) for row in kb.keyboard] == [1, 2, 2]
+    assert [len(row) for row in kb.keyboard] == [1, 2, 2, 1]
     assert [b.text for row in kb.keyboard for b in row] == [
         t("kb.start", "ru"), t("kb.balance", "ru"),
         t("kb.videos", "ru"), t("kb.referral", "ru"), t("kb.support", "ru"),
+        t("kb.channel", "ru"),
     ]
     # Без этих двух клавиатура либо занимает пол-экрана, либо исчезает после
     # первого нажатия — и пользователь остаётся без навигации.
@@ -157,3 +158,48 @@ async def test_a_broken_delivery_never_eats_the_answer(monkeypatch):
         return "ответ"
 
     assert await menu.KeyboardOnce()(handler, _message(), {}) == "ответ"
+
+
+# ------------------------------------------------------------ «Наш канал»
+
+
+def test_the_channel_button_sits_alone_at_the_bottom():
+    kb = main_keyboard("ru")
+    assert [len(row) for row in kb.keyboard] == [1, 2, 2, 1]
+    last = kb.keyboard[-1][0]
+    assert last.text == t("kb.channel", "ru") == "Наш канал"
+    assert menu.action_for(last.text) == "channel"
+
+
+def test_the_channel_keyboard_reaches_old_chats_once_more():
+    """Кнопки канала нет у тех, кто уже получил прежнюю клавиатуру."""
+    assert menu.SEEN_FLAG not in ("kb", "kb2")
+
+
+async def test_the_channel_button_opens_the_channel(monkeypatch):
+    from types import SimpleNamespace
+
+    from src.db import repo
+
+    sent = []
+
+    class Msg:
+        from_user = SimpleNamespace(id=5, username=None, first_name="Т", language_code="ru")
+        text = "Наш канал"
+
+        async def answer(self, text, **k):
+            sent.append((text, k.get("reply_markup")))
+
+    async def upsert(*a, **k):
+        return SimpleNamespace(id=5, lang="ru", language_code="ru", interface_lang=None, balance=0)
+
+    monkeypatch.setattr(repo, "upsert_user", upsert)
+    monkeypatch.setattr(menu.settings, "channel_url", "https://t.me/cliply_channel")
+    await menu.on_button(Msg(), bot=None)
+    text, markup = sent[-1]
+    assert markup.inline_keyboard[0][0].url == "https://t.me/cliply_channel"
+
+    monkeypatch.setattr(menu.settings, "channel_url", "")
+    await menu.on_button(Msg(), bot=None)
+    text, markup = sent[-1]
+    assert markup is None and text == t("menu.channel_soon", "ru")

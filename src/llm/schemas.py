@@ -15,6 +15,7 @@ from src.core.edl import (
     BLOCK_MAX_WORDS,
     BLOCK_POSTER_MAX_WORDS,
     BLOCK_QUIET_MIN_WORDS,
+    LIST_ITEM_MAX_WORDS,
 )
 
 # ------------------------------------------------------------------ direct (главный вызов)
@@ -81,8 +82,12 @@ DIRECT_SCHEMA: dict[str, Any] = {
                     },
                     "register": {
                         "type": "string",
-                        "enum": ["poster", "quiet"],
+                        "enum": ["poster", "quiet", "item"],
                         "description": (
+                            "`item` — пункт перечисления: человек называет 2-4 "
+                            f"однородные вещи подряд. До {LIST_ITEM_MAX_WORDS} слов, "
+                            "accent_word=null, accent=null. Пункты идут отдельными "
+                            "блоками ПОДРЯД, одиночного пункта не бывает. "
                             "Регистр субтитра — какой это КЛАСС блока, а не где он "
                             f"висит. `poster`: до {BLOCK_POSTER_MAX_WORDS} слов, "
                             "огромный кегль, одно золотое слово. `quiet`: "
@@ -127,6 +132,14 @@ DIRECT_SCHEMA: dict[str, Any] = {
                             "Дом плаката — `auto`/`bottom`, но плакат бывает и "
                             "наверху: там он остаётся крупным и с золотом. Для "
                             "тихого блока `top` обязателен."
+                        ),
+                    },
+                    "emoji": {
+                        "type": ["string", "null"],
+                        "description": (
+                            "Значок пункта списка (register=item): РОВНО ОДИН "
+                            "эмодзи, изображающий сам пункт — 🎵 для звуков, 🖼️ "
+                            "для картинок. У остальных блоков null."
                         ),
                     },
                     "panel": {

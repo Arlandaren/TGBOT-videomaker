@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 from enum import Enum
-from typing import Any, Iterable, Literal
+from typing import Any, Iterable, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -52,6 +52,15 @@ ANCHOR_TRACK_MAX = 2
 # двух блоков из тринадцати; поставить её всем — значит вернуть тот самый фон,
 # от которого мы уходили. Число взято с эталона, а не выбрано.
 PANEL_MAX = 2
+# Перечисление: пункты отдельными плашками, стопкой (блоки с `item=True`, идущие
+# подряд). Пункт — это название, а не фраза: длиннее четырёх слов он не влезает
+# в одну строку плашки. Список короче двух пунктов — не список, длиннее четырёх
+# — стопка выше свободной полосы под лицом. Больше двух списков на ролик — приём
+# перестаёт быть приёмом, как и стекло (`PANEL_MAX`).
+LIST_ITEM_MAX_WORDS = 4
+LIST_MIN_ITEMS = 2
+LIST_MAX_ITEMS = 4
+LIST_MAX = 2
 
 
 # --------------------------------------------------------------------------- модели
@@ -176,6 +185,15 @@ class CaptionBlock(BaseModel):
     # плаката и «нет» у тихого. Тему это и так держит (`Quiet.preset` гасит
     # панель), а заявку «тихий блок со стеклом» валидатор отклоняет.
     panel: bool = False
+    # Пункт перечисления. Подряд идущие пункты — один список: каждый встаёт
+    # своей плашкой под предыдущим и остаётся в кадре до конца списка
+    # (`list_runs`, `render_plan.build_plan`). Решает режиссёр — услышать, что
+    # человек перечисляет, может только он. У пункта нет ни золота, ни стекла
+    # блока, ни привязки к голове, и он не тихий: это третий класс блока.
+    item: bool = False
+    # Значок блока — один цветной эмодзи. Рисуется слева в плашке пункта и
+    # значком у блока со стеклом; у остальных блоков его нет.
+    emoji: str | None = None
 
     def quiet_register(self) -> bool:
         """Тихий ли это регистр по КОНТРАКТУ — то есть без оглядки на тему.
@@ -190,6 +208,26 @@ class CaptionBlock(BaseModel):
         if self.quiet is None:
             return len(self.words) > BLOCK_POSTER_MAX_WORDS
         return self.quiet
+
+
+def list_runs(captions: "Sequence[CaptionBlock]") -> list[list[int]]:
+    """Списки ролика: номера блоков-пунктов, идущих подряд.
+
+    Одно место, где «подряд идущие пункты — список» превращается в данные: им
+    пользуются и режиссёр (потолки), и валидатор, и сборка плана.
+    """
+    runs: list[list[int]] = []
+    current: list[int] = []
+    for i, block in enumerate(captions):
+        if block.item:
+            current.append(i)
+            continue
+        if current:
+            runs.append(current)
+            current = []
+    if current:
+        runs.append(current)
+    return runs
 
 
 class BrollAnim(str, Enum):
@@ -511,10 +549,33 @@ def validate_edl(edl: EDL, *, strict_coverage: bool = True) -> list[str]:
                 f"captions[{bi}]: тихий регистр с плашкой — матовое стекло носит "
                 f"только плакат"
             )
+        if block.item:
+            if len(block.words) > LIST_ITEM_MAX_WORDS:
+                errors.append(
+                    f"captions[{bi}]: пункт списка из {len(block.words)} слов — в "
+                    f"плашку помещается не больше {LIST_ITEM_MAX_WORDS}"
+                )
+            if accents or block.quiet or block.panel or block.anchor_track is not None:
+                errors.append(
+                    f"captions[{bi}]: пункт списка — отдельный класс блока: у него "
+                    f"нет выделенного слова, стекла, привязки к голове, и он не тихий"
+                )
         for cw in block.words:
             if cw.word_idx not in known:
                 errors.append(f"captions[{bi}]: word_idx={cw.word_idx} отсутствует в words")
             flat.append(cw.word_idx)
+
+    runs = list_runs(edl.captions)
+    for run in runs:
+        if not (LIST_MIN_ITEMS <= len(run) <= LIST_MAX_ITEMS):
+            errors.append(
+                f"captions[{run[0]}]: список из {len(run)} пунктов подряд, допустимо "
+                f"{LIST_MIN_ITEMS}..{LIST_MAX_ITEMS} — одиночный пункт списком не бывает"
+            )
+    if len(runs) > LIST_MAX:
+        errors.append(
+            f"captions: {len(runs)} списков из пунктов, допустимо не больше {LIST_MAX}"
+        )
 
     anchored = sum(1 for b in edl.captions if b.anchor_track is not None)
     if anchored > ANCHOR_TRACK_MAX:

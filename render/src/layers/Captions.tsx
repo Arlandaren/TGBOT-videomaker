@@ -126,7 +126,52 @@ const titleCardRegister = (preset: Preset, block: PlanBlock): TitleCardRegister 
  * поэтому акцентный цвет подменяется цветом обычного слова. Регистры
  * взаимоисключающи: титр — это плакат, и `quiet` у него всегда `false`.
  */
+/**
+ * Плашка пункта перечисления — четвёртый класс блока (`preset.Pill`).
+ *
+ * Та же подмена чисел, что у тихого регистра и титра: плашка — это блок со
+ * стеклом, только кегль мелкий, строка одна, а стекло затемнено и скруглено в
+ * капсулу. Кегль и разрядка приезжают с самим блоком: Python мог ужать стопку
+ * под длинный пункт и срезать разрядку темы (`Pill.preset`).
+ */
+type PillRegister = NonNullable<Preset["caption"]["pill"]>;
+
+const pillRegister = (preset: Preset, block: PlanBlock): PillRegister | null => {
+  if (!block.pill) return null;
+  return preset.caption.pill ?? null;
+};
+
 const registerPreset = (preset: Preset, block: PlanBlock): Preset => {
+  const pill = pillRegister(preset, block);
+  if (pill && block.pill) {
+    return {
+      ...preset,
+      accent_font: null,
+      font: {
+        ...preset.font,
+        size: block.pill.font_size,
+        letter_spacing: block.pill.letter_spacing,
+        word_spacing: block.pill.word_spacing,
+      },
+      caption: { ...preset.caption, line_height: pill.line_height, align: "left" },
+      panel: {
+        ...preset.panel,
+        enabled: true,
+        color: pill.tint_color,
+        opacity: pill.tint_opacity,
+        blur: pill.blur,
+        radius: pill.radius,
+        padding_x: pill.padding_x,
+        padding_y: pill.padding_y,
+        border_color: pill.border_color,
+        border_opacity: pill.border_opacity,
+        border_width: pill.border_width,
+        glass_color: pill.glass_color,
+        glass_opacity: pill.glass_opacity,
+      },
+      animation: { ...preset.animation, accent_scale: 1, shout_scale: 1 },
+    };
+  }
   const card = titleCardRegister(preset, block);
   if (card) {
     return {
@@ -173,6 +218,9 @@ const registerPreset = (preset: Preset, block: PlanBlock): Preset => {
     animation: { ...preset.animation, accent_scale: 1, shout_scale: 1 },
   };
 };
+
+/** Шрифт значка: из бандла (`Root.tsx`), системный — запасной для своей машины. */
+const EMOJI_FONT = '"ReelbotEmoji", "Noto Color Emoji", sans-serif';
 
 const emphasisScale = (word: PlanWord, preset: Preset): number => {
   // Поправка кегля второго шрифта — то же число, что в `geometry.emphasis_size`.
@@ -658,8 +706,17 @@ const Block: React.FC<{ block: PlanBlock; preset: Preset }> = ({ block, preset }
   // из тринадцати, остальные держит одна тень. Стекло (размытие и рамка) идёт
   // только с флагом; заливка может подняться и без него, если правило контраста
   // не взяло порог, — это закон, а не стиль.
-  const glass = p.enabled && (block as PlanBlock).panel === true;
-  const look = lookFor(preset, (block as PlanBlock).bg_luma);
+  const pill = (block as PlanBlock).pill ?? null;
+  const glass = p.enabled && ((block as PlanBlock).panel === true || pill !== null);
+  // У плашки стекло затемнено числом темы, и текст на нём белый при любом
+  // фоне: правило контраста (Ф9) ей не нужно и подбирать прозрачность по
+  // яркости кадра не должно — иначе соседние плашки стопки вышли бы разными.
+  const look = lookFor(preset, pill ? null : (block as PlanBlock).bg_luma);
+  // Значок стоит в окошке фиксированной ширины СЛЕВА от текста. Окошко — это
+  // добавка к левому полю, а сам глиф позиционирован абсолютно: на размер
+  // коробки он не влияет вовсе, и Python знает её, не зная ширины глифа.
+  const icon = pill && pill.emoji && pill.emoji_box > 0 ? pill : null;
+  const iconRoom = icon ? icon.emoji_box + icon.emoji_gap : 0;
   // Прямоугольник блока посчитан в Python по этим же метрикам: строка в бюджет
   // уложена, и ограничивать ширину здесь незачем. План без прямоугольника
   // (пресет без метрик шрифта) — другое дело: там перенос по символам, ширину
@@ -693,6 +750,8 @@ const Block: React.FC<{ block: PlanBlock; preset: Preset }> = ({ block, preset }
         // числом, и разойтись им негде.
         gap: Math.max(0, Math.round(preset.font.size * (preset.caption.line_height - 1))),
         padding: p.enabled ? `${p.padding_y}px ${p.padding_x}px` : 0,
+        paddingLeft: icon ? p.padding_x + iconRoom : undefined,
+        position: icon ? "relative" : undefined,
         borderRadius: p.enabled ? p.radius : 0,
         // Два разных слоя в одном свойстве: снизу стекло (стиль, только у
         // помеченных блоков), сверху заслонка (закон Ф9, у любого блока, где
@@ -717,6 +776,30 @@ const Block: React.FC<{ block: PlanBlock; preset: Preset }> = ({ block, preset }
         willChange: "transform, opacity",
       }}
     >
+      {icon ? (
+        <span
+          style={{
+            position: "absolute",
+            left: p.padding_x,
+            top: 0,
+            bottom: 0,
+            width: icon.emoji_box,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontFamily: EMOJI_FONT,
+            fontSize: icon.emoji_size,
+            fontWeight: 400,
+            lineHeight: 1,
+            letterSpacing: 0,
+            wordSpacing: 0,
+            // Цветной глиф: тень под ним читается как грязь (как и у эмодзи в слове).
+            textShadow: "none",
+          }}
+        >
+          {icon.emoji}
+        </span>
+      ) : null}
       {block.lines.map((line, li) => (
         <div
           key={li}
@@ -799,8 +882,15 @@ export const Captions: React.FC<{ blocks: PlanBlock[]; preset: Preset }> = ({ bl
         // Тихий блок стоит у ЛЕВОГО края кадра, а не по центру (§1.4.1).
         // Отступ считается той же формулой, что `Quiet.left_x` в Python, — без
         // округления, иначе прямоугольник плана и бокс в кадре разойдутся.
-        const left = quiet && quiet.edge === "left" ? width * quiet.edge_ratio : null;
-        const margin = marginOf(ps);
+        // Плашка стоит ровно в своём прямоугольнике: место стопки выбрано под
+        // лицо, а не под край кадра, и безопасную зону Python уже учёл.
+        const spot = block.pill && block.rect ? block.rect : null;
+        const left = spot
+          ? spot.x
+          : quiet && quiet.edge === "left"
+            ? width * quiet.edge_ratio
+            : null;
+        const margin = spot ? spot.y : marginOf(ps);
         return (
           <div
             // Ключ — начало блока, а не его номер в ОТФИЛЬТРОВАННОМ списке: номер

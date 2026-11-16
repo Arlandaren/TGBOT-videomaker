@@ -251,6 +251,20 @@ def _emoji_cluster(text: str, i: int) -> int:
     return j - i
 
 
+def single_emoji(text: str | None) -> str | None:
+    """Строка, если это ровно ОДИН цветной эмодзи, иначе `None`.
+
+    Значок пункта списка и карточки приходит от режиссёра свободной строкой.
+    Рисуется он в окошке фиксированного размера, поэтому два эмодзи, слово или
+    символ текстового начертания туда не годятся: окошко рассчитано на один
+    цветной глиф. Пробелы по краям не в счёт.
+    """
+    value = (text or "").strip()
+    if not value:
+        return None
+    return value if _emoji_cluster(value, 0) == len(value) else None
+
+
 # Пробельные символы `white-space: normal` — ровно набор CSS, без питоновского
 # U+00A0 и вертикальной табуляции.
 _CSS_SPACE = re.compile(r"[ \t\n\r\f]+")

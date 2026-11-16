@@ -30,14 +30,20 @@ from src.core.edl import (
     BLOCK_POSTER_MAX_WORDS,
     BLOCK_QUIET_MIN_WORDS,
     EDL,
+    LIST_ITEM_MAX_WORDS,
+    LIST_MAX,
+    LIST_MAX_ITEMS,
+    LIST_MIN_ITEMS,
     AnchorTrack,
     CaptionBlock,
     CaptionWord,
     Cut,
     Emphasis,
     Word,
+    list_runs,
     validate_edl,
 )
+from src.core.geometry import single_emoji
 from src.core.proc import ProcError, ffmpeg
 from src.core.text import strip_punctuation
 from src.llm.client import LLMBadOutput, LLMBudgetExceeded, LLMClient, LLMUnavailable
@@ -668,6 +674,14 @@ def edl_from_plan(
         # листа, сохранённого до появления поля.
         declared = raw.get("register")
         quiet = declared == "quiet" if declared in ("poster", "quiet") else None
+        # Пункт перечисления — третий класс блока. Слишком длинный пункт в
+        # плашку не влезет: он остаётся в ролике обычным блоком (и рвёт
+        # цепочку пунктов, см. `settle_lists`), а не роняет ответ.
+        is_item = declared == "item" and len(idxs) <= LIST_ITEM_MAX_WORDS
+        if declared == "item" and not is_item:
+            log.info("пункт списка из %d слов: стал обычным блоком", len(idxs))
+        if is_item:
+            quiet = False
         if len(idxs) > BLOCK_POSTER_MAX_WORDS and quiet is not True:
             # Длиннее плаката — тихий регистр по построению: столько слов кеглем
             # плаката дают строку за краем кадра. Заявку правим молча — это
@@ -677,7 +691,10 @@ def edl_from_plan(
                 log.info("плакат из %d слов: регистр поправлен на тихий", len(idxs))
             quiet = True
         emphasis_map: dict[int, Emphasis] = {}
-        if quiet:
+        if is_item:
+            # В плашке выделенного слова нет: пункт — это название целиком.
+            pass
+        elif quiet:
             # У тихого регистра золота нет ни одного слова. Акцент, если модель
             # его всё же назвала, снимаем молча — это перебор с приёмом, а не
             # ошибка формы, и он дешевле ретрая (так же устроены `anchor_track`
@@ -710,12 +727,18 @@ def edl_from_plan(
                 # кадра (§1.4.1), а привязка водит блок за головой — две
                 # раскладки на один блок, и побеждает та, что приехала позже.
                 anchor_track=(
-                    AnchorTrack() if raw.get("follow_face") and not quiet else None
+                    AnchorTrack()
+                    if raw.get("follow_face") and not quiet and not is_item
+                    else None
                 ),
                 # Плашку у тихого блока снимаем по тому же праву, что и акцент:
                 # в эталоне тихий регистр её не носит ни разу (§1.4.1), а
                 # противоречивая заявка дешевле в правке, чем в ретрае.
-                panel=bool(raw.get("panel")) and not quiet,
+                panel=bool(raw.get("panel")) and not quiet and not is_item,
+                item=is_item,
+                # Значок — один цветной эмодзи; всё остальное («звук», два
+                # эмодзи) в окошко значка не годится и молча отбрасывается.
+                emoji=single_emoji(raw.get("emoji")) if is_item else None,
             )
         )
 
@@ -729,6 +752,8 @@ def edl_from_plan(
     restored = sorted(i for i in ignored if _is_kept(by_idx[i], cuts))
     if restored:
         captions = cover_missing(captions, restored, by_idx)
+
+    settle_lists(captions, by_idx)
 
     # Потолок держим здесь, а не ретраем валидатора: лишняя привязка — не
     # ошибка формы, а перебор с приёмом, и снять её дешевле, чем гонять модель
@@ -762,6 +787,42 @@ def edl_from_plan(
         captions=captions,
         preset=preset or cfg.default_preset,
     )
+
+
+def settle_lists(captions: list[CaptionBlock], by_idx: dict[int, Word]) -> None:
+    """Приводит пункты перечисления к правилам списка. Правит блоки на месте.
+
+    Перебор с приёмом — не ошибка формы (как лишняя плашка или привязка к
+    голове): одиночный пункт, пункты сверх четырёх в одном списке и списки сверх
+    двух на ролик становятся обычными блоками, а не поводом для ретрая.
+    Остаются ПЕРВЫЕ. Пункт, разросшийся после `cover_missing`, тоже уходит в
+    обычные блоки — и рвёт цепочку, потому что стопка плашек с плакатом
+    посередине списком уже не читается.
+    """
+
+    def demote(block: CaptionBlock) -> None:
+        block.item = False
+        block.emoji = None
+        # Обычному плакату нужно главное слово (С3) — берём его так же, как у
+        # любого блока, где режиссёр слово не назвал.
+        lead = lead_word([w.word_idx for w in block.words], by_idx)
+        for w in block.words:
+            w.emphasis = Emphasis.ACCENT if w.word_idx == lead else Emphasis.NONE
+
+    for block in captions:
+        if block.item and len(block.words) > LIST_ITEM_MAX_WORDS:
+            demote(block)
+
+    kept = 0
+    dropped = 0
+    for run in list_runs(captions):
+        stays = run[:LIST_MAX_ITEMS] if len(run) >= LIST_MIN_ITEMS and kept < LIST_MAX else []
+        kept += bool(stays)
+        for i in run[len(stays):]:
+            demote(captions[i])
+            dropped += 1
+    if dropped:
+        log.info("списки: %d пунктов стали обычными блоками (осталось списков: %d)", dropped, kept)
 
 
 # --------------------------------------------------------------------------- вход

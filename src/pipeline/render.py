@@ -100,6 +100,13 @@ def prepare_assets(
                 "второй шрифт %s не найден в %s — слово нарисуется шрифтом строки",
                 accent_file, cfg.fonts_dir,
             )
+    # Шрифт эмодзи — только роликам со значками: это 10 МБ, и ролику без
+    # значков везти их в бандл незачем.
+    if any(b.pill is not None and b.pill.emoji for b in plan.blocks):
+        if cfg.emoji_font.exists():
+            plan.meta["emoji_font"] = _stage_asset(cfg.emoji_font, assets_dir)
+        else:
+            log.warning("шрифт эмодзи %s не найден — значки нарисует система", cfg.emoji_font)
     return plan
 
 
@@ -109,6 +116,7 @@ def _request_payload(req: RenderRequest) -> str:
             **req.plan.to_dict(),
             "fontUrl": req.plan.meta.get("font"),
             "accentFontUrl": req.plan.meta.get("accent_font"),
+            "emojiFontUrl": req.plan.meta.get("emoji_font"),
         },
         "assetsDir": str(req.assets_dir.resolve()),
         "out": str(req.out.resolve()),

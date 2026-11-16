@@ -29,6 +29,7 @@
  *   "boxes": [                          // блоки целиком, вместе с панелью
  *     { "id": "b0", "lines": [[{ "text": "Я", "size": 88 }]],
  *       "gap": 5, "padding_x": 34, "padding_y": 22, "border_width": 1,
+ *       "icon_room": 71.8, "icon_box": 59.8, "icon_size": 50.6,  // плашка со значком
  *       "line_height": 1.06, "max_width": 842.4 }
  *   ]
  * }
@@ -195,6 +196,19 @@ const measureInPage = (items, boxes, weight, baseSize, lineHeight, accentWeight)
       box.gap ?? Math.round(baseSize * ((box.line_height ?? lineHeight ?? 1) - 1));
     panel.style.gap = `${gap}px`;
     panel.style.padding = `${box.padding_y ?? 0}px ${box.padding_x ?? 0}px`;
+    // Окошко значка у плашки -- добавка к левому полю, а сам глиф стоит
+    // абсолютно и на коробку не влияет: ровно так же в Captions.tsx.
+    if (box.icon_room) {
+      panel.style.position = "relative";
+      panel.style.paddingLeft = `${(box.padding_x ?? 0) + box.icon_room}px`;
+      const icon = document.createElement("span");
+      icon.textContent = "\u{1F3B5}";
+      icon.style.cssText =
+        `position:absolute;left:${box.padding_x ?? 0}px;top:0;bottom:0;` +
+        `display:flex;align-items:center;justify-content:center;line-height:1;` +
+        `font-size:${box.icon_size ?? 0}px;width:${box.icon_box ?? 0}px;`;
+      panel.appendChild(icon);
+    }
     panel.style.border = `${box.border_width ?? 0}px solid transparent`;
     if (box.max_width) panel.style.maxWidth = `${box.max_width}px`;
     for (const words of box.lines) panel.appendChild(buildLine(words, false).line);

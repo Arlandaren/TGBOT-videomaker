@@ -42,7 +42,7 @@ from typing import Any, Literal, Sequence
 
 from src.core.anchor import fallbacks, follow_offsets
 from src.core.config import Settings, settings as default_settings
-from src.core.edl import EDL, Emphasis, Timeline
+from src.core.edl import EDL, LIST_MIN_ITEMS, Emphasis, Timeline, list_runs
 from src.core.geometry import (
     CAPTION_POSITIONS,
     FontMetrics,
@@ -61,6 +61,7 @@ from src.core.geometry import (
     metrics_for,
     word_metrics,
     resting_anchor,
+    safe_margin_x,
     space_width,
 )
 from src.core.preset import Preset, TitleCard, load_preset
@@ -84,6 +85,28 @@ class PlanWord:
     # и рендерер обязан поставить ровно его. `None` — метрик шрифта не было,
     # рендерер берёт кегль из пресета сам, как до Ф5.
     size: float | None = None
+
+
+@dataclass(slots=True)
+class PlanPill:
+    """Плашка пункта перечисления: числа, которыми рендерер её рисует.
+
+    Всё уже посчитано: кегль (стопку могли ужать, чтобы длинный пункт влез в
+    строку), окошко значка и просвет. Рендерер их не выводит, а берёт как есть
+    (§0) — поэтому коробка в плане и коробка в кадре совпадают. Место плашки —
+    `PlanBlock.rect`.
+    """
+
+    emoji: str | None = None
+    font_size: int = 0
+    # Разрядка букв и поправка к пробелу в плашке, em: у тем с широкой
+    # разрядкой они свои (`Pill.max_letter_spacing`).
+    letter_spacing: float = 0.0
+    word_spacing: float = 0.0
+    # Окошко значка: ширина, кегль глифа и просвет до текста, px. Нули — значка нет.
+    emoji_box: float = 0.0
+    emoji_size: float = 0.0
+    emoji_gap: float = 0.0
 
 
 @dataclass(slots=True)
@@ -130,6 +153,10 @@ class PlanBlock:
     # своё, иначе полоса титра уедет мимо замера. Регистры взаимоисключающи:
     # титр — это плакат наверху, и `quiet` у него всегда `False`.
     title_card: bool = False
+    # ПЛАШКА пункта перечисления — четвёртый класс блока (`preset.Pill`). Блок с
+    # ней стоит не по `position`, а ровно в `rect`: место стопки выбрано под
+    # лицо, а не под край кадра.
+    pill: PlanPill | None = None
 
     @property
     def words(self) -> list[PlanWord]:
@@ -196,6 +223,7 @@ class RenderPlan:
                     anchor_path=b.get("anchor_path"),
                     quiet=bool(b.get("quiet", False)),
                     title_card=bool(b.get("title_card", False)),
+                    pill=PlanPill(**b["pill"]) if b.get("pill") else None,
                 )
                 for b in data.get("blocks", [])
             ],
@@ -238,6 +266,7 @@ class RenderPlan:
                     "anchor_path": b.anchor_path,
                     "quiet": b.quiet,
                     "title_card": b.title_card,
+                    "pill": asdict(b.pill) if b.pill else None,
                 }
                 for b in self.blocks
             ],
@@ -1011,12 +1040,9 @@ def build_plan(
                 item.places = {pos: item.places[pos]}
         return chosen
 
-    laid: list[_Laid] = []
-    phrases: list[bool] = []
-    prev_word: Any = None
-    prev_end = 0.0
-    for block in edl.captions:
-        pwords: list[PlanWord] = []
+    def spoken(block: Any) -> list[PlanWord]:
+        """Слова блока на выходном таймлайне; вырезанные и неизвестные выпадают."""
+        out: list[PlanWord] = []
         for cw in block.words:
             w = by_idx.get(cw.word_idx)
             if w is None:
@@ -1025,7 +1051,7 @@ def build_plan(
             if window is None:
                 continue
             text = display_text(w.text, uppercase=ps.font.uppercase)
-            pwords.append(
+            out.append(
                 PlanWord(
                     text=text,
                     start=round(window[0], 3),
@@ -1039,8 +1065,147 @@ def build_plan(
                     word_idx=cw.word_idx,
                 )
             )
+        return out
+
+    def lay_list(run: Sequence[int]) -> list[PlanBlock] | None:
+        """Стопка плашек для списка или `None`, если списку в кадре не место.
+
+        `None` не теряет ни слова: пункты такого списка играют обычными блоками.
+        Причины — правила, а не осторожность: тема плашек не рисует; от списка
+        после резов остался один пункт; кадр поделён на два видео (стопке негде
+        встать); нет метрик шрифта — мерить нечем; пункт не влез в строку даже
+        ужатым; или стопка в любой полосе закрывает лицо.
+        """
+        pill = ps.caption.pill
+        if not pill.enabled:
+            return None
+        items = [(edl.captions[i], spoken(edl.captions[i])) for i in run]
+        items = [(block, words) for block, words in items if words]
+        if len(items) < LIST_MIN_ITEMS:
+            return None
+        first = items[0][1][0].start
+        if edl.split_until is not None and first < edl.split_until:
+            return None
+        list_end = round(items[-1][1][-1].end + cfg.sub_tail, 3)
+
+        left = width * pill.left_ratio
+        room = min(width * pill.right_ratio, width - safe_margin_x(ps, width)) - left
+        scale = 1.0
+        measured: list[tuple[Any, list[PlanWord], Rect, PlanPill]] | None = None
+        while scale >= pill.min_scale - 1e-9:
+            pr = pill.preset(ps, scale)
+            try:
+                ruler = _Ruler(
+                    metrics=metrics_for(pr),
+                    letter_spacing=pr.font.letter_spacing,
+                    base_size=float(pr.font.size),
+                    budget=room,
+                    word_spacing=pr.font.word_spacing,
+                )
+            except (FileNotFoundError, ValueError) as err:
+                log.warning("список не измерен (%s) — пункты сыграют обычными блоками", err)
+                return None
+            attempt: list[tuple[Any, list[PlanWord], Rect, PlanPill]] = []
+            for block, words in items:
+                # Текст плашки виден целиком с первого её кадра и до конца
+                # списка: это название пункта, а не караоке. Выделения нет.
+                line = [
+                    replace(
+                        w,
+                        start=words[0].start,
+                        end=list_end,
+                        emphasis="none",
+                        emoji=None,
+                        size=float(pr.font.size),
+                    )
+                    for w in words
+                ]
+                emoji = getattr(block, "emoji", None)
+                look = PlanPill(
+                    emoji=emoji,
+                    font_size=pr.font.size,
+                    letter_spacing=pr.font.letter_spacing,
+                    word_spacing=pr.font.word_spacing,
+                    emoji_box=round(pr.font.size * pill.emoji_box, 3) if emoji else 0.0,
+                    emoji_size=round(pr.font.size * pill.emoji_scale, 3) if emoji else 0.0,
+                    emoji_gap=round(pill.emoji_gap * scale, 3) if emoji else 0.0,
+                )
+                box = _rect_of_lines("top", [line], [ruler.line_width(line)], pr, frame, left=left)
+                box = Rect(left, 0.0, box.width + look.emoji_box + look.emoji_gap, box.height)
+                attempt.append((block, line, box, look))
+            if all(box.width <= room for _, _, box, _ in attempt):
+                measured = attempt
+                break
+            scale = round(scale - 0.05, 4)
+        if measured is None:
+            log.info("список %.2f с: пункт не влезает в плашку — обычные блоки", first)
+            return None
+
+        gap = pill.gap * scale
+        tall = sum(box.height for _, _, box, _ in measured) + gap * (len(measured) - 1)
+        wide = max(box.width for _, _, box, _ in measured)
+        floor = height * pill.bottom_ratio
+        ceiling = height * ps.geometry.safe_area_ratio
+        top = next(
+            (
+                y
+                for y in (height * r for r in pill.top_ratios)
+                if y >= ceiling
+                and y + tall <= floor
+                and not covers_face(first, list_end, Rect(left, y, wide, tall))
+            ),
+            None,
+        )
+        if top is None:
+            log.info("список %.2f с: стопке нет места мимо лица — обычные блоки", first)
+            return None
+
+        stack: list[PlanBlock] = []
+        y = top
+        for _, line, box, look in measured:
+            stack.append(
+                PlanBlock(
+                    start=line[0].start,
+                    end=list_end,
+                    position="top",
+                    lines=[line],
+                    rect=Rect(left, round(y, 3), round(box.width, 3), round(box.height, 3)),
+                    pill=look,
+                )
+            )
+            y += box.height + gap
+        return stack
+
+    # Списки раскладываются ДО обычных блоков: им нужны только слова и трек, а
+    # их прямоугольники обязаны попасть в `text_zones` — картинка уступает
+    # плашкам так же, как любому тексту.
+    stacks: list[list[PlanBlock]] = []
+    in_stack: set[int] = set()
+    plain: set[int] = set()
+    for run in list_runs(edl.captions):
+        stack = lay_list(run)
+        if stack is None:
+            plain.update(run)
+        else:
+            stacks.append(stack)
+            in_stack.update(run)
+
+    laid: list[_Laid] = []
+    phrases: list[bool] = []
+    prev_word: Any = None
+    prev_end = 0.0
+    for bi, block in enumerate(edl.captions):
+        pwords = spoken(block)
         if not pwords:
             continue
+        if bi in in_stack:
+            # Пункт уже стоит плашкой. Блоком он не раскладывается, но речь
+            # продолжается: следующему блоку нужно знать, чем кончился этот.
+            prev_word, prev_end = by_idx[pwords[-1].word_idx], pwords[-1].end
+            continue
+        if bi in plain:
+            # Список в кадр не встал — пункт играет обычным плакатом.
+            block = block.model_copy(update={"item": False, "emoji": None})
         if edl.split_until is not None and pwords[0].start < edl.split_until:
             # Кадр поделён: блок стоит на шве между половинами, плакатом и без
             # привязки к голове — голова живёт в нижней половине, а трек лица
@@ -1096,7 +1261,12 @@ def build_plan(
         кегль, вчетверо выше настоящей, и карточка уезжала бы в полный кадр без
         причины.
         """
-        out: list[Rect] = []
+        out: list[Rect] = [
+            pill_block.rect
+            for stack in stacks
+            for pill_block in stack
+            if pill_block.rect is not None and pill_block.start < end and pill_block.end > start
+        ]
         for item in laid:
             if item.end <= start or item.start >= end:
                 continue
@@ -1269,6 +1439,27 @@ def build_plan(
             a.end = b.start
     if blocks and duration > 0:
         blocks[-1].end = min(blocks[-1].end, duration)
+
+    # Стопки встают между обычными блоками. Список уходит ЦЕЛИКОМ — когда
+    # начинается следующий блок, — а плашки друг друга не обрезают: в этом и
+    # приём. Блок перед списком уступает первой плашке, как любому соседу.
+    for stack in stacks:
+        first = stack[0].start
+        after = [b.start for b in blocks if b.start > first]
+        end = min([stack[0].end, *after])
+        if duration > 0:
+            end = min(end, duration)
+        for pill_block in stack:
+            pill_block.end = end
+            for w in pill_block.words:
+                w.end = end
+        for b in blocks:
+            if b.start <= first < b.end:
+                b.end = first
+    if stacks:
+        blocks = sorted(
+            [*blocks, *(p for stack in stacks for p in stack)], key=lambda b: b.start
+        )
 
     def title_card_block() -> PlanBlock | None:
         """Титр ролика или `None`, если ему в этом ролике не место (STYLE_PLAN §5).

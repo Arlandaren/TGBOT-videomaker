@@ -140,6 +140,7 @@ const main = async () => {
       audio: withPrefix(prefix, plan.audio),
       fontUrl: withPrefix(prefix, plan.fontUrl),
       accentFontUrl: withPrefix(prefix, plan.accentFontUrl),
+      emojiFontUrl: withPrefix(prefix, plan.emojiFontUrl),
       broll: (plan.broll ?? []).map((b) => ({ ...b, asset: withPrefix(prefix, b.asset) })),
     };
 

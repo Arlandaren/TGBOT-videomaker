@@ -72,9 +72,39 @@ const useAccentFont = (accentFontUrl: string | null | undefined) => {
   }, [accentFontUrl, handle]);
 };
 
+/**
+ * Цветной эмодзи-шрифт для значков (плашка пункта, значок карточки).
+ *
+ * Из бандла, как и шрифты текста: на сервере рендера эмодзи-шрифта в системе
+ * нет вовсе, и значок рисовался бы пустым квадратом. Ширину значка шрифт не
+ * решает — окошко под него фиксированное и приезжает в плане, — поэтому в
+ * линейке `measure.mjs` этого лица нет и быть не должно.
+ */
+const useEmojiFont = (emojiFontUrl: string | null | undefined) => {
+  const [handle] = React.useState(() => delayRender("загрузка шрифта эмодзи"));
+  React.useEffect(() => {
+    if (!emojiFontUrl) {
+      continueRender(handle);
+      return;
+    }
+    const face = new FontFace("ReelbotEmoji", `url(${staticFile(emojiFontUrl)})`);
+    face
+      .load()
+      .then((loaded) => {
+        (document.fonts as unknown as { add(f: FontFace): void }).add(loaded);
+        continueRender(handle);
+      })
+      .catch((err) => {
+        console.warn("шрифт эмодзи не загрузился:", err);
+        continueRender(handle);
+      });
+  }, [emojiFontUrl, handle]);
+};
+
 const ReelWithFont: React.FC<RenderPlan> = (plan) => {
   useCaptionFont(plan.fontUrl);
   useAccentFont(plan.accentFontUrl);
+  useEmojiFont(plan.emojiFontUrl);
   return <Reel {...plan} />;
 };
 

@@ -86,6 +86,21 @@ export type PlanBlock = {
    * свои. Отсутствует — обычный блок.
    */
   title_card?: boolean;
+  /**
+   * ПЛАШКА пункта перечисления — четвёртый класс блока. Блок с ней стоит не по
+   * `position`, а ровно в `rect`. Все числа посчитал Python (`render_plan.
+   * PlanPill`): кегль (стопку могли ужать под длинный пункт), разрядка, окошко
+   * значка — рендерер их берёт как есть. Нулевое окошко — значка нет.
+   */
+  pill?: {
+    emoji: string | null;
+    font_size: number;
+    letter_spacing: number;
+    word_spacing: number;
+    emoji_box: number;
+    emoji_size: number;
+    emoji_gap: number;
+  } | null;
 };
 
 export type PlanBroll = {
@@ -202,6 +217,27 @@ export type Preset = {
      *
      * Необязательная: план, собранный до титра, её не содержит.
      */
+    /**
+     * Плашка пункта перечисления (`preset.Pill`): стекло, поля, скругление.
+     * Место, кегль и окошко значка приезжают с самим блоком (`PlanBlock.pill`).
+     *
+     * Необязательная: план, собранный до перечислений, её не содержит.
+     */
+    pill?: {
+      enabled: boolean;
+      line_height: number;
+      padding_x: number;
+      padding_y: number;
+      radius: number;
+      blur: number;
+      border_width: number;
+      border_color: string;
+      border_opacity: number;
+      tint_color: string;
+      tint_opacity: number;
+      glass_color: string;
+      glass_opacity: number;
+    };
     title_card?: {
       enabled: boolean;
       start: number;
@@ -330,6 +366,8 @@ export type RenderPlan = {
   fontUrl?: string | null;
   /** Второй шрифт темы (`preset.accent_font`), тем же способом. */
   accentFontUrl?: string | null;
+  /** Цветной эмодзи-шрифт для значков: есть, только если в плане есть значки. */
+  emojiFontUrl?: string | null;
 };
 
 export const EMPTY_PLAN: RenderPlan = {

@@ -247,6 +247,103 @@ class Quiet(BaseModel):
         return ps
 
 
+class Pill(BaseModel):
+    """Плашка пункта перечисления: стеклянная капсула со значком и названием.
+
+    Четвёртый класс блока. Когда человек перечисляет («трендовые звуки,
+    вставленные картинки, …»), каждый пункт встаёт своей плашкой под
+    предыдущим и остаётся до конца списка — зритель видит список, а не поток
+    сменяющих друг друга плакатов.
+
+    Устроена плашка как блок со стеклом (`Panel`), только числа свои: мелкий
+    кегль, одна строка, капсула вместо скруглённого прямоугольника и затемнённое
+    стекло — текст на нём белый при любом фоне, и правило контраста ему не
+    нужно. Поэтому регистр и здесь выражен пресетом (`preset`): перенос,
+    бюджет строки и коробку блока считает общий код.
+
+    Значок — цветной эмодзи в окошке ФИКСИРОВАННОЙ ширины (`emoji_box`, доля
+    кегля). Ширина плашки от настоящей ширины глифа не зависит, поэтому её не
+    сдвинет ни другой эмодзи-шрифт, ни глиф, которого в шрифте нет.
+
+    Пиксельные числа — при высоте кадра 1920 (`_PIXEL_FIELDS`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    font_size: int = 46
+    line_height: float = 1.2
+    padding_x: int = 30
+    padding_y: int = 15
+    # Больше половины высоты плашки — значит капсула при любом кегле.
+    radius: int = 80
+    blur: int = 16
+    border_width: int = 2
+    border_color: str = "#FFFFFF"
+    border_opacity: float = 0.36
+    # Затемнение стекла: на нём держится читаемость белого текста.
+    tint_color: str = "#0E1116"
+    tint_opacity: float = 0.42
+    glass_color: str = "#FFFFFF"
+    glass_opacity: float = 0.06
+    # Просвет между плашками стопки.
+    gap: int = 14
+    # Значок: кегль глифа и ширина окошка в долях кегля текста, просвет до текста.
+    emoji_scale: float = 1.1
+    emoji_box: float = 1.3
+    emoji_gap: int = 12
+    # Левый край стопки и потолок её правого края, доли ширины кадра.
+    left_ratio: float = 0.2
+    right_ratio: float = 0.9
+    # Где стопка может начинаться, доли высоты кадра, в порядке предпочтения.
+    # Первая — под лицом, у груди (так стоит перечисление в эталоне); дальше
+    # ниже, выше и наконец над головой — берётся первая полоса, где стопка не
+    # закрывает лицо и не уходит ниже `bottom_ratio` (там интерфейс ленты).
+    top_ratios: tuple[float, ...] = (0.6, 0.66, 0.54, 0.72, 0.14, 0.2)
+    bottom_ratio: float = 0.84
+    # До какой доли кегля стопку можно ужать, чтобы длинный пункт влез в строку.
+    # Не влез и так — список играет обычными блоками.
+    min_scale: float = 0.8
+    # Потолок разрядки букв в плашке. Тема с широкой разрядкой (deco_line,
+    # 0.2 em) набирает ею плакат из трёх слов; название пункта мелким кеглем в
+    # капсуле с такой разрядкой шире кадра.
+    max_letter_spacing: float = 0.04
+
+    def preset(self, base: "Preset", scale: float = 1.0) -> "Preset":
+        """Пресет плашки: та же тема, числа капсулы. `base` уже приведён к кадру."""
+        ps = base.model_copy(deep=True)
+        ps.accent_font = None
+        ps.font.size = max(8, int(self.font_size * scale))
+        tracked = min(base.font.letter_spacing, self.max_letter_spacing)
+        # Зазор между словами (пробел + разрядка + поправка темы) остаётся тем
+        # же: разрядку срезали у букв, а не у пробела.
+        ps.font.word_spacing = round(
+            base.font.word_spacing + base.font.letter_spacing - tracked, 4
+        )
+        ps.font.letter_spacing = tracked
+        ps.caption.line_height = self.line_height
+        ps.caption.align = "left"
+        ps.caption.max_lines = 1
+        ps.caption.fill_max_scale = 1.0
+        ps.animation.accent_scale = 1.0
+        ps.animation.shout_scale = 1.0
+        ps.panel = Panel(
+            enabled=True,
+            color=self.tint_color,
+            opacity=self.tint_opacity,
+            blur=self.blur,
+            radius=self.radius,
+            padding_x=self.padding_x,
+            padding_y=self.padding_y,
+            border_color=self.border_color,
+            border_opacity=self.border_opacity,
+            border_width=self.border_width,
+            glass_color=self.glass_color,
+            glass_opacity=self.glass_opacity,
+        )
+        return ps
+
+
 class TitleCard(BaseModel):
     """Титр первых секунд: самый крупный текст ролика (STYLE_PLAN §5).
 
@@ -422,6 +519,9 @@ class Caption(BaseModel):
     # из речи, а из заголовка ролика (`EDL.title`), поэтому в блоках EDL его
     # нет: титр собирает `render_plan`.
     title_card: TitleCard = Field(default_factory=TitleCard)
+    # Четвёртый класс блока — плашка пункта перечисления. Есть у всех тем:
+    # своих чисел плашке тема может не задавать вовсе.
+    pill: Pill = Field(default_factory=Pill)
 
 
 class Geometry(BaseModel):
@@ -658,6 +758,14 @@ _PIXEL_FIELDS: tuple[tuple[str, str], ...] = (
     ("caption.quiet", "margin"),
     ("caption.title_card", "font_size"),
     ("caption.title_card", "margin"),
+    ("caption.pill", "font_size"),
+    ("caption.pill", "padding_x"),
+    ("caption.pill", "padding_y"),
+    ("caption.pill", "radius"),
+    ("caption.pill", "blur"),
+    ("caption.pill", "border_width"),
+    ("caption.pill", "gap"),
+    ("caption.pill", "emoji_gap"),
     ("panel", "padding_x"),
     ("panel", "padding_y"),
     ("panel", "radius"),
@@ -680,7 +788,12 @@ _PIXEL_FIELDS: tuple[tuple[str, str], ...] = (
 # Вниз кегль относительно бюджета только уменьшается, поэтому перенос на меньшем
 # кадре может стать разве что свободнее, но не теснее.
 _ROUND_DOWN: frozenset[tuple[str, str]] = frozenset(
-    {("font", "size"), ("caption.quiet", "font_size"), ("caption.title_card", "font_size")}
+    {
+        ("font", "size"),
+        ("caption.quiet", "font_size"),
+        ("caption.title_card", "font_size"),
+        ("caption.pill", "font_size"),
+    }
 )
 
 

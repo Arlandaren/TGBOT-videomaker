@@ -37,7 +37,7 @@ from aiogram.types import LabeledPrice
 from aiohttp import web
 
 from src.core.config import CLAIMED_PREFIX, MUSIC_PREFIX, UPLOAD_PREFIX, Settings
-from src.core.geometry import load_metrics
+from src.core.geometry import load_metrics, metrics_for, space_width
 from src.core.i18n import LANGS, error_text, lang_of, stage_title, t, tokens_text
 from src.core.options import ACCENTS, FONTS, JobOptions, theme_label
 from src.core.preset import available, load_preset
@@ -473,6 +473,18 @@ async def bootstrap(request: web.Request) -> web.Response:
             "font": p.font.family,
             "font_file": p.font.file,
             "letter_spacing": p.font.letter_spacing,
+            # Зазор между словами, em: пробел шрифта + разрядка + поправка темы.
+            # Превью ставит его как есть — своя константа врала бы про темы
+            # с узким или широким пробелом.
+            "word_gap": round(
+                space_width(
+                    1.0,
+                    metrics=metrics_for(p),
+                    letter_spacing=p.font.letter_spacing,
+                    word_spacing=p.font.word_spacing,
+                ),
+                4,
+            ),
             "uppercase": p.font.uppercase,
             # Второй шрифт темы: им набрано выделенное слово. Превью обязано
             # показать пару, иначе тема выглядит как её соседка без пары.

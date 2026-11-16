@@ -27,6 +27,12 @@ class FontSpec(BaseModel):
     size: int = 84  # px при высоте кадра 1920
     uppercase: bool = False
     letter_spacing: float = -0.01  # em
+    # Поправка к пробелу МЕЖДУ словами, em от кегля строки (CSS `word-spacing`).
+    # Пробел шрифта у моноширинных и разрядка у «широких» тем разводят слова
+    # дальше, чем читается фраза; отрицательное значение сужает именно пробел,
+    # буквы не трогает. Раскладку и рендер ведёт одно число: `geometry.space_width`
+    # и `wordSpacing` в Captions.tsx.
+    word_spacing: float = 0.0
 
 
 class AccentFont(BaseModel):

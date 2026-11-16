@@ -275,6 +275,11 @@ def apply_font(preset: Preset, font: str) -> Preset:
     clone.font.family = choice.family
     clone.font.file = choice.file
     clone.font.weight = choice.weight
+    # Поправка к пробелу подобрана под шрифт темы; у выбранного шрифта пробел
+    # свой. Широкий (моноширинный — 0.6 em) сужаем до обычных 0.28 em: с
+    # пробелом шириной в букву строка читается как отдельные слова.
+    own_space = now.advance(" ") / now.units_per_em + clone.font.letter_spacing
+    clone.font.word_spacing = round(min(0.0, 0.28 - own_space), 3)
     clone.font.size = max(12, int(preset.font.size * ratio))
     clone.caption.quiet.font_size = max(12, int(preset.caption.quiet.font_size * ratio))
     clone.caption.title_card.font_size = max(

@@ -821,6 +821,11 @@ export const Captions: React.FC<{ blocks: PlanBlock[]; preset: Preset }> = ({ bl
               fontSize: ps.font.size,
               lineHeight: ps.caption.line_height,
               letterSpacing: `${ps.font.letter_spacing}em`,
+              // Пробел между словами — настоящий символ в этом контейнере,
+              // поэтому поправку темы к нему несёт `word-spacing`. Слова её
+              // наследуют уже в пикселях, как и letter-spacing (measure.mjs
+              // объявляет то же самое на `#stage`).
+              wordSpacing: `${ps.font.word_spacing ?? 0}em`,
               textAlign: ps.caption.align,
               pointerEvents: "none",
               // Смещение живёт на контейнере, а не на самом блоке: у блока свой

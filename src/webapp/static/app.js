@@ -575,6 +575,9 @@ const preview = {
     box.style.fontSize = `${base}px`;
     box.style.lineHeight = p.line_height;
     box.style.letterSpacing = `${p.letter_spacing}em`;
+    // Зазор между словами — число темы (пробел шрифта + разрядка + поправка),
+    // то же, которым ролик раскладывает строку.
+    if (typeof p.word_gap === "number") box.style.setProperty("--word-gap", `${p.word_gap}em`);
     box.style.setProperty("--cap-font", `"${activeThemeFamily()}"`);
     this.place(box, p, k);
     // Движение берётся у темы, а не зашито в стили: иначе превью обещает одно,

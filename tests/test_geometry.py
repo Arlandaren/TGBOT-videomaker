@@ -400,6 +400,88 @@ def test_uppercase_is_measured_after_uppercasing(metrics):
     assert upper > lower
 
 
+# ------------------------------------------------------------------ word-spacing
+#
+# Пробел между словами — это пробел шрифта плюс разрядка темы. У моноширинного
+# шрифта он шириной с букву (0.6 em), у тем с разрядкой набегает до 0.55 em, и
+# слова в строке разъезжаются. `font.word_spacing` (em от кегля строки, как
+# CSS `word-spacing`) сужает именно пробел, не трогая буквы.
+
+MAX_WORD_GAP_EM = 0.30
+
+
+def test_word_spacing_narrows_the_gap_and_not_the_word(metrics):
+    plain = space_width(88, metrics=metrics, letter_spacing=-0.015)
+    tight = space_width(88, metrics=metrics, letter_spacing=-0.015, word_spacing=-0.1)
+    assert tight == pytest.approx(plain - 8.8)
+
+    word = measure_word("человек", 88, metrics=metrics, letter_spacing=-0.015)
+    assert measure_word(
+        "человек", 88, metrics=metrics, letter_spacing=-0.015, word_spacing=-0.1
+    ) == pytest.approx(word)
+
+
+def test_word_spacing_reaches_the_space_inside_a_word_box(metrics):
+    """Эмодзи стоит в спане слова за настоящим пробелом — CSS сужает и его.
+
+    `word-spacing` наследуется от строки уже в пикселях, поэтому у акцентного
+    слова он тот же, что у соседей: em считаются от кегля строки.
+    """
+    plain = measure_word("а б", 88 * 1.5, metrics=metrics, spacing_size=88)
+    tight = measure_word("а б", 88 * 1.5, metrics=metrics, spacing_size=88, word_spacing=-0.1)
+    assert tight == pytest.approx(plain - 8.8)
+
+
+def test_a_line_loses_the_spacing_once_per_gap(metrics):
+    words = [("раз", 88.0), ("два", 88.0), ("три", 88.0)]
+    plain = measure_line(words, metrics=metrics, letter_spacing=-0.015, base_size=88)
+    tight = measure_line(
+        words, metrics=metrics, letter_spacing=-0.015, base_size=88, word_spacing=-0.1
+    )
+    assert tight == pytest.approx(plain - 2 * 8.8)
+
+
+@pytest.mark.parametrize("name", ALL_PRESETS)
+def test_no_theme_sets_words_far_apart(name):
+    """Зазор между словами в раскладке — не шире 0.30 em ни в одной теме.
+
+    Это пробел шрифта + разрядка + `word_spacing`. У конкурентов и в нашей теме
+    по умолчанию он около 0.27 em; шире — строка читается как отдельные слова, а
+    не как фраза. И не уже 0.15 em: слова не должны слипаться.
+    """
+    preset = load_preset(name)
+    font = preset.font
+    gap = (
+        space_width(
+            1.0,
+            metrics=metrics_for(preset),
+            letter_spacing=font.letter_spacing,
+            word_spacing=font.word_spacing,
+        )
+    )
+    assert 0.15 <= gap <= MAX_WORD_GAP_EM + 1e-9, f"{name}: зазор {gap:.3f} em"
+
+
+def test_the_production_ruler_uses_the_theme_word_spacing():
+    """`wrap_block` и коробка блока меряют тем же пробелом, что рисует рендер."""
+    from src.core.render_plan import PlanBlock, PlanWord, wrap_block
+
+    preset = load_preset("deco_line").scaled(1920)
+    assert preset.font.word_spacing < 0
+    loose = preset.model_copy(deep=True)
+    loose.font.word_spacing = 0.0
+
+    def rect_width(ps):
+        words = [PlanWord(text=t, start=i, end=i + 1) for i, t in enumerate(["мы", "тут"])]
+        lines, _ = wrap_block(words, ps, 1080)
+        assert len(lines) == 1
+        block = PlanBlock(start=0, end=2, position="center", lines=lines)
+        return caption_rect(block, ps, (1080, 1920)).width
+
+    saved = -preset.font.word_spacing * preset.font.size
+    assert rect_width(loose) - rect_width(preset) == pytest.approx(saved, abs=0.01)
+
+
 def test_line_uses_a_real_space_not_a_gap(metrics):
     words = [SizedWord("один", 88), SizedWord("два", 88)]
     line = measure_line(words, metrics=metrics, base_size=88)
@@ -619,6 +701,7 @@ def test_panelless_preset_has_no_padding_in_the_rect():
         bold.font.size,
         metrics=metrics_for(bold),
         letter_spacing=bold.font.letter_spacing,
+        word_spacing=bold.font.word_spacing,
     )
     assert rect.width == pytest.approx(width, abs=0.01)
 
@@ -927,12 +1010,15 @@ def _baseline_lines(base: float, accent: float, shout: float, *, uppercase: bool
     return lines
 
 
-def _assert_matches_chromium(font_file: str, weight: int, base: float, spacing: float, items):
+def _assert_matches_chromium(
+    font_file: str, weight: int, base: float, spacing: float, items, word_spacing: float = 0.0
+):
     request = {
         "font": str(REPO / "assets" / "fonts" / font_file),
         "weight": weight,
         "base_size": base,
         "letter_spacing": spacing,
+        "word_spacing": word_spacing,
         "items": [
             {"id": key, "words": [{"text": w.text, "size": w.size} for w in ws]}
             for key, ws in items.items()
@@ -942,7 +1028,9 @@ def _assert_matches_chromium(font_file: str, weight: int, base: float, spacing: 
     metrics = load_metrics(font_file)
     report: list[str] = []
     for key, ws in items.items():
-        predicted = measure_line(ws, metrics=metrics, letter_spacing=spacing, base_size=base)
+        predicted = measure_line(
+            ws, metrics=metrics, letter_spacing=spacing, base_size=base, word_spacing=word_spacing
+        )
         if abs(predicted - measured[key]) >= 2.0:
             text = " ".join(w.text for w in ws)
             report.append(f"{key} {text!r}: python {predicted:.2f}, chromium {measured[key]:.2f}")
@@ -1005,7 +1093,8 @@ def test_python_predicts_chromium_on_hard_lines():
         preset.animation.shout_scale * preset.font.size,
     )
     _assert_matches_chromium(
-        preset.font.file, preset.font.weight, preset.font.size, preset.font.letter_spacing, items
+        preset.font.file, preset.font.weight, preset.font.size, preset.font.letter_spacing, items,
+        word_spacing=preset.font.word_spacing,
     )
 
 
@@ -1032,7 +1121,8 @@ def test_python_predicts_chromium_on_hard_lines_for_the_dense_preset():
             if key != "greek"
         }
     _assert_matches_chromium(
-        preset.font.file, preset.font.weight, preset.font.size, preset.font.letter_spacing, items
+        preset.font.file, preset.font.weight, preset.font.size, preset.font.letter_spacing, items,
+        word_spacing=preset.font.word_spacing,
     )
 
 
@@ -1055,6 +1145,7 @@ def test_fallback_never_underestimates_chromium():
         "weight": preset.font.weight,
         "base_size": preset.font.size,
         "letter_spacing": preset.font.letter_spacing,
+        "word_spacing": preset.font.word_spacing,
         "items": [{"id": c, "text": c, "size": preset.font.size} for c in unknown],
     }
     measured = _measure_in_node(request)["widths"]
@@ -1064,6 +1155,7 @@ def test_fallback_never_underestimates_chromium():
             preset.font.size,
             metrics=metrics,
             letter_spacing=preset.font.letter_spacing,
+            word_spacing=preset.font.word_spacing,
         )
         assert predicted >= measured[char] - 1e-6, (
             f"{char!r}: оценка {predicted:.2f} УЖЕ настоящих {measured[char]:.2f} — "
@@ -1080,7 +1172,8 @@ def test_python_predicts_chromium_line_width():
     )
     assert len(items) >= 20, "в базовом плане должно быть с чего мерить"
     _assert_matches_chromium(
-        preset.font.file, preset.font.weight, preset.font.size, preset.font.letter_spacing, items
+        preset.font.file, preset.font.weight, preset.font.size, preset.font.letter_spacing, items,
+        word_spacing=preset.font.word_spacing,
     )
 
 
@@ -1114,7 +1207,8 @@ def test_python_predicts_chromium_for_every_bundled_font(ttf: str, preset_name: 
         uppercase=preset.font.uppercase,
     )
     _assert_matches_chromium(
-        ttf, preset.font.weight, preset.font.size, preset.font.letter_spacing, items
+        ttf, preset.font.weight, preset.font.size, preset.font.letter_spacing, items,
+        word_spacing=preset.font.word_spacing,
     )
 
 
@@ -1143,6 +1237,7 @@ def test_caption_rect_matches_the_chromium_box():
         "weight": preset.font.weight,
         "base_size": preset.font.size,
         "letter_spacing": preset.font.letter_spacing,
+        "word_spacing": preset.font.word_spacing,
         "line_height": preset.caption.line_height,
         "items": [],
         "boxes": [
@@ -1243,7 +1338,9 @@ def test_wrap_measures_the_accent_word_with_the_second_font(name: str):
         if w is not accent
     )
     spaces = (len(lines[row]) - 1) * space_width(
-        float(preset.font.size), metrics=metrics_for(preset)
+        float(preset.font.size),
+        metrics=metrics_for(preset),
+        word_spacing=preset.font.word_spacing,
     )
     assert widths[row] == pytest.approx(alone + rest + spaces, abs=0.05)
 
@@ -1310,6 +1407,7 @@ def test_the_production_block_rect_matches_chromium(name: str):
         "weight": preset.font.weight,
         "base_size": preset.font.size,
         "letter_spacing": preset.font.letter_spacing,
+        "word_spacing": preset.font.word_spacing,
         "line_height": preset.caption.line_height,
         **_accent_request(preset),
         "items": [],
@@ -1387,6 +1485,7 @@ def test_the_title_card_box_matches_chromium():
         "weight": card.font.weight,
         "base_size": card.font.size,
         "letter_spacing": card.font.letter_spacing,
+        "word_spacing": card.font.word_spacing,
         "line_height": card.caption.line_height,
         "items": [],
         "boxes": [

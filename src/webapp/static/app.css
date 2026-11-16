@@ -384,7 +384,7 @@ svg { flex: none; }
   text-shadow: 0 0 6px rgb(0 0 0 / 50%), 0 2px 8px rgb(0 0 0 / 45%), 0 6px 22px rgb(0 0 0 / 35%);
 }
 .cap-plate { display: inline-block; max-width: 100%; }
-.cap-line { display: flex; gap: 0.28em; justify-content: center; flex-wrap: nowrap; white-space: nowrap; }
+.cap-line { display: flex; gap: var(--word-gap, 0.28em); justify-content: center; flex-wrap: nowrap; white-space: nowrap; }
 /* Числа тут не свои, а темы: их присылает /api/bootstrap и подставляет app.js.
    Иначе превью обещает одно движение, а рендер делает другое. */
 .cap-word {

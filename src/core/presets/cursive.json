@@ -8,7 +8,8 @@
     "weight": 400,
     "size": 62,
     "uppercase": false,
-    "letter_spacing": 0.0
+    "letter_spacing": 0.0,
+    "word_spacing": -0.08
   },
   "accent_font": {
     "family": "Playfair Display ExtraBold Italic",

@@ -328,6 +328,8 @@ class _Ruler:
     budget: float
     # Второй шрифт темы: им набрано выделенное слово, им же оно и меряется.
     accent_metrics: FontMetrics | None = None
+    # Поправка темы к пробелу между словами (`FontSpec.word_spacing`).
+    word_spacing: float = 0.0
 
     def word(self, word: PlanWord, size: float) -> float:
         """Ширина слова вместе с эмодзи.
@@ -347,12 +349,16 @@ class _Ruler:
             # Спейсинг объявлен на контейнере строки и наследуется уже в
             # пикселях: у акцента он тот же, что у соседей.
             spacing_size=self.base_size,
+            word_spacing=self.word_spacing,
         )
 
     @property
     def space(self) -> float:
         return space_width(
-            self.base_size, metrics=self.metrics, letter_spacing=self.letter_spacing
+            self.base_size,
+            metrics=self.metrics,
+            letter_spacing=self.letter_spacing,
+            word_spacing=self.word_spacing,
         )
 
     def line_width(self, line: Sequence[PlanWord]) -> float:
@@ -420,6 +426,7 @@ def wrap_block(
         base_size=float(preset.font.size),
         budget=caption_text_width(preset, frame_width),
         accent_metrics=accent_metrics_for(preset),
+        word_spacing=preset.font.word_spacing,
     )
     floor_ratio = max(0.05, min(1.0, preset.caption.min_word_scale))
     max_lines = max(1, preset.caption.max_lines)

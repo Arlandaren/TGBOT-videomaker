@@ -225,3 +225,25 @@ def test_a_new_job_always_uses_the_font_of_the_theme():
     assert JobOptions.for_new_job({"font": "serif", "accent": "red"}).accent == "red"
     assert JobOptions.for_new_job(None).font == "theme"
     assert JobOptions.from_stored({"font": "serif"}).font == "serif"
+
+
+@pytest.mark.parametrize("key", [k for k in FONTS if k != "theme"])
+def test_a_chosen_font_never_sets_words_far_apart(key: str):
+    """Старая задача с выбранным шрифтом при пересборке не разводит слова.
+
+    У моноширинного шрифта пробел шириной с букву (0.6 em): ролики с ним
+    читались как отдельные слова. Поправка темы к пробелу подобрана под ЕЁ
+    шрифт, поэтому у выбранного шрифта она своя — до обычных 0.28 em.
+    """
+    from src.core.geometry import metrics_for, space_width
+
+    for theme in ("pulse", "deco_line"):
+        preset = apply_font(load_preset(theme), key)
+        gap = space_width(
+            1.0,
+            metrics=metrics_for(preset),
+            letter_spacing=preset.font.letter_spacing,
+            word_spacing=preset.font.word_spacing,
+        )
+        assert gap <= 0.30 + 1e-9, f"{theme} + {key}: зазор {gap:.3f} em"
+        assert preset.font.word_spacing <= 0

@@ -8,7 +8,8 @@
     "weight": 600,
     "size": 83,
     "uppercase": false,
-    "letter_spacing": 0.08
+    "letter_spacing": 0.08,
+    "word_spacing": -0.044
   },
   "colors": {
     "active": "#FDFAF2",

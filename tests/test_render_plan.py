@@ -463,6 +463,7 @@ def test_fallback_line_limit_follows_the_preset(name: str):
                 [(w.text, base) for w in line],
                 metrics=metrics,
                 letter_spacing=preset.font.letter_spacing,
+                word_spacing=preset.font.word_spacing,
                 base_size=base,
             )
             assert width <= budget, (name, [w.text for w in line], width)
@@ -555,6 +556,7 @@ def ruler_of(preset: Preset) -> _Ruler:
     return _Ruler(
         metrics=metrics_for(preset),
         letter_spacing=preset.font.letter_spacing,
+        word_spacing=preset.font.word_spacing,
         base_size=float(preset.font.size),
         budget=caption_text_width(preset, FRAME[0]),
         accent_metrics=accent_metrics_for(preset),
@@ -617,6 +619,7 @@ def test_wrapped_text_never_leaves_the_caption_rect(name: str):
                         _sized(line, preset, base),
                         metrics=metrics,
                         letter_spacing=preset.font.letter_spacing,
+                        word_spacing=preset.font.word_spacing,
                         base_size=base,
                     ),
                     abs=0.01,
@@ -651,7 +654,9 @@ def test_words_in_a_line_never_overlap(name: str):
     budget = caption_text_width(preset, FRAME[0])
     # Пробел между словами меряет `space_width`, а не `measure_word(" ")`: в
     # боксе слова краевой пробел схлопывается и стоит ноль, между боксами — нет.
-    space = space_width(base, metrics=metrics, letter_spacing=ls)
+    space = space_width(
+        base, metrics=metrics, letter_spacing=ls, word_spacing=preset.font.word_spacing
+    )
     assert space > 0
     seen = 0
     for block in all_blocks():
@@ -670,6 +675,7 @@ def test_words_in_a_line_never_overlap(name: str):
                     # Выделенное слово темы с парой шрифтов набрано вторым.
                     metrics=word_metrics(word.emphasis, preset) or metrics,
                     letter_spacing=ls,
+                    word_spacing=preset.font.word_spacing,
                     spacing_size=base,
                 )
                 assert own > 0, (name, word.text)
@@ -686,6 +692,7 @@ def test_words_in_a_line_never_overlap(name: str):
                 _sized(line, preset, base),
                 metrics=metrics,
                 letter_spacing=ls,
+                word_spacing=preset.font.word_spacing,
                 base_size=base,
             )
             assert previous_right == pytest.approx(independent, abs=0.01), name
@@ -1545,6 +1552,7 @@ def test_chromium_draws_the_block_the_plan_promised(name: str):
         "weight": preset.font.weight,
         "base_size": preset.font.size,
         "letter_spacing": preset.font.letter_spacing,
+        "word_spacing": preset.font.word_spacing,
         "line_height": preset.caption.line_height,
         "items": [],
         "boxes": [],
@@ -1618,6 +1626,7 @@ def test_chromium_draws_the_quiet_block_the_plan_promised():
         "weight": preset.font.weight,
         "base_size": preset.font.size,
         "letter_spacing": preset.font.letter_spacing,
+        "word_spacing": preset.font.word_spacing,
         "line_height": preset.caption.line_height,
         "items": [],
         "boxes": [],

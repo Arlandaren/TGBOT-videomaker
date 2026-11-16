@@ -561,6 +561,7 @@ def measure_word(
     letter_spacing: float = 0.0,
     spacing_size: float | None = None,
     uppercase: bool = False,
+    word_spacing: float = 0.0,
 ) -> float:
     """Ширина слова в пикселях.
 
@@ -583,6 +584,10 @@ def measure_word(
     Пробелы по краям слова НЕ считаются: бокс слова — inline-block, и CSS их
     убирает (`_collapse`). Ширину одиночного пробела между словами берёт
     `space_width`: там пробел лежит между боксами и схлопнуться ему не с чем.
+
+    `word_spacing` (em от того же `spacing_size`) достаётся пробелам ВНУТРИ
+    бокса: между текстом и эмодзи стоит настоящий пробел, и CSS `word-spacing`,
+    унаследованный от строки, сужает его так же, как пробел между словами.
     """
     if not text:
         return 0.0
@@ -596,17 +601,34 @@ def measure_word(
     if letter_spacing:
         spacing_px = letter_spacing * (font_size if spacing_size is None else spacing_size)
         width += spacing_px * metrics.spacing_units(text, ligatures=use_ligatures)
+    if word_spacing:
+        spaces = sum(1 for ch in text if ch in _WORD_SEPARATORS)
+        width += word_spacing * (font_size if spacing_size is None else spacing_size) * spaces
     return width
 
 
-def space_width(font_size: float, *, metrics: FontMetrics, letter_spacing: float = 0.0) -> float:
+# Символы, которым CSS `word-spacing` прибавляет ширину (css-text-3, «word
+# separators», в пределах того, что бывает в субтитре).
+_WORD_SEPARATORS = " \u00a0"
+
+
+def space_width(
+    font_size: float,
+    *,
+    metrics: FontMetrics,
+    letter_spacing: float = 0.0,
+    word_spacing: float = 0.0,
+) -> float:
     """Ширина пробела МЕЖДУ словами.
 
     Отдельная функция, а не `measure_word(" ")`: в боксе слова краевой пробел
     схлопывается и стоит ноль, а между двумя inline-block-боксами он настоящий и
     рисуется кеглем строки. Одной функцией эти два случая не описать.
+
+    `word_spacing` — поправка темы к этому пробелу (`FontSpec.word_spacing`).
     """
-    return (metrics.advance(" ") / metrics.units_per_em + letter_spacing) * font_size
+    space = metrics.advance(" ") / metrics.units_per_em
+    return (space + letter_spacing + word_spacing) * font_size
 
 
 def measure_line(
@@ -616,6 +638,7 @@ def measure_line(
     letter_spacing: float = 0.0,
     base_size: float | None = None,
     uppercase: bool = False,
+    word_spacing: float = 0.0,
 ) -> float:
     """Ширина строки в пикселях с учётом разных кеглей внутри неё.
 
@@ -651,10 +674,13 @@ def measure_line(
             letter_spacing=letter_spacing,
             spacing_size=base_size,
             uppercase=uppercase,
+            word_spacing=word_spacing,
         )
         for w in items
     )
-    space = space_width(base_size, metrics=metrics, letter_spacing=letter_spacing)
+    space = space_width(
+        base_size, metrics=metrics, letter_spacing=letter_spacing, word_spacing=word_spacing
+    )
     return total + space * (len(items) - 1)
 
 
@@ -878,7 +904,11 @@ def caption_rect(block: _HasLines, preset: Any, frame_size: tuple[int, int]) -> 
         text_w = max(
             text_w,
             measure_line(
-                line, metrics=metrics, letter_spacing=ls, base_size=float(preset.font.size)
+                line,
+                metrics=metrics,
+                letter_spacing=ls,
+                base_size=float(preset.font.size),
+                word_spacing=preset.font.word_spacing,
             ),
         )
         text_h += line_box_height(

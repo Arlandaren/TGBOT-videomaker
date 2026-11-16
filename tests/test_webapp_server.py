@@ -516,6 +516,12 @@ async def test_bootstrap_describes_every_theme_the_way_the_preview_draws_it(boot
         assert item["size"] == p.font.size, item["name"]
         assert item["uppercase"] == p.font.uppercase, item["name"]
         assert item["letter_spacing"] == p.font.letter_spacing, item["name"]
+        # Зазор между словами превью берёт у темы, а не из своей константы:
+        # иначе у темы с узким пробелом превью обещает широкий.
+        space = load_metrics(p.font.file).advance(" ") / load_metrics(p.font.file).units_per_em
+        assert item["word_gap"] == pytest.approx(
+            space + p.font.letter_spacing + p.font.word_spacing, abs=1e-4
+        ), item["name"]
         assert item["line_height"] == p.caption.line_height, item["name"]
         assert item["position"] == p.caption.position, item["name"]
         assert item["margin"] == p.caption.margin, item["name"]

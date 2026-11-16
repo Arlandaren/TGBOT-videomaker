@@ -20,6 +20,7 @@
  *   "accent_weight": 400,                              // им набрано слово с "accent": true
  *   "base_size": 88,
  *   "letter_spacing": -0.015,          // em, как в пресете
+ *   "word_spacing": 0,                 // em, поправка к пробелу между словами
  *   "items": [                          // строки
  *     { "id": "b0l0", "words": [{ "text": "Я", "size": 88 }, ...] },
  *     { "id": "word", "text": "думаю", "size": 104 },
@@ -79,6 +80,7 @@ const buildPage = (req) => {
     : "";
   const weight = req.weight ?? 400;
   const letterSpacing = req.letter_spacing ?? 0;
+  const wordSpacing = req.word_spacing ?? 0;
   const baseSize = req.base_size ?? 100;
   return `<!doctype html>
 <meta charset="utf-8">
@@ -102,6 +104,9 @@ const buildPage = (req) => {
     font-size: ${baseSize}px;
     line-height: ${req.line_height ?? "normal"};
     letter-spacing: ${letterSpacing}em;
+    /* Поправка темы к пробелу между словами -- там же, где её объявляет
+       Captions.tsx: на контейнере строки, от его кегля. */
+    word-spacing: ${wordSpacing}em;
   }
   /* content-box намеренно: max-width в Python — это бюджет ТЕКСТА, паддинги
      панели прибавляются к нему, а не съедают его. */

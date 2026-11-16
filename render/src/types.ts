@@ -122,6 +122,8 @@ export type Preset = {
     size: number;
     uppercase: boolean;
     letter_spacing: number;
+    /** Поправка к пробелу между словами, em от кегля строки. */
+    word_spacing?: number;
   };
   /** Второй шрифт темы: им набрано только выделенное слово блока. */
   accent_font?: {

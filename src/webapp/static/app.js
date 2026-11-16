@@ -693,19 +693,98 @@ function syncPreview() {
 // Двигаем САМУ ленту, а не зовём scrollIntoView: тот бы потянул и страницу по
 // вертикали, а на открытии приложения это прыжок экрана ещё до первого
 // касания.
-function scrollToActive(box, behavior = "smooth") {
+// Вызывается ОДИН раз — когда шаг оформления открывается. Позже лента сама не
+// ездит никогда: человек уже листает её и целится в плитку, а самоходная лента
+// уводит плитку из-под пальца.
+function scrollToActive(box) {
   const active = box.querySelector(".is-active");
   if (!active || box.scrollWidth <= box.clientWidth) return;
   const a = active.getBoundingClientRect();
   const b = box.getBoundingClientRect();
-  // `behavior` — перечисление WebIDL: клиент, который не знает значения
-  // «instant», бросает TypeError прямо на входе. Здесь это стоило бы всего
-  // остального в `main()` — обработчиков загрузки, кнопок, опроса задач.
-  try {
-    box.scrollBy({ left: a.left - b.left - (b.width - a.width) / 2, behavior });
-  } catch (_) {
-    box.scrollLeft += a.left - b.left - (b.width - a.width) / 2;
+  jumpTo(box, box.scrollLeft + a.left - b.left - (b.width - a.width) / 2);
+  // Дальше держим на месте именно выбранную плитку: шрифты ещё едут.
+  pinAnchor(box, [...box.children].indexOf(active));
+}
+
+// Поставить ленту в точку мгновенно. У ленты в CSS плавная прокрутка, и обычное
+// присваивание `scrollLeft` превращается в езду; `behavior: "instant"` знают
+// не все клиенты. Встроенный стиль выключает плавность наверняка и везде.
+function jumpTo(box, left) {
+  const was = box.style.scrollBehavior;
+  box.style.scrollBehavior = "auto";
+  box.scrollLeft = left;
+  box.style.scrollBehavior = was;
+}
+
+// ЯКОРЬ ЛЕНТЫ. Подписи плиток набраны шрифтами тем, а шрифты приезжают не
+// сразу — по туннелю секундами. Каждый приехавший шрифт меняет ширину своей
+// плитки, и всё, что правее, сдвигается: человек нажал на стиль, а лента ещё
+// несколько секунд ползёт под пальцем (замер с медленными шрифтами: 49 px за
+// шесть секунд). Поэтому у ленты есть якорь — плитка, которая обязана стоять
+// на месте, — и на каждое изменение ширины плиток прокрутка поправляется так,
+// чтобы якорь не сдвинулся. Поправка идёт из ResizeObserver, то есть до
+// отрисовки кадра: сдвига на экране нет вовсе.
+//
+// Якорь — плитка, на которую нажали (или выбранная при открытии шага), пока
+// она видна; ушла из вида — самая левая видимая.
+const stripAnchors = new WeakMap();
+
+function anchorOf(box, pinned) {
+  const b = box.getBoundingClientRect();
+  const kids = box.children;
+  const at = (i) => {
+    const r = kids[i].getBoundingClientRect();
+    return r.right > b.left + 1 && r.left < b.right - 1 ? { index: i, x: r.left - b.left, pinned } : null;
+  };
+  if (pinned !== null && pinned >= 0 && pinned < kids.length) {
+    const held = at(pinned);
+    if (held) return held;
   }
+  for (let i = 0; i < kids.length; i++) {
+    const seen = at(i);
+    if (seen) return { ...seen, pinned: null };
+  }
+  return null;
+}
+
+function pinAnchor(box, index) {
+  const anchor = anchorOf(box, index);
+  if (anchor) stripAnchors.set(box, anchor);
+  else stripAnchors.delete(box);
+}
+
+// Лента прокручена пальцем или стрелкой: якорь тот же, место — новое.
+//
+// Собственную поправку (`holdAnchor`) сюда не пускаем: прокрутка округляется
+// до долей пикселя, и перезапись места после каждой поправки копила бы эту
+// ошибку — десять приехавших шрифтов сдвигали плитку на шесть пикселей.
+function saveAnchor(box) {
+  const was = stripAnchors.get(box);
+  if (was && was.heldAt === box.scrollLeft) return;
+  pinAnchor(box, was ? was.pinned : null);
+}
+
+// Плитки сменили ширину: вернуть якорь туда, где он стоял.
+function holdAnchor(box) {
+  const anchor = stripAnchors.get(box);
+  const kid = anchor && box.children[anchor.index];
+  if (!kid) return;
+  const drift = kid.getBoundingClientRect().left - box.getBoundingClientRect().left - anchor.x;
+  if (Math.abs(drift) < 0.5) return;
+  jumpTo(box, box.scrollLeft + drift);
+  anchor.heldAt = box.scrollLeft;
+}
+
+const pillWatch = new WeakMap();
+function watchPills(box) {
+  if (!window.ResizeObserver) return;
+  let watch = pillWatch.get(box);
+  if (!watch) {
+    watch = new ResizeObserver(() => holdAnchor(box));
+    pillWatch.set(box, watch);
+  }
+  watch.disconnect();
+  for (const kid of box.children) watch.observe(kid);
 }
 
 // Стрелки ленты видны, только когда в их сторону есть куда листать: стрелка
@@ -728,7 +807,7 @@ function syncAllArrows() {
 function initStrips() {
   for (const strip of $$(".strip")) {
     const track = strip.querySelector(".strip__track");
-    track.addEventListener("scroll", () => syncArrows(strip), { passive: true });
+    track.addEventListener("scroll", () => { syncArrows(strip); saveAnchor(track); }, { passive: true });
     for (const btn of strip.querySelectorAll(".strip__arrow")) {
       btn.addEventListener("click", () => {
         haptic();
@@ -768,8 +847,11 @@ function pillName(p) {
 function keepScroll(box, redraw) {
   const left = box.scrollLeft;
   redraw();
-  if (box.scrollLeft === left) return;
-  try { box.scrollTo({ left, behavior: "instant" }); } catch (_) { box.scrollLeft = left; }
+  if (box.scrollLeft !== left) jumpTo(box, left);
+  // Плитки новые — следим за шириной уже их. Якорь — выбранная плитка: на неё
+  // только что нажали, и уехать из-под пальца она не должна.
+  pinAnchor(box, [...box.children].findIndex((kid) => kid.classList.contains("is-active")));
+  watchPills(box);
 }
 
 function renderPresets() {
@@ -994,13 +1076,19 @@ function setStep(step) {
     // Ленты меряются только видимыми: на скрытом шаге ширина нулевая. А шрифты
     // плиток браузер начинает тянуть, только когда шаг стал видимым, — первый
     // замер идёт по подставному шрифту, поэтому второй ждёт их загрузки.
-    const fit = () => {
+    //
+    // Ленты ставятся к выбранному ОДИН раз, сейчас. Когда шрифты приедут,
+    // стрелки и превью пересчитываются, а ленты не трогаются: человек к этому
+    // времени уже листает и нажимает, и лента, уехавшая к выбранному стилю,
+    // уводит плитку из-под пальца. Ширину плиток, которая меняется с каждым
+    // приехавшим шрифтом, держит якорь ленты (`holdAnchor`).
+    const refit = () => {
       syncAllArrows();
-      for (const id of ["#preset-tabs", "#accent-chips"]) scrollToActive($(id), "instant");
       preview.render();
     };
-    fit();
-    if (document.fonts && document.fonts.ready) requestAnimationFrame(() => document.fonts.ready.then(fit));
+    for (const id of ["#preset-tabs", "#accent-chips"]) scrollToActive($(id));
+    refit();
+    if (document.fonts && document.fonts.ready) requestAnimationFrame(() => document.fonts.ready.then(refit));
   }
 }
 
@@ -1982,7 +2070,6 @@ async function main() {
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => {
       syncAllArrows();
-      scrollToActive($("#preset-tabs"), "instant");
       preview.render();
     });
   }

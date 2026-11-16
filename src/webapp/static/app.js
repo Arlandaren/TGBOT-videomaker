@@ -26,7 +26,7 @@ const I18N = {
     "edit.s1_lead": "Видео, где человек говорит в камеру. Соберём из него вертикальный ролик с субтитрами.",
     "edit.limits": "до {mb} МБ · от {min} с до {max} мин",
     "edit.style": "Стиль субтитров", "edit.font": "Шрифт", "edit.color": "Цвет выделения", "edit.effects": "Эффекты",
-    "tab.style": "Стиль", "tab.color": "Цвет", "tab.music": "Музыка",
+    "card.captions": "Субтитры",
     "music.title": "Музыка по ссылке", "music.placeholder": "Ссылка на рилс, TikTok или файл", "music.paste": "Вставить",
     "music.checking": "Достаём звук…", "music.ready": "Трек {t}", "music.clear": "Убрать музыку",
     "music.hint": "Звук по ссылке тихо заиграет под вашей речью",
@@ -125,7 +125,7 @@ const I18N = {
     "edit.s1_lead": "A video of someone talking to the camera. We'll turn it into a vertical reel with captions.",
     "edit.limits": "up to {mb} MB · {min} s to {max} min",
     "edit.style": "Caption style", "edit.font": "Typeface", "edit.color": "Highlight colour", "edit.effects": "Effects",
-    "tab.style": "Style", "tab.color": "Colour", "tab.music": "Music",
+    "card.captions": "Captions",
     "music.title": "Music from a link", "music.placeholder": "Reel, TikTok or file link", "music.paste": "Paste",
     "music.checking": "Getting the sound…", "music.ready": "Track {t}", "music.clear": "Remove music",
     "music.hint": "The sound plays quietly under your voice",
@@ -238,7 +238,6 @@ const state = {
   boot: null,
   preset: null,
   accent: "theme",
-  font: "theme",
   options: {},
   file: null,
   // «Два видео» (`pipeline.split`): `file` — нижнее, говорящий; `topFile` —
@@ -444,7 +443,6 @@ function renderThemeSeg() {
 // закрывает весь диапазон, и браузер не синтезирует жирность.
 function declareFonts() {
   const faces = new Map();
-  for (const f of state.boot.fonts || []) if (f.file && f.family) faces.set(f.file, f.family);
   for (const p of state.boot.presets || []) {
     if (p.font_file && p.font) faces.set(p.font_file, p.font);
     // Второй шрифт темы — им набрано выделенное слово.
@@ -522,14 +520,6 @@ function activeThemeFamily() {
   return (p && p.font) || "Montserrat ExtraBold";
 }
 
-// Шрифт, которым рисуется превью: выбранный, а иначе — шрифт темы.
-function activeFont() {
-  return (state.boot.fonts || []).find((f) => f.key === state.font && f.family) || null;
-}
-function activeFamily() {
-  const chosen = activeFont();
-  return (chosen && chosen.family) || activeThemeFamily();
-}
 
 // Цвет выделения: выбранный, а иначе — задуманный темой.
 function activeAccent() {
@@ -557,14 +547,9 @@ const preview = {
   // Поэтому мелкая тема (Widescreen, 46 px) здесь и выглядит мелкой, а крупная
   // (Heavyweight, 109) занимает полкадра — как и будет в ролике.
   //
-  // Смена шрифта двигает кегль ровно так же, как `core.options.apply_font`:
-  // по высоте прописных. Иначе превью обещало бы один размер, а ролик дал
-  // другой — у Cormorant прописная 0.625 em против 0.800 у Prata.
   size(p) {
     const k = ($("#preview").clientHeight || 620) / 1920;
-    const font = activeFont();
-    const ratio = font && font.cap_em && p.cap_em ? p.cap_em / font.cap_em : 1;
-    return { k, base: p.size * ratio * k };
+    return { k, base: p.size * k };
   },
   place(box, p, k) {
     box.style.top = "auto";
@@ -590,7 +575,7 @@ const preview = {
     box.style.fontSize = `${base}px`;
     box.style.lineHeight = p.line_height;
     box.style.letterSpacing = `${p.letter_spacing}em`;
-    box.style.setProperty("--cap-font", `"${activeFamily()}"`);
+    box.style.setProperty("--cap-font", `"${activeThemeFamily()}"`);
     this.place(box, p, k);
     // Движение берётся у темы, а не зашито в стили: иначе превью обещает одно,
     // а рендер делает другое — ровно так и было, пока слово в ролике включалось
@@ -612,10 +597,8 @@ const preview = {
           (family ? `;font-family:"${family}", system-ui, sans-serif;font-feature-settings:"calt" 0` : ""),
       });
     };
-    // Второй шрифт темы — у выделенного слова, пока человек не выбрал свой
-    // шрифт: тот значит «вся надпись этим шрифтом» и пару выключает
-    // (`options.apply_font` делает то же в ролике).
-    const pair = !activeFont() && p.accent_font ? p.accent_font : null;
+    // Второй шрифт темы — у выделенного слова.
+    const pair = p.accent_font || null;
     const bigSize = base * (p.accent_scale || 1) * (pair ? pair.scale || 1 : 1);
     // Плашка — та же, что у блока в кадре: цвет, непрозрачность, радиус и
     // паддинги темы. У тем, где она приходит только над светлым фоном
@@ -661,8 +644,7 @@ const preview = {
         }
       }
     }
-    const font = activeFont();
-    $("#preview-tag").textContent = `${p.label || p.title} · ${font ? font.title : p.font}`;
+    $("#preview-tag").textContent = p.label || p.title;
   },
   tick() {
     this.step += 1;
@@ -777,7 +759,6 @@ function pillName(p) {
 
 function renderPresets() {
   const box = $("#preset-tabs");
-  $("#style-count").textContent = state.boot.presets.length;
   box.replaceChildren(...state.boot.presets.map((p) =>
     el("button", {
       class: `style-pill${p.name === state.preset ? " is-active" : ""}`,
@@ -789,14 +770,9 @@ function renderPresets() {
       "aria-checked": p.name === state.preset ? "true" : "false",
       onclick: () => {
         state.preset = p.name;
-        // Стиль показывается СВОИМ шрифтом. Раньше выбранный на вкладке «Шрифт»
-        // вариант переживал смену стиля, и все семнадцать стилей выглядели
-        // одинаково — отличались только цветом и регистром.
-        state.font = "theme";
         haptic();
         renderPresets();
         renderAccents();
-        renderFonts();
         preview.render();
         scrollToActive(box);
       },
@@ -813,7 +789,6 @@ function renderPresets() {
 function renderAccents() {
   const p = activePreset();
   const box = $("#accent-chips");
-  $("#accent-count").textContent = state.boot.accents.length;
   box.replaceChildren(...state.boot.accents.map((a) =>
     el("button", {
       class: `swatch${a.key === state.accent ? " is-active" : ""}`,
@@ -833,34 +808,6 @@ function renderAccents() {
       el("span", { class: "swatch__name", text: a.title }),
     ])));
   syncArrows($("#accent-chips").parentNode);
-}
-
-function renderFonts() {
-  const box = $("#font-chips");
-  $("#font-count").textContent = (state.boot.fonts || []).length;
-  box.replaceChildren(...(state.boot.fonts || []).map((f) =>
-    el("button", {
-      class: `chip${f.key === state.font ? " is-active" : ""}`,
-      type: "button",
-      role: "radio",
-      "aria-checked": f.key === state.font ? "true" : "false",
-      title: f.family || activeThemeFamily(),
-      // Образец рисуется САМИМ шрифтом: название «Антиква» ничего не говорит,
-      // пока не видно букв. Подпись при этом остаётся интерфейсным шрифтом —
-      // иначе «Моноширинный», набранный Cormorant, читается как ещё один образец.
-      style: `--chip-font:"${f.family || activeThemeFamily()}"`,
-      onclick: () => {
-        state.font = f.key;
-        haptic();
-        renderFonts();
-        preview.render();
-        scrollToActive(box);
-      },
-    }, [
-      el("span", { class: "chip__aa", text: "Аа" }),
-      el("span", { class: "chip__name", text: f.title }),
-    ])));
-  syncArrows($("#font-chips").parentNode);
 }
 
 function renderOptions() {
@@ -1036,7 +983,7 @@ function setStep(step) {
     // замер идёт по подставному шрифту, поэтому второй ждёт их загрузки.
     const fit = () => {
       syncAllArrows();
-      for (const id of ["#preset-tabs", "#font-chips", "#accent-chips"]) scrollToActive($(id), "instant");
+      for (const id of ["#preset-tabs", "#accent-chips"]) scrollToActive($(id), "instant");
       preview.render();
     };
     fit();
@@ -1063,30 +1010,7 @@ function syncTabbarHeight() {
   addEventListener("resize", put, { passive: true });
 }
 
-function showDesignTab(name) {
-  state.designTab = name;
-  for (const t of $$("#design-tabs .dtab")) {
-    const on = t.dataset.tab === name;
-    t.classList.toggle("is-active", on);
-    t.setAttribute("aria-selected", on ? "true" : "false");
-  }
-  for (const p of $$(".dpanel")) p.hidden = p.dataset.panel !== name;
-  const panel = $(`.dpanel[data-panel="${name}"]`);
-  // Выбранный вариант — на виду: семнадцать стилей в два-три ряда не влезают.
-  const active = panel && panel.querySelector(".is-active");
-  const box = $(".dpanels");
-  box.scrollTop = 0;
-  if (active) {
-    const below = active.getBoundingClientRect().bottom - box.getBoundingClientRect().bottom;
-    if (below > 0) box.scrollTop = below + 8;
-  }
-  syncAllArrows();
-}
-
 function initEdit() {
-  for (const t of $$("#design-tabs .dtab")) {
-    t.addEventListener("click", () => { haptic(); showDesignTab(t.dataset.tab); });
-  }
   $("#preview-play").addEventListener("click", () => { preview.toggle(); haptic(); });
   $("#requirements").addEventListener("click", () => {
     const l = state.boot.limits;
@@ -1152,9 +1076,6 @@ function renderMusic() {
   const card = $("#music-card");
   if (!card) return;
   card.dataset.state = m.status;
-  // Точка на вкладке «Музыка»: трек прикреплён, даже когда вкладка закрыта.
-  const tab = $('.dtab[data-tab="music"]');
-  if (tab) tab.classList.toggle("has-value", m.status === "ready");
   $("#music-clear").hidden = m.status === "empty" && !$("#music-input").value;
   $("#music-paste").hidden = !$("#music-clear").hidden;
   const text = {
@@ -1333,7 +1254,8 @@ async function uploadAndStart() {
   renderCta(tr("cta.checking"), 1);
   const body = {
     preset: state.preset,
-    options: { ...state.options, accent: state.accent, font: state.font },
+    // Шрифта в опциях нет: его задаёт стиль (отдельный выбор убран).
+    options: { ...state.options, accent: state.accent },
   };
   if (ids[1]) body.top_upload_id = ids[1];
   // Трек уходит, только если уже проверен. Пока ссылка проверяется, ролик
@@ -1867,11 +1789,10 @@ async function setLanguage(code) {
   rerenderAll();
   try {
     await api("/api/language", { method: "POST", body: { lang: code } });
-    // Названия цветов, шрифтов и стадий приходят с сервера на языке
-    // пользователя — перечитываем.
+    // Названия цветов и стадий приходят с сервера на языке пользователя —
+    // перечитываем.
     const fresh = await api("/api/bootstrap");
     state.boot.accents = fresh.accents;
-    state.boot.fonts = fresh.fonts;
     state.boot.user = fresh.user;
     rerenderAll();
     loadJobs();
@@ -1890,7 +1811,6 @@ function rerenderAll() {
   renderThemeSeg();
   renderPresets();
   renderAccents();
-  renderFonts();
   renderOptions();
   renderLimits();
   renderNext();
@@ -2027,20 +1947,15 @@ async function main() {
   state.options = { ...b.defaults };
   state.layout = loadLayout();
   // Запомненный выбор важнее умолчания: тема уже так и работает (`user.preset`),
-  // а цвет со шрифтом до сих пор сбрасывались на каждом открытии приложения.
+  // а цвет до сих пор сбрасывался на каждом открытии приложения.
   const saved = (b.user && b.user.settings) || {};
   state.accent = saved.accent || b.defaults.accent || "theme";
-  state.font = saved.font || b.defaults.font || "theme";
-  // Шрифт могли убрать из выбора: без этой проверки ни одна таблетка не
-  // подсвечена, а превью молча рисуется шрифтом темы.
-  if (!(b.fonts || []).some((f) => f.key === state.font)) state.font = "theme";
 
   declareFonts();
   renderUser();
   renderLanguages();
   renderPresets();
   renderAccents();
-  renderFonts();
   renderOptions();
   renderLimits();
   renderNext();

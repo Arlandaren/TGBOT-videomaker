@@ -147,9 +147,9 @@ async def on_video(message: Message, bot: Bot) -> None:
             preset=db_user.preset,
             chat_id=message.chat.id,
             # Выбор, сделанный в приложении, действует и на ролик из чата: входа
-            # два, а пользователь один. Тему чат и так брал из профиля, а цвет со
-            # шрифтом до сих пор молча сбрасывались на умолчание.
-            options=JobOptions.model_validate(db_user.settings or {}).model_dump(),
+            # два, а пользователь один. Тему чат и так брал из профиля, а цвет
+            # до сих пор молча сбрасывался на умолчание. Шрифт задаёт тема.
+            options=JobOptions.for_new_job(db_user.settings).model_dump(),
             charge=settings.charges(is_admin=db_user.is_admin),
         )
     except repo.InsufficientBalance:

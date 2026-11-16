@@ -442,17 +442,15 @@ async def booted(tmp_path, monkeypatch):
         yield c
 
 
-async def test_bootstrap_offers_the_font_library(booted):
-    """Приложение рисует чипы по тому, что пришло; без этого массива выбора нет."""
-    from src.core.options import FONTS
+async def test_bootstrap_offers_no_font_choice(booted):
+    """Отдельный выбор шрифта убран: шрифт задаёт стиль.
 
+    Пока массив шрифтов приходил, приложение рисовало по нему вкладку, а
+    выбранный там вариант перекрывал шрифт у ВСЕХ стилей — они выглядели
+    одинаково."""
     r = await booted.get("/api/bootstrap", headers=auth())
     assert r.status == 200
-    fonts = (await r.json())["fonts"]
-    assert [f["key"] for f in fonts] == list(FONTS)
-    theme, *rest = fonts
-    assert theme["key"] == "theme" and theme["file"] is None, "«как в теме» идёт первым"
-    assert all(f["title"] and f["file"] and f["family"] for f in rest)
+    assert "fonts" not in await r.json()
 
 
 async def test_the_font_route_serves_the_whole_library(client):
@@ -1424,3 +1422,32 @@ async def test_youtube_is_declined_with_a_clear_message(client, reel_fetch):
     assert r.status == 422
     assert (await r.json())["error"] == t("music.unsupported", "ru")
     assert reel_fetch["urls"] == [] and reel_fetch["files"] == []
+
+
+async def test_a_new_job_never_takes_a_font_from_the_request(client, finish_ok, monkeypatch):
+    """Шрифт, присланный приложением (старая версия в кеше Telegram), не доезжает
+    до задачи и стирается из профиля: убрать его человеку уже нечем."""
+    from src.db import repo
+
+    seen: dict = {}
+    create = repo.create_job
+
+    async def create_job(*a, **k):
+        seen["options"] = k.get("options")
+        return await create(*a, **k)
+
+    async def set_user_settings(user_id, **k):
+        seen["settings"] = k
+
+    monkeypatch.setattr(repo, "create_job", create_job)
+    monkeypatch.setattr(repo, "set_user_settings", set_user_settings)
+    bottom = await _uploaded(client, b"abcd")
+    r = await client.post(
+        f"/api/uploads/{bottom}/finish",
+        json={"preset": "glass", "options": {"font": "serif", "accent": "red"}},
+        headers=auth(),
+    )
+    assert r.status == 200
+    assert seen["options"]["font"] == "theme"
+    assert seen["options"]["accent"] == "red", "цвет при этом остаётся выбором человека"
+    assert seen["settings"] == {"accent": "red", "font": "theme"}

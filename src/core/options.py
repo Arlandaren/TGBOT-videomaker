@@ -204,6 +204,19 @@ class JobOptions(BaseModel):
         return v if v in FONTS else "theme"
 
     @classmethod
+    def for_new_job(cls, raw: dict[str, Any] | None) -> "JobOptions":
+        """Опции НОВОГО ролика: шрифт всегда «как в теме».
+
+        Отдельный выбор шрифта убран из интерфейса 16.11.2026: он перекрывал
+        шрифт у всех стилей разом, и стили выглядели одинаково. Но выбор,
+        сделанный раньше, лежит в `users.settings` и в присланных приложением
+        опциях — без этого сброса он продолжал бы действовать, а убрать его
+        человеку было бы уже нечем. Старые задачи читаются `from_stored` и свой
+        шрифт сохраняют: перерендер обязан дать тот же ролик.
+        """
+        return cls.model_validate(raw or {}).model_copy(update={"font": "theme"})
+
+    @classmethod
     def from_stored(cls, raw: dict[str, Any] | None) -> "JobOptions":
         """Опции из БД. Старые задачи опций не несут — это поведение по умолчанию."""
         return cls.model_validate(raw or {})

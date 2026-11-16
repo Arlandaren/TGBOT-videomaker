@@ -539,21 +539,6 @@ async def bootstrap(request: web.Request) -> web.Response:
                 {"key": k, "title": titles.get(lang, titles["ru"]), "color": color}
                 for k, (titles, color) in ACCENTS.items()
             ],
-            # Шрифты той же формы, что и цвета: ключ, подпись и то, чем рисовать
-            # превью. `file` у «как в теме» пустой — шрифт берётся у выбранной
-            # темы. `cap_em` — высота прописных: по ней приложение пересчитывает
-            # кегль превью ровно так же, как это делает `options.apply_font` в
-            # пайплайне, иначе превью обещало бы не тот размер.
-            "fonts": [
-                {
-                    "key": k,
-                    "title": titles.get(lang, titles["ru"]),
-                    "family": choice.family if choice else None,
-                    "file": choice.file if choice else None,
-                    "cap_em": cap_em(choice.file) if choice else None,
-                }
-                for k, (titles, choice) in FONTS.items()
-            ],
             "packages": _packages_view(cfg),
             # Способы оплаты по порядку показа: включённые способы PayHot и звёзды.
             "pay_methods": _pay_methods_view(cfg),
@@ -847,7 +832,7 @@ async def upload_finish(request: web.Request) -> web.Response:
         preset = str(body.get("preset") or "")
         if preset not in available():
             return await _fail(request, 400, "api.unknown_style")
-        options = JobOptions.model_validate(body.get("options") or {})
+        options = JobOptions.for_new_job(body.get("options") or {})
 
         user = await _db_user(request)
         lang = lang_of(user)
@@ -918,9 +903,8 @@ async def upload_finish(request: web.Request) -> web.Response:
                 finally:
                     shutil.rmtree(music_path.parent, ignore_errors=True)
             await repo.set_user_preset(user.id, preset)
-            # Цвет и шрифт запоминаются между роликами, как и тема. Раньше
-            # приложение каждый раз подставляло умолчание, и выбранная антиква
-            # на следующем ролике молча становилась гротеском.
+            # Цвет запоминается между роликами, как и тема. Шрифт пишется
+            # сброшенным («как в теме»): так старый выбор стирается из профиля.
             await repo.set_user_settings(user.id, accent=options.accent, font=options.font)
 
             status_id: int | None = None

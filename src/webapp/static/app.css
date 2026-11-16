@@ -404,44 +404,33 @@ svg { flex: none; }
 
 .design__controls { display: flex; flex-direction: column; gap: 12px; }
 
-/* ---------------------------------------------------------------- вкладки оформления */
-/* Стиль · Шрифт · Цвет · Эффекты · Музыка. Открыт один раздел — выбор не
-   уводит превью из виду. Вид — как у переключателя `.seg`. */
-.dtabs {
-  display: flex; gap: 4px; padding: 4px; border-radius: 999px; flex: none;
-  background: var(--card-2); border: 1px solid var(--line);
-  overflow-x: auto; scrollbar-width: none;
+/* ---------------------------------------------------------------- колонка настроек */
+/* Карточки одна под другой: субтитры (лента стилей, лента цветов), эффекты,
+   музыка. На телефоне колонка листается под неподвижным превью, на широком
+   экране стоит справа от него целиком. */
+.dscroll { display: flex; flex-direction: column; gap: 12px; overscroll-behavior: contain; }
+/* Карточки не сжимаются: у карточки с `overflow: hidden` минимальная высота
+   ноль, и в колонке ограниченной высоты она схлопывалась до 18 px. */
+.dscroll > * { flex: none; }
+/* В ленте таблетки компактнее: на телефоне в строку должно попадать больше
+   полутора вариантов. Палец всё равно попадает — ряд отделён от соседнего. */
+.picker .style-pill, .picker .swatch { height: 40px; padding: 0 15px; }
+.picker .swatch { padding: 0 15px 0 12px; }
+.picker .style-pill__name { font-size: 15px; }
+.picker .style-pill__name.is-caps { font-size: 12px; }
+.picker .strip { margin-bottom: 10px; }
+.picker { padding: 14px 0 2px; overflow: hidden; }
+.picker__head, .options__head { display: flex; align-items: center; gap: 8px; }
+.picker__head { padding: 0 18px 12px; }
+.options__head { padding: 14px 0 2px; }
+.music .options__head { padding: 8px 0 6px; }
+.picker__head h2, .options__head h2 {
+  font-family: var(--display); font-size: 17px; font-weight: 800; letter-spacing: -0.01em;
 }
-.dtabs::-webkit-scrollbar { display: none; }
-/* Пять вкладок делят ширину поровну и на 360 px помещаются целиком; уже —
-   полоса листается вбок, а не обрезает подпись. */
-.dtab {
-  position: relative; flex: 1 0 auto; min-height: 40px; padding: 0 8px; border-radius: 999px;
-  font-weight: 700; font-size: clamp(12px, 3.5vw, 14px); color: var(--muted); white-space: nowrap;
-  text-align: center;
-  transition: background 140ms ease, color 140ms ease;
-}
-.dtab.is-active { background: var(--pill); color: var(--pill-text); }
-/* Трек прикреплён — видно и с закрытой вкладки. */
-.dtab.has-value::after {
-  content: ""; position: absolute; top: 7px; right: 7px;
-  width: 7px; height: 7px; border-radius: 50%; background: #ff4d8a;
-}
-.dpanels { overscroll-behavior: contain; }
 /* Подпись темы на маленьком кадре налезала на субтитр и обрезалась
    многоточием; выбранная тема и так подсвечена во вкладке. */
 .preview { container-type: size; }
 @container (max-height: 320px) { .preview__tag { display: none; } }
-.dpanel__head { display: flex; align-items: baseline; gap: 8px; margin: 2px 2px 10px; }
-.dpanel__head h2 {
-  font-size: 12px; font-weight: 800; color: var(--muted);
-  letter-spacing: 0.1em; text-transform: uppercase;
-}
-/* Во вкладке места хватает на несколько рядов: варианты лежат сеткой, и
-   видно сразу шесть-девять, а не два с половиной в ленте. */
-.dpanel .strip { margin: 0; }
-.dpanel .strip__track { flex-wrap: wrap; overflow: visible; padding: 2px 0 6px; -webkit-mask-image: none; mask-image: none; }
-.dpanel .strip__arrow { display: none; }
 .design__foot { flex: none; display: flex; flex-direction: column; gap: 4px; }
 .design__foot .cta { margin-top: 0; }
 
@@ -506,11 +495,6 @@ svg { flex: none; }
 .style-pill__accent { font-size: 1.25em; line-height: 1; }
 
 .chip { padding: 0 18px 0 14px; }
-.chip__aa { font-family: var(--chip-font), system-ui, sans-serif; font-size: 22px; line-height: 1; font-weight: 400; }
-/* Название шрифта набрано ИМ ЖЕ, а не шрифтом интерфейса: пятнадцать подписей
-   одним системным шрифтом читались как «все шрифты одинаковые», хотя образец
-   «Аа» рядом был разный. */
-.chip__name { font-family: var(--chip-font), system-ui, sans-serif; font-size: 15px; font-weight: 700; }
 
 .swatch { padding: 0 18px 0 14px; font-size: 14px; }
 .swatch__dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 1px rgb(255 255 255 / 18%); }
@@ -795,11 +779,12 @@ svg { flex: none; }
     height: var(--avail);
     display: flex; flex-direction: column; gap: 12px; padding-bottom: 12px;
   }
-  /* Кадру — всё, что остаётся после вкладок, кнопки и ~170 px на варианты. */
+  /* Кадру — всё, что остаётся после кнопки и ~230 px на настройки: карточка
+     субтитров видна целиком, из-под неё выглядывает следующая. */
   html.is-design .preview-wrap { --prev-h: clamp(140px, calc(var(--avail) - 330px), 440px); }
   html.is-design .design__controls { flex: 1; min-height: 0; }
-  /* Низ вкладки растворяется: видно, что вариантов больше и их можно листать. */
-  html.is-design .dpanels {
+  /* Низ колонки растворяется: видно, что ниже есть ещё настройки. */
+  html.is-design .dscroll {
     flex: 1; min-height: 0; overflow-y: auto; margin: 0 -18px; padding: 0 18px 14px;
     -webkit-mask-image: linear-gradient(#000 calc(100% - 22px), transparent);
     mask-image: linear-gradient(#000 calc(100% - 22px), transparent);
@@ -856,5 +841,4 @@ svg { flex: none; }
   /* Слово не мигает раз в 280 мс, а просто стоит: таймер в app.js при этой
      настройке не запускается вовсе, и кадр собирается один раз. */
   .cap-word { transition: none; transform: none; opacity: 1; }
-  .dtab { transition: none; }
 }

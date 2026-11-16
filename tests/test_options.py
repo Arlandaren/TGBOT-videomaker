@@ -216,3 +216,12 @@ def test_the_old_star_packages_setting_is_ignored():
     50 звёзд»: у пакетов токенов своя настройка."""
     cfg = Settings(_env_file=None, star_packages='{"1": 50}')
     assert [p.tokens for p in cfg.token_packages] == [240, 590, 1170]
+
+
+def test_a_new_job_always_uses_the_font_of_the_theme():
+    """Сохранённый раньше шрифт не действует на новые ролики; старые задачи
+    читаются как есть — перерендер обязан дать тот же ролик."""
+    assert JobOptions.for_new_job({"font": "serif", "accent": "red"}).font == "theme"
+    assert JobOptions.for_new_job({"font": "serif", "accent": "red"}).accent == "red"
+    assert JobOptions.for_new_job(None).font == "theme"
+    assert JobOptions.from_stored({"font": "serif"}).font == "serif"

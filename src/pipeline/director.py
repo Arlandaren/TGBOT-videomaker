@@ -774,6 +774,9 @@ def edl_from_plan(
             len(anchored), ANCHOR_TRACK_MAX,
         )
 
+    # Два особых приёма подряд не ставим — до потолка, чтобы он считал уцелевшие.
+    space_out_tricks(captions)
+
     # Плашка — по тому же принципу: перебор с приёмом, а не ошибка формы.
     # Поставить фон всем блокам значит вернуть ту самую подложку, от которой мы
     # уходили; в эталоне её носят два блока из тринадцати.
@@ -794,6 +797,32 @@ def edl_from_plan(
         captions=captions,
         preset=preset or cfg.default_preset,
     )
+
+
+def space_out_tricks(captions: list[CaptionBlock]) -> None:
+    """Снимает стекло с блока, который стоит вплотную к другому особому приёму.
+
+    Особых приёмов два: карточка (блок со стеклом) и список плашками. Работают
+    они, пока стоят среди обычных блоков; два подряд читаются как сбой стиля —
+    кадр, где всё на подложках. Список остаётся (он — содержание: человек
+    действительно перечисляет), карточка рядом с ним или с другой карточкой
+    становится обычным плакатом. Правит блоки на месте.
+    """
+    dropped = 0
+    for i, block in enumerate(captions):
+        if not block.panel:
+            continue
+        before = captions[i - 1] if i > 0 else None
+        after = captions[i + 1] if i + 1 < len(captions) else None
+        crowded = (before is not None and (before.panel or before.item)) or (
+            after is not None and after.item
+        )
+        if crowded:
+            block.panel = False
+            block.emoji = None
+            dropped += 1
+    if dropped:
+        log.info("приёмы подряд: стекло снято с %d блоков", dropped)
 
 
 def settle_lists(captions: list[CaptionBlock], by_idx: dict[int, Word]) -> None:

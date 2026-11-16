@@ -94,9 +94,13 @@ def test_only_a_glass_block_keeps_its_icon():
 
 
 def test_a_panel_trimmed_by_the_cap_loses_its_icon_too():
-    edl = direct([_raw([i], panel=True, emoji="🎁") for i in range(4)])
-    assert [b.panel for b in edl.captions] == [True, True, False, False]
-    assert [b.emoji for b in edl.captions] == ["🎁", "🎁", None, None]
+    # Карточки через обычный блок: подряд они не стоят, и считает их уже потолок.
+    blocks = []
+    for i in range(3):
+        blocks += [_raw([2 * i], panel=True, emoji="🎁"), _raw([2 * i + 1])]
+    edl = direct(blocks)
+    assert [b.panel for b in edl.captions] == [True, False, True, False, False, False]
+    assert [b.emoji for b in edl.captions] == ["🎁", None, "🎁", None, None, None]
 
 
 # ------------------------------------------------------------------ план
@@ -229,3 +233,58 @@ def test_the_director_is_told_about_the_icon():
     prompt = (REPO / "src" / "llm" / "prompts" / "direct.md").read_text()
     assert "значок" in prompt.lower()
     json.dumps(DIRECT_SCHEMA)  # схема остаётся сериализуемой
+
+
+# ------------------------------------------------------------------ чередование приёмов
+#
+# Особые приёмы — карточка (блок со стеклом) и список плашками — работают, пока
+# стоят среди обычных блоков. Два подряд читаются как сбой стиля, поэтому соседа
+# мы разжалуем сами: список остаётся, карточка рядом с ним становится плакатом.
+
+
+def _item(idxs: list[int]) -> dict:
+    return {"words": idxs, "register": "item", "accent_word": None, "accent": None,
+            "position": "auto", "follow_face": False, "emoji": "🎵"}
+
+
+def test_two_cards_in_a_row_leave_one():
+    edl = direct([
+        _raw([0, 1], panel=True, emoji="🎁"),
+        _raw([2, 3], panel=True, emoji="💰"),
+        _raw([4, 5]),
+        _raw([6, 7], panel=True, emoji="⏱️"),
+    ])
+    assert [b.panel for b in edl.captions] == [True, False, False, True]
+    assert [b.emoji for b in edl.captions] == ["🎁", None, None, "⏱️"]
+
+
+def test_a_card_next_to_a_list_gives_way_to_it():
+    edl = direct([
+        _raw([0, 1], panel=True, emoji="🎁"),  # прямо перед списком
+        _item([2]), _item([3]),
+        _raw([4, 5], panel=True, emoji="💰"),  # прямо после списка
+        _raw([6, 7]),
+        _raw([8, 9], panel=True, emoji="⏱️"),  # отделена обычным блоком
+    ])
+    assert [b.item for b in edl.captions] == [False, True, True, False, False, False]
+    assert [b.panel for b in edl.captions] == [False, False, False, False, False, True]
+
+
+def test_the_cap_counts_only_the_cards_that_survived():
+    """Потолок в две карточки считает уцелевшие, а не заявленные."""
+    edl = direct([
+        _raw([0], panel=True), _raw([1], panel=True),  # вторая — сосед первой
+        _raw([2]),
+        _raw([3], panel=True),
+        _raw([4]),
+        _raw([5], panel=True),  # третья уцелевшая — сверх потолка
+    ])
+    assert [b.panel for b in edl.captions] == [True, False, False, True, False, False]
+
+
+def test_the_director_is_told_how_to_mix_the_tricks():
+    prompt = (REPO / "src" / "llm" / "prompts" / "direct.md").read_text()
+    assert "## Как чередовать приёмы" in prompt
+    section = prompt.split("## Как чередовать приёмы")[1].split("\n## ")[0]
+    for word in ("подряд", "item", "panel"):
+        assert word in section.lower(), word

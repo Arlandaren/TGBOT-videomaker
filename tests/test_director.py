@@ -576,24 +576,42 @@ def test_a_panel_on_every_block_is_trimmed_to_the_cap():
 
     Потолок держим здесь, а не ретраем валидатора: перебор с приёмом — не ошибка
     формы, и снять его дешевле, чем гонять модель по кругу. Остаются ПЕРВЫЕ, как
-    и у привязки к голове.
+    и у привязки к голове. Плашки в примере стоят через блок: две подряд снимает
+    другое правило (`space_out_tricks`), и до потолка они бы не дошли.
     """
-    ws = mk([(f"сл{i}", i * 0.4, i * 0.4 + 0.3) for i in range(9)])
+    ws = mk([(f"сл{i}", i * 0.4, i * 0.4 + 0.3) for i in range(10)])
+    plain = {"register": "poster", "accent": "accent", "position": "auto"}
     plan = {
         "hook_end_word": None,
         "drop_words": [],
         "blocks": [
-            {"words": [0, 1, 2], "register": "poster", "accent_word": 1, "accent": "accent",
-             "position": "auto", "panel": True},
-            {"words": [3, 4, 5], "register": "poster", "accent_word": 4, "accent": "accent",
-             "position": "auto", "panel": True},
-            {"words": [6, 7, 8], "register": "poster", "accent_word": 7, "accent": "accent",
-             "position": "auto", "panel": True},
+            {"words": [0, 1], "accent_word": 1, "panel": True, **plain},
+            {"words": [2, 3], "accent_word": 3, **plain},
+            {"words": [4, 5], "accent_word": 5, "panel": True, **plain},
+            {"words": [6, 7], "accent_word": 7, **plain},
+            {"words": [8, 9], "accent_word": 9, "panel": True, **plain},
         ],
     }
-    edl = edl_from_plan(ws, 4.5, plan, cfg=cfg())
+    edl = edl_from_plan(ws, 5.0, plan, cfg=cfg())
     assert validate_edl(edl) == []
-    assert [b.panel for b in edl.captions] == [True, True, False]
+    assert [b.panel for b in edl.captions] == [True, False, True, False, False]
+
+
+def test_two_panels_in_a_row_leave_one():
+    """Две плашки подряд — кадр, где всё на подложках: вторая становится плакатом."""
+    ws = mk([(f"сл{i}", i * 0.4, i * 0.4 + 0.3) for i in range(6)])
+    plain = {"register": "poster", "accent": "accent", "position": "auto", "panel": True}
+    plan = {
+        "hook_end_word": None,
+        "drop_words": [],
+        "blocks": [
+            {"words": [0, 1, 2], "accent_word": 1, **plain},
+            {"words": [3, 4, 5], "accent_word": 4, **plain},
+        ],
+    }
+    edl = edl_from_plan(ws, 3.0, plan, cfg=cfg())
+    assert validate_edl(edl) == []
+    assert [b.panel for b in edl.captions] == [True, False]
 
 
 def test_a_poster_at_the_top_keeps_its_gold():

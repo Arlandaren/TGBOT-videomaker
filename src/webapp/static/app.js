@@ -635,7 +635,13 @@ const preview = {
     // словами за подложку.
     const room = box.clientWidth - 2 * plateX;
     for (const line of plate.children) {
-      const over = line.scrollWidth / room;
+      // Ширина строки — от левого края первого слова до правого края
+      // последнего. `scrollWidth` у строки по центру считает только то, что
+      // вылезло ВПРАВО: левая половина перебора терялась, строка ужималась
+      // вдвое меньше нужного и первой буквой уходила за край кадра.
+      const first = line.firstElementChild, last = line.lastElementChild;
+      const width = first ? last.getBoundingClientRect().right - first.getBoundingClientRect().left : 0;
+      const over = width / room;
       if (room > 0 && over > 1) {
         for (const w of line.children) {
           const size = parseFloat(getComputedStyle(w).fontSize);
@@ -751,6 +757,10 @@ function renderPresets() {
       "aria-checked": p.name === state.preset ? "true" : "false",
       onclick: () => {
         state.preset = p.name;
+        // Стиль показывается СВОИМ шрифтом. Раньше выбранный на вкладке «Шрифт»
+        // вариант переживал смену стиля, и все семнадцать стилей выглядели
+        // одинаково — отличались только цветом и регистром.
+        state.font = "theme";
         haptic();
         renderPresets();
         renderAccents();
@@ -1993,6 +2003,9 @@ async function main() {
   const saved = (b.user && b.user.settings) || {};
   state.accent = saved.accent || b.defaults.accent || "theme";
   state.font = saved.font || b.defaults.font || "theme";
+  // Шрифт могли убрать из выбора: без этой проверки ни одна таблетка не
+  // подсвечена, а превью молча рисуется шрифтом темы.
+  if (!(b.fonts || []).some((f) => f.key === state.font)) state.font = "theme";
 
   declareFonts();
   renderUser();

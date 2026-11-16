@@ -143,10 +143,6 @@ FONTS: dict[str, tuple[dict[str, str], FontChoice | None]] = {
         {"ru": "Изящный", "en": "Elegant"},
         FontChoice(family="Cormorant SemiBold", file="Cormorant-SemiBold.ttf", weight=600),
     ),
-    "black": (
-        {"ru": "Чёрный", "en": "Black"},
-        FontChoice(family="Montserrat Black", file="Montserrat-Black.ttf", weight=900),
-    ),
     "wide": (
         {"ru": "Широкий", "en": "Wide"},
         FontChoice(family="Tenor Sans", file="TenorSans-Regular.ttf", weight=400),
@@ -178,14 +174,6 @@ FONTS: dict[str, tuple[dict[str, str], FontChoice | None]] = {
     "light": (
         {"ru": "Лёгкий", "en": "Light"},
         FontChoice(family="Jost Light", file="Jost-Light.ttf", weight=300),
-    ),
-    "grotesk": (
-        {"ru": "Гротеск", "en": "Grotesque"},
-        FontChoice(family="Montserrat ExtraBold", file="Montserrat-ExtraBold.ttf", weight=800),
-    ),
-    "neutral": (
-        {"ru": "Нейтральный", "en": "Neutral"},
-        FontChoice(family="Golos Text", file="GolosText-Bold.ttf", weight=700),
     ),
 }
 

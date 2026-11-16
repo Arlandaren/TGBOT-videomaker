@@ -16,6 +16,8 @@
  * {
  *   "font":     "/abs/Montserrat-ExtraBold.ttf",
  *   "weight":   800,
+ *   "accent_font":   "/abs/MarckScript-Regular.ttf",  // второй шрифт темы, необязателен
+ *   "accent_weight": 400,                              // им набрано слово с "accent": true
  *   "base_size": 88,
  *   "letter_spacing": -0.015,          // em, как в пресете
  *   "items": [                          // строки
@@ -65,6 +67,16 @@ const readStdin = () =>
  */
 const buildPage = (req) => {
   const base64 = fs.readFileSync(req.font).toString("base64");
+  // Второй шрифт темы объявлен так же, как первый, и под своим именем: ровно
+  // так его объявляет Root.tsx («ReelbotAccent»).
+  const accentFace = req.accent_font
+    ? `@font-face {
+    font-family: "ReelbotMeasureAccent";
+    src: url(data:font/ttf;base64,${fs.readFileSync(req.accent_font).toString("base64")}) format("truetype");
+    font-weight: 1 1000;
+    font-style: normal;
+  }`
+    : "";
   const weight = req.weight ?? 400;
   const letterSpacing = req.letter_spacing ?? 0;
   const baseSize = req.base_size ?? 100;
@@ -81,6 +93,7 @@ const buildPage = (req) => {
     font-weight: 1 1000;
     font-style: normal;
   }
+  ${accentFace}
   html, body { margin: 0; padding: 0; }
   #stage {
     position: absolute; top: 0; left: 0;
@@ -109,7 +122,7 @@ const buildPage = (req) => {
  * Всё измерение целиком уезжает в страницу одной функцией: `evaluate`
  * сериализует её текстом, и ничего из области видимости Node внутри не будет.
  */
-const measureInPage = (items, boxes, weight, baseSize, lineHeight) => {
+const measureInPage = (items, boxes, weight, baseSize, lineHeight, accentWeight) => {
   /** Строка: спаны слов и настоящие пробелы между ними, без переносов. */
   const buildLine = (words, inline) => {
     const line = document.createElement("div");
@@ -122,6 +135,17 @@ const measureInPage = (items, boxes, weight, baseSize, lineHeight) => {
       span.textContent = word.text;
       if (word.size) span.style.fontSize = `${word.size}px`;
       span.style.fontWeight = String(weight);
+      // Выделенное слово темы с парой шрифтов: свой шрифт и свой вес, кегль и
+      // letter-spacing — как у любого слова (Captions.tsx, компонент Word).
+      // Признак без второго шрифта в запросе ничего не значит: иначе слово
+      // ушло бы в несуществующее семейство, то есть в системный шрифт.
+      if (word.accent && accentWeight) {
+        span.style.fontFamily = '"ReelbotMeasureAccent"';
+        span.style.fontWeight = String(accentWeight);
+        // То же, что в Captions.tsx (ACCENT_FONT_FEATURES): контекстных замен
+        // замер Python не знает, поэтому в кадре их нет.
+        span.style.fontFeatureSettings = '"calt" 0';
+      }
       // Эмодзи лежит ВНУТРИ спана слова, отдельным вложенным спаном и с
       // пробелом перед ним — ровно так его рисует Captions.tsx. Снаружи мерить
       // нельзя: у вложенного спана свой шейпинг, а кегль он наследует от слова.
@@ -141,7 +165,9 @@ const measureInPage = (items, boxes, weight, baseSize, lineHeight) => {
   const heights = {};
   const parts = {};
   for (const item of items) {
-    const words = item.words ?? [{ text: item.text, size: item.size, emoji: item.emoji }];
+    const words = item.words ?? [
+      { text: item.text, size: item.size, emoji: item.emoji, accent: item.accent },
+    ];
     const { line, spans } = buildLine(words, true);
     stage.appendChild(line);
     const box = line.getBoundingClientRect();
@@ -181,6 +207,9 @@ const main = async () => {
   const req = JSON.parse(raw);
   if (!req.font) throw new Error("в запросе нет поля font (путь к TTF)");
   if (!fs.existsSync(req.font)) throw new Error(`шрифт не найден: ${req.font}`);
+  if (req.accent_font && !fs.existsSync(req.accent_font)) {
+    throw new Error(`второй шрифт не найден: ${req.accent_font}`);
+  }
   const items = req.items ?? [];
   const boxes = req.boxes ?? [];
 
@@ -203,6 +232,12 @@ const main = async () => {
       (family) => document.fonts.load(`100px "${family}"`).then(() => document.fonts.ready),
       "ReelbotMeasure",
     );
+    if (req.accent_font) {
+      await tab.evaluate(
+        (family) => document.fonts.load(`100px "${family}"`).then(() => document.fonts.ready),
+        "ReelbotMeasureAccent",
+      );
+    }
     const result = await tab.evaluate(
       measureInPage,
       items,
@@ -210,6 +245,7 @@ const main = async () => {
       req.weight ?? 400,
       req.base_size ?? 100,
       req.line_height ?? 1,
+      req.accent_font ? (req.accent_weight ?? 400) : null,
     );
     process.stdout.write(JSON.stringify(result) + "\n");
   } finally {

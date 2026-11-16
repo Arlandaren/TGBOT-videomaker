@@ -41,8 +41,40 @@ const useCaptionFont = (fontUrl: string | null | undefined) => {
   }, [fontUrl, handle]);
 };
 
+/**
+ * Второй шрифт темы — им набрано выделенное слово (`preset.accent_font`).
+ *
+ * Отдельное лицо под своим именем, а не второй файл в «ReelbotCaption»: слово
+ * выбирает шрифт по имени семейства (Captions.tsx, `Word`), и у двух файлов
+ * под одним именем Chromium выбирал бы сам. Объявление — то же, что у первого
+ * шрифта и у линейки `render/measure.mjs`.
+ */
+const useAccentFont = (accentFontUrl: string | null | undefined) => {
+  const [handle] = React.useState(() => delayRender("загрузка второго шрифта субтитров"));
+  React.useEffect(() => {
+    if (!accentFontUrl) {
+      continueRender(handle);
+      return;
+    }
+    const face = new FontFace("ReelbotAccent", `url(${staticFile(accentFontUrl)})`, {
+      weight: "1 1000",
+    });
+    face
+      .load()
+      .then((loaded) => {
+        (document.fonts as unknown as { add(f: FontFace): void }).add(loaded);
+        continueRender(handle);
+      })
+      .catch((err) => {
+        console.warn("второй шрифт не загрузился:", err);
+        continueRender(handle);
+      });
+  }, [accentFontUrl, handle]);
+};
+
 const ReelWithFont: React.FC<RenderPlan> = (plan) => {
   useCaptionFont(plan.fontUrl);
+  useAccentFont(plan.accentFontUrl);
   return <Reel {...plan} />;
 };
 

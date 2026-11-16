@@ -139,6 +139,7 @@ const main = async () => {
       video: withPrefix(prefix, plan.video),
       audio: withPrefix(prefix, plan.audio),
       fontUrl: withPrefix(prefix, plan.fontUrl),
+      accentFontUrl: withPrefix(prefix, plan.accentFontUrl),
       broll: (plan.broll ?? []).map((b) => ({ ...b, asset: withPrefix(prefix, b.asset) })),
     };
 

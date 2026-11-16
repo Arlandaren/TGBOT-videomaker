@@ -68,15 +68,41 @@ def slice_static(raw: bytes, weight: float) -> TTFont:
     return instancer.instantiateVariableFont(font, {"wght": weight}, updateFontNames=True)
 
 
+def rename_family(font: TTFont, family: str) -> None:
+    """Семейство из одного начертания: имя `family`, стиль Regular.
+
+    Типографские имена (16, 17) убираются: по ним fontconfig снова склеил бы
+    начертание с прямым собратом, и libass выбирал бы между ними сам."""
+    names = font["name"]
+    names.names = [r for r in names.names if r.nameID not in (16, 17, 21, 22)]
+    for record in names.names:
+        if record.nameID == 1:
+            record.string = family
+        elif record.nameID == 2:
+            record.string = "Regular"
+        elif record.nameID == 4:
+            record.string = family
+        elif record.nameID == 6:
+            record.string = family.replace(" ", "")
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("source", help="путь к ttf или URL")
     ap.add_argument("weight", type=float, help="вес по оси wght")
     ap.add_argument("--name", help="имя файла без расширения (по умолчанию — из имён шрифта)")
+    ap.add_argument(
+        "--family",
+        help="своё имя семейства. Нужно наклонным и жирным начертаниям: у них имя "
+        "семейства то же, что у прямого («Playfair Display ExtraBold» + стиль Italic), "
+        "а ASS-бэкенд различает шрифты только по имени семейства",
+    )
     ap.add_argument("--out-dir", type=Path, default=FONTS_DIR)
     args = ap.parse_args(argv)
 
     font = slice_static(fetch(args.source), args.weight)
+    if args.family:
+        rename_family(font, args.family)
     family = font["name"].getDebugName(1) or "Font"
     name = args.name or family.replace(" ", "")
     args.out_dir.mkdir(parents=True, exist_ok=True)

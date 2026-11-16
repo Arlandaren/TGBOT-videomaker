@@ -137,6 +137,8 @@ const registerPreset = (preset: Preset, block: PlanBlock): Preset => {
         margin: card.margin,
         line_height: card.line_height,
       },
+      // Титр набран одним шрифтом — как и в `TitleCard.preset` на стороне Python.
+      accent_font: null,
       colors: {
         ...preset.colors,
         accent: preset.colors.active,
@@ -154,6 +156,7 @@ const registerPreset = (preset: Preset, block: PlanBlock): Preset => {
   if (!quiet) return preset;
   return {
     ...preset,
+    accent_font: null,
     font: { ...preset.font, size: quiet.font_size },
     caption: {
       ...preset.caption,
@@ -172,9 +175,32 @@ const registerPreset = (preset: Preset, block: PlanBlock): Preset => {
 };
 
 const emphasisScale = (word: PlanWord, preset: Preset): number => {
-  if (word.emphasis === "accent") return preset.animation.accent_scale;
-  if (word.emphasis === "shout") return preset.animation.shout_scale;
+  // Поправка кегля второго шрифта — то же число, что в `geometry.emphasis_size`.
+  const own = preset.accent_font?.scale ?? 1;
+  if (word.emphasis === "accent") return preset.animation.accent_scale * own;
+  if (word.emphasis === "shout") return preset.animation.shout_scale * own;
   return 1;
+};
+
+/** То же объявление стоит в `render/measure.mjs` — сверка меряет то, что в кадре. */
+const ACCENT_FONT_FEATURES = '"calt" 0';
+
+/**
+ * Шрифт выделенного слова в теме с парой шрифтов. Кегль и letter-spacing слово
+ * получает как обычно: Python мерил его этим шрифтом и этим кеглем.
+ */
+const accentFontStyle = (word: PlanWord, preset: Preset): React.CSSProperties => {
+  const accent = preset.accent_font;
+  if (!accent || (word.emphasis !== "accent" && word.emphasis !== "shout")) return {};
+  return {
+    fontFamily: `"ReelbotAccent", "${accent.family}", sans-serif`,
+    fontWeight: accent.weight,
+    // Контекстные замены выключены: рукописный шрифт (Caveat) подменяет формы
+    // букв по соседям, и слово выходит на 3-30 px шире, чем намерил Python —
+    // его замер знает ширины, кернинг и лигатуры, а `calt` не знает. При
+    // ненулевой разрядке Chromium выключает их сам, здесь разрядка нулевая.
+    fontFeatureSettings: ACCENT_FONT_FEATURES,
+  };
 };
 
 /**
@@ -490,6 +516,7 @@ const Word: React.FC<{ word: PlanWord; preset: Preset; neutral: string }> = ({
       style={{
         display: "inline-block",
         fontSize: wordSize(word, preset),
+        ...accentFontStyle(word, preset),
         color,
         opacity,
         transform: `translateY(${rise}px) scale(${scale}) rotate(${rotate}deg)`,

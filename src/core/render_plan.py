@@ -53,11 +53,13 @@ from src.core.geometry import (
     caption_positions,
     caption_text_width,
     caption_zone,
+    accent_metrics_for,
     emphasis_size,
     line_box_height,
     line_gap,
     measure_word,
     metrics_for,
+    word_metrics,
     resting_anchor,
     space_width,
 )
@@ -324,6 +326,8 @@ class _Ruler:
     letter_spacing: float
     base_size: float
     budget: float
+    # Второй шрифт темы: им набрано выделенное слово, им же оно и меряется.
+    accent_metrics: FontMetrics | None = None
 
     def word(self, word: PlanWord, size: float) -> float:
         """Ширина слова вместе с эмодзи.
@@ -334,10 +338,11 @@ class _Ruler:
         letter-spacing достаётся кластеру ровно один раз.
         """
         text = f"{word.text} {word.emoji}" if word.emoji else word.text
+        own = self.accent_metrics if word.emphasis in ("accent", "shout") else None
         return measure_word(
             text,
             size,
-            metrics=self.metrics,
+            metrics=own or self.metrics,
             letter_spacing=self.letter_spacing,
             # Спейсинг объявлен на контейнере строки и наследуется уже в
             # пикселях: у акцента он тот же, что у соседей.
@@ -414,6 +419,7 @@ def wrap_block(
         letter_spacing=preset.font.letter_spacing,
         base_size=float(preset.font.size),
         budget=caption_text_width(preset, frame_width),
+        accent_metrics=accent_metrics_for(preset),
     )
     floor_ratio = max(0.05, min(1.0, preset.caption.min_word_scale))
     max_lines = max(1, preset.caption.max_lines)
@@ -510,7 +516,12 @@ def _rect_of_lines(
     # занижала блок на 45-164 px, и весь промах уходил вверх: блок прибит к низу
     # кадра.
     text_h = sum(
-        line_box_height((w.size for w in line if w.size), preset) for line in lines
+        line_box_height(
+            (w.size for w in line if w.size),
+            preset,
+            fonts=(word_metrics(w.emphasis, preset) for w in line if w.size),
+        )
+        for line in lines
     ) + gap * max(0, len(lines) - 1)
     return block_rect(position, text_w, text_h, preset, frame, left=left)
 

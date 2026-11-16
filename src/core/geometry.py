@@ -516,15 +516,35 @@ def metrics_for(preset: Any) -> FontMetrics:
     return load_metrics(file)
 
 
+def accent_metrics_for(preset: Any) -> FontMetrics | None:
+    """Метрики второго шрифта темы (`preset.accent_font`) или `None`, если его нет."""
+    accent = getattr(preset, "accent_font", None)
+    if accent is None:
+        return None
+    return load_metrics(accent.file)
+
+
+def word_metrics(emphasis: str, preset: Any) -> FontMetrics | None:
+    """Чем мерить слово: вторым шрифтом — выделенное, иначе `None` (шрифт строки)."""
+    if emphasis in ("accent", "shout"):
+        return accent_metrics_for(preset)
+    return None
+
+
 # --------------------------------------------------------------------------- измерение
 
 
 @dataclass(frozen=True, slots=True)
 class SizedWord:
-    """Слово со своим кеглем: акцент крупнее соседей и занимает больше места."""
+    """Слово со своим кеглем: акцент крупнее соседей и занимает больше места.
+
+    `metrics` — шрифт слова, когда он не шрифт строки: выделенное слово темы с
+    парой шрифтов. `None` — мерить шрифтом строки.
+    """
 
     text: str
     size: float
+    metrics: FontMetrics | None = None
 
 
 class _HasEmphasis(Protocol):
@@ -627,7 +647,7 @@ def measure_line(
         measure_word(
             w.text,
             w.size,
-            metrics=metrics,
+            metrics=w.metrics or metrics,
             letter_spacing=letter_spacing,
             spacing_size=base_size,
             uppercase=uppercase,
@@ -647,10 +667,14 @@ def emphasis_size(emphasis: str, preset: Any) -> float:
     будет рисовать рендерер после Ф5.
     """
     base = preset.font.size
+    # Второй шрифт несёт свою поправку кегля: рукописное слово при том же числе
+    # выглядит мельче гротеска (`AccentFont.scale`).
+    accent = getattr(preset, "accent_font", None)
+    own = accent.scale if accent is not None else 1.0
     if emphasis == "accent":
-        return base * preset.animation.accent_scale
+        return base * preset.animation.accent_scale * own
     if emphasis == "shout":
-        return base * preset.animation.shout_scale
+        return base * preset.animation.shout_scale * own
     return float(base)
 
 
@@ -665,6 +689,7 @@ def sized_words(words: Iterable[_HasEmphasis], preset: Any) -> list[SizedWord]:
         SizedWord(
             f"{w.text} {w.emoji}" if getattr(w, "emoji", None) else w.text,
             emphasis_size(getattr(w, "emphasis", "none"), preset),
+            word_metrics(getattr(w, "emphasis", "none"), preset),
         )
         for w in words
     ]
@@ -713,7 +738,11 @@ def line_gap(preset: Any) -> float:
 
 
 def line_box_height(
-    sizes: Iterable[float], preset: Any, *, metrics: "FontMetrics | None" = None
+    sizes: Iterable[float],
+    preset: Any,
+    *,
+    metrics: "FontMetrics | None" = None,
+    fonts: "Iterable[FontMetrics | None] | None" = None,
 ) -> float:
     """Высота строчного бокса по кеглям слов в строке.
 
@@ -742,8 +771,14 @@ def line_box_height(
     Без метрик шрифта `c` взять неоткуда, и остаётся прежняя формула: она верна
     везде, где `lh ≥ 2c`, то есть во всех поставляемых темах, а титра без
     метрик не бывает вовсе — его раскладку считает `wrap_block`.
+
+    `fonts` — шрифты слов, в том же порядке, что и `sizes` (`None` — шрифт
+    строки). Нужны теме с парой шрифтов: у выделенного слова своё `c`, и два
+    максимума берутся уже по каждому слову отдельно — рукописный шрифт с
+    длинными выносными опускает строку ниже, чем то же слово гротеском.
     """
-    all_sizes = [float(preset.font.size), *(float(s) for s in sizes)]
+    own_sizes = [float(s) for s in sizes]
+    all_sizes = [float(preset.font.size), *own_sizes]
     biggest = max(all_sizes)
     lh = float(preset.caption.line_height)
     if metrics is None:
@@ -752,6 +787,16 @@ def line_box_height(
         except (FileNotFoundError, ValueError):
             return biggest * lh
     half = (metrics.ascender + metrics.descender) / (2 * metrics.units_per_em)
+    own_fonts = list(fonts) if fonts is not None else []
+    if any(f is not None and f is not metrics for f in own_fonts):
+        halves = [half] + [
+            half if f is None else (f.ascender + f.descender) / (2 * f.units_per_em)
+            for f in own_fonts
+        ]
+        halves += [half] * (len(all_sizes) - len(halves))
+        up = max(s * (lh / 2 + c) for s, c in zip(all_sizes, halves))
+        down = max(s * (lh / 2 - c) for s, c in zip(all_sizes, halves))
+        return up + down
     if lh / 2 >= half:
         return biggest * lh
     return biggest * (lh / 2 + half) + min(all_sizes) * (lh / 2 - half)
@@ -836,7 +881,9 @@ def caption_rect(block: _HasLines, preset: Any, frame_size: tuple[int, int]) -> 
                 line, metrics=metrics, letter_spacing=ls, base_size=float(preset.font.size)
             ),
         )
-        text_h += line_box_height((w.size for w in line), preset, metrics=metrics)
+        text_h += line_box_height(
+            (w.size for w in line), preset, metrics=metrics, fonts=(w.metrics for w in line)
+        )
         if i:
             text_h += line_gap(preset)
     text_w = min(text_w, caption_text_width(preset, width))

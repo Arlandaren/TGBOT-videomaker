@@ -500,6 +500,10 @@ svg { flex: none; }
    подпись. Кегль чуть меньше у капса — иначе WIDESCREEN шире соседей вдвое. */
 .style-pill__name { font-size: 16px; line-height: 1; }
 .style-pill__name.is-caps { font-size: 13px; }
+/* Второй шрифт темы в подписи: рукописный при том же кегле мельче, поэтому
+   чуть крупнее соседа; пробел перед ним обычный. */
+.style-pill__name { white-space: pre; }
+.style-pill__accent { font-size: 1.25em; line-height: 1; }
 
 .chip { padding: 0 18px 0 14px; }
 .chip__aa { font-family: var(--chip-font), system-ui, sans-serif; font-size: 22px; line-height: 1; font-weight: 400; }

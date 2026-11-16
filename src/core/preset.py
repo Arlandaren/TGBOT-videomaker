@@ -29,6 +29,29 @@ class FontSpec(BaseModel):
     letter_spacing: float = -0.01  # em
 
 
+class AccentFont(BaseModel):
+    """Второй шрифт темы — только для выделенного слова блока.
+
+    Пара шрифтов и есть рисунок темы: мелкие слова тонким гротеском, главное —
+    рукописным или жирным наклонным. Один шрифт на всю надпись отличал слово
+    только кеглем и цветом, и темы выглядели роднёй друг другу.
+
+    Своего кегля, регистра и разрядки у него нет: кегль — это `font.size` на
+    `accent_scale` и на `scale`, регистр и разрядка — как у строки (см. проверку
+    в `Preset`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    family: str
+    file: str
+    weight: int = 400
+    # Множитель кегля поверх `accent_scale`/`shout_scale`. Рукописный шрифт при
+    # том же кегле выглядит мельче гротеска: у него низкие строчные и длинные
+    # выносные. Число подбирается глазами по кадру, а не по метрикам.
+    scale: float = Field(1.0, gt=0.2, le=3.0)
+
+
 class Colors(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -203,6 +226,8 @@ class Quiet(BaseModel):
           паддингов темы нарисовать нечем.
         """
         ps = base.model_copy(deep=True)
+        # Выделенного слова в тихом блоке нет — второму шрифту нечего набирать.
+        ps.accent_font = None
         ps.font.size = self.font_size
         ps.caption.margin = self.margin
         ps.caption.line_height = self.line_height
@@ -314,6 +339,9 @@ class TitleCard(BaseModel):
           резервируется — иначе полоса титра уехала бы вниз на 48 px.
         """
         ps = base.model_copy(deep=True)
+        # Титр набран одним шрифтом: его большое слово — это кегль, а межстрочие
+        # 0.5 рассчитано по метрикам одного шрифта (`geometry.line_box_height`).
+        ps.accent_font = None
         ps.font.size = self.font_size
         ps.caption.margin = self.margin
         ps.caption.line_height = self.line_height
@@ -669,6 +697,7 @@ class Preset(BaseModel):
     # не влезла в начало.
     order: int = 100
     font: FontSpec = Field(default_factory=FontSpec)
+    accent_font: AccentFont | None = None
     colors: Colors = Field(default_factory=Colors)
     panel: Panel = Field(default_factory=Panel)
     caption: Caption = Field(default_factory=Caption)
@@ -679,6 +708,22 @@ class Preset(BaseModel):
     crop: Crop = Field(default_factory=Crop)
     audio: Audio = Field(default_factory=Audio)
     background: str = "#000000"
+
+    @model_validator(mode="after")
+    def _accent_font_rides_a_plain_line(self) -> "Preset":
+        """Второй шрифт — только в строке без разрядки и без капса.
+
+        Разрядка объявлена на контейнере строки и наследуется словом в пикселях
+        (`geometry.measure_word`): рукописному слову она рвёт соединения букв. А
+        капс рукописного шрифта нечитаем. Обе вещи проще запретить данным, чем
+        учить им замер и рендер.
+        """
+        if self.accent_font is not None and (self.font.letter_spacing != 0 or self.font.uppercase):
+            raise ValueError(
+                f"пресет {self.name!r}: accent_font требует font.letter_spacing = 0 "
+                "и font.uppercase = false"
+            )
+        return self
 
     def scaled(self, height: int) -> "Preset":
         """Размеры заданы для 1920 по высоте; под другой кадр — пропорционально.

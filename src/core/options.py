@@ -50,6 +50,11 @@ THEME_LABELS: dict[str, dict[str, str]] = {
     "glass": {"ru": "Крупные субтитры", "en": "Large captions"},
     "bold": {"ru": "Жирные заглавные", "en": "Bold caps"},
     "press": {"ru": "Журнальный", "en": "Magazine"},
+    # Темы с парой шрифтов: мелкие слова одним, выделенное — другим.
+    "script": {"ru": "Рукописный акцент", "en": "Handwritten accent"},
+    "slant": {"ru": "Наклонный акцент", "en": "Slanted accent"},
+    "marker": {"ru": "С маркером", "en": "Marker accent"},
+    "cursive": {"ru": "С курсивом", "en": "Italic accent"},
     "widescreen": {"ru": "Как в кино", "en": "Cinematic"},
     "notebook": {"ru": "Печатная машинка", "en": "Typewriter"},
     "silk": {"ru": "Элегантный", "en": "Elegant"},
@@ -250,6 +255,10 @@ def apply_font(preset: Preset, font: str) -> Preset:
         ratio = (was.cap_height / was.units_per_em) / (now.cap_height / now.units_per_em)
 
     clone = preset.model_copy(deep=True)
+    # Выбранный шрифт — это «вся надпись этим шрифтом». Второй шрифт темы
+    # (рукописное главное слово) при этом выключается: иначе выбор менял бы
+    # только мелкие слова, а самое заметное слово оставалось бы прежним.
+    clone.accent_font = None
     clone.font.family = choice.family
     clone.font.file = choice.file
     clone.font.weight = choice.weight

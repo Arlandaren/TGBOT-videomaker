@@ -445,7 +445,11 @@ function renderThemeSeg() {
 function declareFonts() {
   const faces = new Map();
   for (const f of state.boot.fonts || []) if (f.file && f.family) faces.set(f.file, f.family);
-  for (const p of state.boot.presets || []) if (p.font_file && p.font) faces.set(p.font_file, p.font);
+  for (const p of state.boot.presets || []) {
+    if (p.font_file && p.font) faces.set(p.font_file, p.font);
+    // Второй шрифт темы — им набрано выделенное слово.
+    if (p.accent_font) faces.set(p.accent_font.file, p.accent_font.family);
+  }
   // На каждое семейство ДВА объявления с одним именем и разными наборами
   // символов. Браузер выбирает файл по тому, что реально на экране:
   //
@@ -596,15 +600,23 @@ const preview = {
     box.style.setProperty("--cap-rise", `${motion.word_rise_em || 0}em`);
 
     let i = 0;
-    const word = (w, size, color) => {
+    const word = (w, size, color, family) => {
       const on = shown >= 1 && i < shown && shown < 9;
       i += 1;
       return el("span", {
         class: `cap-word${on ? " on" : ""}`,
         text: tx(w),
-        style: `font-size:${size}px${color ? `;color:${color}` : ""}`,
+        style: `font-size:${size}px${color ? `;color:${color}` : ""}` +
+          // `calt` выключен так же, как в ролике (Captions.tsx): превью
+          // обязано показать те же формы букв, что будут в кадре.
+          (family ? `;font-family:"${family}", system-ui, sans-serif;font-feature-settings:"calt" 0` : ""),
       });
     };
+    // Второй шрифт темы — у выделенного слова, пока человек не выбрал свой
+    // шрифт: тот значит «вся надпись этим шрифтом» и пару выключает
+    // (`options.apply_font` делает то же в ролике).
+    const pair = !activeFont() && p.accent_font ? p.accent_font : null;
+    const bigSize = base * (p.accent_scale || 1) * (pair ? pair.scale || 1 : 1);
     // Плашка — та же, что у блока в кадре: цвет, непрозрачность, радиус и
     // паддинги темы. У тем, где она приходит только над светлым фоном
     // (`opacity: 0`), в превью её и нет — фон карточки тёмный.
@@ -618,7 +630,7 @@ const preview = {
       plate.style.borderRadius = `${Math.round(panel.radius * k)}px`;
     }
     plate.append(el("div", { class: "cap-line" }, scene.small.map((w) => word(w, base))));
-    plate.append(el("div", { class: "cap-line" }, [word(scene.big, base * (p.accent_scale || 1), accent)]));
+    plate.append(el("div", { class: "cap-line" }, [word(scene.big, bigSize, accent, pair && pair.family)]));
     if (scene.after.length) {
       plate.append(el("div", { class: "cap-line" }, scene.after.map((w) => word(w, base))));
     }
@@ -743,6 +755,26 @@ function initStrips() {
   }
 }
 
+// Подпись таблетки. У темы с парой шрифтов последнее слово подписи набрано
+// вторым шрифтом — пара видна ещё в ленте, до нажатия.
+function pillName(p) {
+  const label = p.uppercase ? (p.label || p.title).toUpperCase() : (p.label || p.title);
+  const attrs = {
+    class: `style-pill__name${p.uppercase ? " is-caps" : ""}`,
+    style: `font-family:"${p.font}", system-ui, sans-serif;letter-spacing:${p.letter_spacing}em`,
+  };
+  const cut = label.lastIndexOf(" ");
+  if (!p.accent_font || cut < 0) return el("span", { ...attrs, text: label });
+  return el("span", attrs, [
+    el("span", { text: label.slice(0, cut + 1) }),
+    el("span", {
+      class: "style-pill__accent",
+      text: label.slice(cut + 1),
+      style: `font-family:"${p.accent_font.family}", system-ui, sans-serif`,
+    }),
+  ]);
+}
+
 function renderPresets() {
   const box = $("#preset-tabs");
   $("#style-count").textContent = state.boot.presets.length;
@@ -773,11 +805,7 @@ function renderPresets() {
       // Семнадцать одинаково набранных подписей ничего не говорили бы о том,
       // чем темы отличаются. Текст — понятная подпись («Крупные субтитры»), а
       // не название темы: «Chisel» тому, кто видит её впервые, не говорит ничего.
-      el("span", {
-        class: `style-pill__name${p.uppercase ? " is-caps" : ""}`,
-        text: p.uppercase ? (p.label || p.title).toUpperCase() : (p.label || p.title),
-        style: `font-family:"${p.font}", system-ui, sans-serif;letter-spacing:${p.letter_spacing}em`,
-      }),
+      pillName(p),
     ])));
   syncArrows(box.parentNode);
 }

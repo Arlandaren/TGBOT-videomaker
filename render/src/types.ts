@@ -123,6 +123,13 @@ export type Preset = {
     uppercase: boolean;
     letter_spacing: number;
   };
+  /** Второй шрифт темы: им набрано только выделенное слово блока. */
+  accent_font?: {
+    family: string;
+    file: string;
+    weight: number;
+    scale: number;
+  } | null;
   colors: {
     active: string;
     past: string;
@@ -319,6 +326,8 @@ export type RenderPlan = {
   meta: Record<string, unknown>;
   /** Шрифт: путь относительно публичной директории. Ставится в рендер, не в систему. */
   fontUrl?: string | null;
+  /** Второй шрифт темы (`preset.accent_font`), тем же способом. */
+  accentFontUrl?: string | null;
 };
 
 export const EMPTY_PLAN: RenderPlan = {

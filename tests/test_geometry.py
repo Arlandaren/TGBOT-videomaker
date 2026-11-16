@@ -24,6 +24,7 @@ from src.core.geometry import (
     SizedWord,
     _emoji_cluster,
     _round_px,
+    accent_metrics_for,
     blocks_caption,
     broll_free_band,
     broll_rect,
@@ -1179,6 +1180,93 @@ def test_caption_rect_matches_the_chromium_box():
     assert not report, "прямоугольник блока разъехался с Chromium:\n" + "\n".join(report)
 
 
+def _accent_request(preset) -> dict:
+    """Второй шрифт темы для линейки — тем же способом, каким его получает рендер."""
+    if preset.accent_font is None:
+        return {}
+    return {
+        "accent_font": str(REPO / "assets" / "fonts" / preset.accent_font.file),
+        "accent_weight": preset.accent_font.weight,
+    }
+
+
+def _is_accented(emphasis: str, preset) -> bool:
+    return preset.accent_font is not None and emphasis in ("accent", "shout")
+
+
+PAIRED = [n for n in ALL_PRESETS if load_preset(n).accent_font is not None]
+
+
+def test_there_are_themes_with_a_second_font():
+    # Без этого параметризация по PAIRED пуста, и тесты пары молча не идут.
+    assert PAIRED
+
+
+@pytest.mark.parametrize("name", PAIRED)
+def test_the_accent_word_is_measured_with_its_own_font(name: str):
+    """Выделенное слово темы с парой шрифтов меряется ВТОРЫМ шрифтом.
+
+    Мерить его шрифтом строки — значит разойтись с кадром на десятки пикселей:
+    у рукописного шрифта буквы вдвое уже, чем у гротеска того же кегля.
+    """
+    preset = load_preset(name)
+    own = accent_metrics_for(preset)
+    assert own is not None and own is not metrics_for(preset)
+    size = emphasis_size("accent", preset)
+    assert size == pytest.approx(
+        preset.font.size * preset.animation.accent_scale * preset.accent_font.scale
+    )
+    [word] = sized_words([PlanWord(text="истину", start=0, end=1, emphasis="accent")], preset)
+    assert word.metrics is own
+    line = measure_line([word], metrics=metrics_for(preset), base_size=preset.font.size)
+    assert line == pytest.approx(measure_word("истину", size, metrics=own))
+    assert line != pytest.approx(measure_word("истину", size, metrics=metrics_for(preset)), abs=1)
+    # Обычное слово — по-прежнему шрифтом строки.
+    [plain] = sized_words([PlanWord(text="истину", start=0, end=1)], preset)
+    assert plain.metrics is None
+
+
+@pytest.mark.parametrize("name", PAIRED)
+def test_wrap_measures_the_accent_word_with_the_second_font(name: str):
+    preset = load_preset(name).scaled(FRAME[1])
+    words = [
+        PlanWord(text="одну", start=0, end=1, word_idx=0),
+        PlanWord(text="истину", start=1, end=2, emphasis="accent", word_idx=1),
+    ]
+    lines, widths = wrap_block(words, preset, FRAME[0])
+    accent = next(w for line in lines for w in line if w.emphasis == "accent")
+    alone = measure_word(accent.text, accent.size, metrics=accent_metrics_for(preset))
+    row = next(i for i, line in enumerate(lines) if accent in line)
+    rest = sum(
+        measure_word(w.text, w.size, metrics=metrics_for(preset))
+        for w in lines[row]
+        if w is not accent
+    )
+    spaces = (len(lines[row]) - 1) * space_width(
+        float(preset.font.size), metrics=metrics_for(preset)
+    )
+    assert widths[row] == pytest.approx(alone + rest + spaces, abs=0.05)
+
+
+def test_a_mixed_line_takes_the_deepest_descent_of_both_fonts():
+    """Строчный бокс строки с двумя шрифтами — два максимума по КАЖДОМУ слову."""
+    preset = load_preset(PAIRED[0])
+    main, own = metrics_for(preset), accent_metrics_for(preset)
+    lh = preset.caption.line_height
+    big = emphasis_size("accent", preset)
+    c_main = (main.ascender + main.descender) / (2 * main.units_per_em)
+    c_own = (own.ascender + own.descender) / (2 * own.units_per_em)
+    base = float(preset.font.size)
+    expected = max(base * (lh / 2 + c_main), big * (lh / 2 + c_own)) + max(
+        base * (lh / 2 - c_main), big * (lh / 2 - c_own)
+    )
+    assert line_box_height([base, big], preset, fonts=[None, own]) == pytest.approx(expected)
+    # Без второго шрифта формула прежняя, бит в бит.
+    assert line_box_height([base, big], preset, fonts=[None, None]) == line_box_height(
+        [base, big], preset
+    )
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("name", ALL_PRESETS)
 def test_the_production_block_rect_matches_chromium(name: str):
@@ -1223,12 +1311,21 @@ def test_the_production_block_rect_matches_chromium(name: str):
         "base_size": preset.font.size,
         "letter_spacing": preset.font.letter_spacing,
         "line_height": preset.caption.line_height,
+        **_accent_request(preset),
         "items": [],
         "boxes": [
             {
                 "id": key,
                 "lines": [
-                    [{"text": w.text, "size": w.size, "emoji": w.emoji} for w in line]
+                    [
+                        {
+                            "text": w.text,
+                            "size": w.size,
+                            "emoji": w.emoji,
+                            "accent": _is_accented(w.emphasis, preset),
+                        }
+                        for w in line
+                    ]
                     for line in lines
                 ],
                 # `gap` намеренно не передаём: его считает сама страница

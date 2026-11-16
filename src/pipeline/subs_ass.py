@@ -177,6 +177,19 @@ def _render_word(word: PlanWord, state: str, preset: Preset, fps: int, dialogue_
 
     base = max(1, round(_word_scale(word, preset) * 100))
     size = f"\\fscx{base}\\fscy{base}"
+    # Второй шрифт темы: выделенное слово набирается им во всех трёх состояниях.
+    # libass ищет шрифт по имени семейства, поэтому у каждого начертания в
+    # `assets/fonts` оно своё (`tools/font_instance.py --family`).
+    #
+    # Тег стоит у КАЖДОГО слова такой темы, а не только у выделенного: `\fn`
+    # действует до конца строки, и без явного возврата сосед справа остался бы
+    # рукописным. И стоит он отдельно от `size`: тот уезжает внутрь `\t`, а
+    # шрифт не анимируется.
+    font_tag = ""
+    accent_font = getattr(preset, "accent_font", None)
+    if accent_font is not None:
+        accented = word.emphasis in ("accent", "shout")
+        font_tag = f"\\fn{accent_font.family if accented else preset.font.family}"
 
     if state == "active":
         # Транзиентный «пшик» ровно как в Remotion (`popBump`): вверх к пику и
@@ -227,7 +240,7 @@ def _render_word(word: PlanWord, state: str, preset: Preset, fps: int, dialogue_
         tags = [to_ass_alpha(c.ghost_opacity), f"\\c{to_ass_colour(c.ghost)}", size]
 
     joined = "".join(t if t.startswith("\\") else f"\\alpha{t}" for t in tags)
-    return "{" + joined + "}" + text
+    return "{" + font_tag + joined + "}" + text
 
 
 def _block_dialogues(

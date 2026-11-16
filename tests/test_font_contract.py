@@ -64,6 +64,40 @@ def test_the_renderer_declares_the_same_weight_range_as_the_ruler():
     )
 
 
+def test_the_second_font_is_declared_the_same_way_as_the_first():
+    """Второй шрифт темы (выделенное слово) — отдельное лицо с тем же диапазоном
+    веса, что у первого и у линейки. Иначе пара сверена одним объявлением, а
+    нарисована другим."""
+    declared = re.search(
+        r"new FontFace\(\s*\"ReelbotAccent\",\s*`url\(\$\{staticFile\(accentFontUrl\)\}\)`\s*,"
+        r"\s*\{([^}]*)\}\s*\)",
+        _src(ROOT_TSX),
+    )
+    assert declared, "Root.tsx: нет `new FontFace(\"ReelbotAccent\", …)` с дескрипторами"
+    m = re.search(r"weight:\s*\"([^\"]+)\"", declared.group(1))
+    assert m and m.group(1).strip() == _ruler_weight_range()
+    ruler_faces = re.findall(r"font-family:\s*\"(ReelbotMeasure\w*)\";", _src(RULER))
+    assert "ReelbotMeasureAccent" in ruler_faces, "measure.mjs не объявляет второй шрифт"
+
+
+def test_the_accent_word_is_drawn_the_way_the_ruler_measures_it():
+    """Выделенное слово: второй шрифт, вес из пресета и те же выключенные
+    контекстные замены, что на странице замера.
+
+    `calt` — не косметика: с ним Caveat рисует слово на 3-30 px шире, чем
+    намерил Python (`test_the_production_block_rect_matches_chromium[marker]`)."""
+    captions = _src(CAPTIONS)
+    assert re.search(r"fontFamily:\s*`\"ReelbotAccent\"", captions)
+    assert re.search(r"fontWeight:\s*accent\.weight", captions)
+    in_render = re.search(r"ACCENT_FONT_FEATURES\s*=\s*'([^']+)'", captions)
+    assert in_render, "Captions.tsx: нет ACCENT_FONT_FEATURES"
+    assert re.search(r"fontFeatureSettings:\s*ACCENT_FONT_FEATURES", captions)
+    in_ruler = re.search(r"fontFeatureSettings\s*=\s*'([^']+)'", _src(RULER))
+    assert in_ruler and in_ruler.group(1) == in_render.group(1), (
+        "выделенное слово в кадре и на линейке набрано с разными font-feature-settings"
+    )
+
+
 def test_the_caption_asks_for_the_weight_the_preset_names():
     """Вторая половина той же пары: кегль и вес субтитра берутся из пресета.
 
@@ -178,3 +212,73 @@ async def test_the_font_goes_into_the_edl_so_a_rerender_repeats_it(tmp_path, mon
     seen.clear()
     await process_from_edl(src, tmp_path / "again", edl, cfg=cfg)
     assert seen["plan"].preset["font"]["file"] == FONTS["narrow"][1].file
+
+
+# --------------------------------------------------- второй шрифт до рендера
+
+
+def test_the_second_font_file_travels_to_the_renderer(tmp_path):
+    """Файл второго шрифта кладётся рядом с первым и уезжает в запрос рендера.
+
+    Без него `Root.tsx` молча не объявит «ReelbotAccent», и выделенное слово
+    нарисуется шрифтом строки — при раскладке, посчитанной под рукописный."""
+    import json
+
+    from src.core.config import Settings
+    from src.core.edl import EDL, CaptionBlock, CaptionWord, Cut, Emphasis, Word
+    from src.core.render_plan import build_plan
+    from src.pipeline.render import RenderRequest, _request_payload, prepare_assets
+
+    edl = EDL(
+        preset="script",
+        source_duration=3.0,
+        words=[Word(idx=0, text="одну", start=0.2, end=0.6), Word(idx=1, text="истину", start=0.7, end=1.4)],
+        cuts=[Cut(src_in=0.0, src_out=3.0, reason="keep")],
+        captions=[
+            CaptionBlock(
+                words=[CaptionWord(word_idx=0), CaptionWord(word_idx=1, emphasis=Emphasis.ACCENT)]
+            )
+        ],
+    )
+    video = tmp_path / "in.mp4"
+    video.write_bytes(b"\0" * 16)
+    plan = build_plan(edl, str(video), width=1080, height=1920, fps=30)
+    assert plan.preset["accent_font"]["file"] == "MarckScript-Regular.ttf"
+
+    assets = tmp_path / "assets"
+    plan = prepare_assets(plan, assets, cfg=Settings(_env_file=None))
+    assert (assets / plan.meta["accent_font"]).is_file()
+    assert plan.meta["accent_font"] != plan.meta["font"]
+
+    payload = json.loads(
+        _request_payload(RenderRequest(plan=plan, out=tmp_path / "o.mp4", assets_dir=assets, job_key="k"))
+    )
+    assert payload["plan"]["accentFontUrl"] == plan.meta["accent_font"]
+    assert payload["plan"]["fontUrl"] == plan.meta["font"]
+
+
+def test_a_theme_with_one_font_sends_no_second_font(tmp_path):
+    import json
+
+    from src.core.config import Settings
+    from src.core.edl import EDL, CaptionBlock, CaptionWord, Cut, Word
+    from src.core.render_plan import build_plan
+    from src.pipeline.render import RenderRequest, _request_payload, prepare_assets
+
+    edl = EDL(
+        preset="glass",
+        source_duration=3.0,
+        words=[Word(idx=0, text="одну", start=0.2, end=0.6)],
+        cuts=[Cut(src_in=0.0, src_out=3.0, reason="keep")],
+        captions=[CaptionBlock(words=[CaptionWord(word_idx=0)])],
+    )
+    video = tmp_path / "in.mp4"
+    video.write_bytes(b"\0" * 16)
+    assets = tmp_path / "assets"
+    plan = prepare_assets(
+        build_plan(edl, str(video), width=1080, height=1920, fps=30), assets, cfg=Settings(_env_file=None)
+    )
+    payload = json.loads(
+        _request_payload(RenderRequest(plan=plan, out=tmp_path / "o.mp4", assets_dir=assets, job_key="k"))
+    )
+    assert payload["plan"]["accentFontUrl"] is None

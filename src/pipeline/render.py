@@ -89,12 +89,27 @@ def prepare_assets(
             plan.meta["font"] = _stage_asset(candidate, assets_dir)
         else:
             log.warning("шрифт %s не найден в %s — Chromium возьмёт системный", font_file, cfg.fonts_dir)
+    # Второй шрифт темы (выделенное слово) едет тем же путём, под своим ключом.
+    accent_file = (plan.preset.get("accent_font") or {}).get("file")
+    if accent_file:
+        candidate = cfg.fonts_dir / accent_file
+        if candidate.exists():
+            plan.meta["accent_font"] = _stage_asset(candidate, assets_dir)
+        else:
+            log.warning(
+                "второй шрифт %s не найден в %s — слово нарисуется шрифтом строки",
+                accent_file, cfg.fonts_dir,
+            )
     return plan
 
 
 def _request_payload(req: RenderRequest) -> str:
     payload = {
-        "plan": {**req.plan.to_dict(), "fontUrl": req.plan.meta.get("font")},
+        "plan": {
+            **req.plan.to_dict(),
+            "fontUrl": req.plan.meta.get("font"),
+            "accentFontUrl": req.plan.meta.get("accent_font"),
+        },
         "assetsDir": str(req.assets_dir.resolve()),
         "out": str(req.out.resolve()),
         "jobKey": req.job_key,

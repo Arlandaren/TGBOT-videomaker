@@ -474,6 +474,18 @@ async def bootstrap(request: web.Request) -> web.Response:
             "font_file": p.font.file,
             "letter_spacing": p.font.letter_spacing,
             "uppercase": p.font.uppercase,
+            # Второй шрифт темы: им набрано выделенное слово. Превью обязано
+            # показать пару, иначе тема выглядит как её соседка без пары.
+            "accent_font": (
+                {
+                    "family": p.accent_font.family,
+                    "file": p.accent_font.file,
+                    "weight": p.accent_font.weight,
+                    "scale": p.accent_font.scale,
+                }
+                if p.accent_font
+                else None
+            ),
             # Числа раскладки: превью рисует ТЕМУ, а не одну композицию на всех
             # — кегль, межстрочие, место в кадре, плашку и во сколько раз
             # крупнее выделенное слово. Пиксели тут кадровые (высота 1920), и
@@ -1283,9 +1295,12 @@ async def font(request: web.Request) -> web.StreamResponse:
     allowed = {choice.file for _, choice in FONTS.values() if choice}
     for preset in available():
         try:
-            allowed.add(load_preset(preset).font.file)
+            loaded = load_preset(preset)
         except Exception:  # noqa: BLE001
             continue
+        allowed.add(loaded.font.file)
+        if loaded.accent_font:
+            allowed.add(loaded.accent_font.file)
     path = Path(cfg.fonts_dir) / name
     if name not in allowed or not path.is_file():
         return _json_error(404, t("api.font_not_found", _browser_lang(request)))

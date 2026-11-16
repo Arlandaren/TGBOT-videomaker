@@ -133,6 +133,58 @@ def test_every_catalogued_font_is_actually_in_the_repository():
             f"{name}: тема просит семейство {font.family!r}, "
             f"а в файле {load_metrics(font.file).family!r}"
         )
+        # Второй шрифт темы — тот же договор. Имя семейства у него обязано быть
+        # СВОИМ: наклонное начертание под именем прямого libass спутал бы.
+        second = load_preset(name).accent_font
+        if second is None:
+            continue
+        assert (REPO_ROOT / "assets" / "fonts" / second.file).exists(), (
+            f"{name}: нет файла второго шрифта {second.file!r}"
+        )
+        assert load_metrics(second.file).family == second.family, (
+            f"{name}: второй шрифт назван {second.family!r}, "
+            f"а в файле {load_metrics(second.file).family!r}"
+        )
+        assert second.family != font.family, f"{name}: два шрифта под одним семейством"
+
+
+def test_a_chosen_font_switches_the_second_font_off():
+    """Выбранный шрифт — это «вся надпись этим шрифтом».
+
+    Оставь пару включённой, и выбор менял бы только мелкие слова: самое заметное
+    слово блока так и осталось бы рукописным."""
+    from src.core.preset import available
+
+    paired = [n for n in available() if load_preset(n).accent_font is not None]
+    assert paired
+    for name in paired:
+        base = load_preset(name)
+        assert apply_font(base, "theme").accent_font is not None
+        chosen = apply_font(base, "serif")
+        assert chosen.accent_font is None
+        assert chosen.font.family == FONTS["serif"][1].family
+        # Исходная тема не тронута: `load_preset` кеширует объект.
+        assert load_preset(name).accent_font is not None
+
+
+def test_the_second_font_needs_a_plain_line():
+    """Разрядка и капс строки ломают рукописное слово — запрещены данными."""
+    import pytest
+    from pydantic import ValidationError
+
+    from src.core.preset import Preset
+
+    data = load_preset("script").model_dump()
+    for field, value in (("letter_spacing", 0.05), ("uppercase", True)):
+        broken = {**data, "font": {**data["font"], field: value}}
+        with pytest.raises(ValidationError):
+            Preset(**broken)
+
+
+def test_quiet_and_title_registers_keep_one_font():
+    base = load_preset("script")
+    assert base.caption.quiet.preset(base).accent_font is None
+    assert base.caption.title_card.preset(base).accent_font is None
 
 
 def test_the_font_and_the_accent_compose():

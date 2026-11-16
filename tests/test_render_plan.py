@@ -23,12 +23,15 @@ from src.core.edl import (
 from src.core.geometry import (
     FALLBACK_ASPECT,
     Rect,
+    SizedWord,
+    accent_metrics_for,
     caption_text_width,
     line_gap,
     measure_line,
     measure_word,
     metrics_for,
     space_width,
+    word_metrics,
 )
 from src.core.preset import Preset, available, hex_to_rgb, load_preset
 from src.core.render_plan import (
@@ -554,7 +557,37 @@ def ruler_of(preset: Preset) -> _Ruler:
         letter_spacing=preset.font.letter_spacing,
         base_size=float(preset.font.size),
         budget=caption_text_width(preset, FRAME[0]),
+        accent_metrics=accent_metrics_for(preset),
     )
+
+
+def _sized(line, preset, base: float) -> list[SizedWord]:
+    """Слова строки для независимой линейки — каждое со СВОИМ шрифтом.
+
+    У темы с парой шрифтов выделенное слово набрано вторым; мерить его шрифтом
+    строки значило бы сверять раскладку с числом, которого в кадре нет."""
+    return [SizedWord(w.text, w.size or base, word_metrics(w.emphasis, preset)) for w in line]
+
+
+def _mixed_line_box(line, preset) -> float:
+    """Строчный бокс строки с двумя шрифтами, независимой формулой.
+
+    Слова стоят на общей базовой линии; у бокса кеглем F подъём над ней
+    `F·(lh/2 + c)`, спуск `F·(lh/2 − c)`, где `c` — середина между верхним и
+    нижним выносными шрифта. Высота строки — самый высокий подъём плюс самый
+    глубокий спуск, со струтом контейнера. Число сверено с Chromium
+    (`test_the_production_block_rect_matches_chromium`)."""
+    lh = preset.caption.line_height
+
+    def c(m) -> float:
+        return (m.ascender + m.descender) / (2 * m.units_per_em)
+
+    main = c(metrics_for(preset))
+    boxes = [(float(preset.font.size), main)]
+    for w in line:
+        own = word_metrics(w.emphasis, preset)
+        boxes.append((float(w.size or 0.0), c(own) if own else main))
+    return max(s * (lh / 2 + k) for s, k in boxes) + max(s * (lh / 2 - k) for s, k in boxes)
 
 
 @pytest.mark.parametrize("name", ALL_PRESETS)
@@ -581,7 +614,7 @@ def test_wrapped_text_never_leaves_the_caption_rect(name: str):
             else:
                 assert width == pytest.approx(
                     measure_line(
-                        [(w.text, w.size or base) for w in line],
+                        _sized(line, preset, base),
                         metrics=metrics,
                         letter_spacing=preset.font.letter_spacing,
                         base_size=base,
@@ -634,7 +667,8 @@ def test_words_in_a_line_never_overlap(name: str):
                 own = measure_word(
                     word.text,
                     word.size or base,
-                    metrics=metrics,
+                    # Выделенное слово темы с парой шрифтов набрано вторым.
+                    metrics=word_metrics(word.emphasis, preset) or metrics,
                     letter_spacing=ls,
                     spacing_size=base,
                 )
@@ -649,7 +683,7 @@ def test_words_in_a_line_never_overlap(name: str):
             # совпадает с независимо измеренной шириной строки и не выходит за
             # бюджет: ни наезда, ни щели, ни переполнения.
             independent = measure_line(
-                [(w.text, w.size or base) for w in line],
+                _sized(line, preset, base),
                 metrics=metrics,
                 letter_spacing=ls,
                 base_size=base,
@@ -679,7 +713,9 @@ def test_block_rect_holds_every_line(name: str):
         chrome_x = 2 * (panel.padding_x + panel.border_width) if panel.enabled else 0
         chrome_y = 2 * (panel.padding_y + panel.border_width) if panel.enabled else 0
         text_h = sum(
-            max(strut, max((w.size or 0.0) for w in line) * preset.caption.line_height)
+            _mixed_line_box(line, preset)
+            if any(word_metrics(w.emphasis, preset) for w in line)
+            else max(strut, max((w.size or 0.0) for w in line) * preset.caption.line_height)
             for line in lines
         ) + line_gap(preset) * (len(lines) - 1)
         assert rect.width >= max(widths) + chrome_x - 0.01
@@ -1435,6 +1471,10 @@ def _as_word(w: PlanWord) -> dict:
     item: dict = {"text": w.text, "size": w.size}
     if w.emoji:
         item["emoji"] = w.emoji
+    # Выделенное слово: у темы с парой шрифтов линейка наберёт его вторым. Без
+    # второго шрифта в запросе признак ничего не меняет (см. measure.mjs).
+    if w.emphasis in ("accent", "shout"):
+        item["accent"] = True
     return item
 
 
@@ -1509,6 +1549,9 @@ def test_chromium_draws_the_block_the_plan_promised(name: str):
         "items": [],
         "boxes": [],
     }
+    if preset.accent_font is not None:
+        request["accent_font"] = str(FONTS / preset.accent_font.file)
+        request["accent_weight"] = preset.accent_font.weight
     expected_lines: dict[str, float] = {}
     expected_boxes: dict[str, tuple[float, float]] = {}
     for bi, block in enumerate(all_blocks()):

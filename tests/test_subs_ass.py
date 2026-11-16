@@ -381,3 +381,33 @@ def test_wrap_keeps_all_words():
     words = [PlanWord(text=f"w{i}", start=0, end=1) for i in range(7)]
     lines = wrap_words(words, max_chars=5)
     assert sum(len(line) for line in lines) == 7
+
+
+# ------------------------------------------------------------------ пара шрифтов
+
+
+def test_the_accent_word_of_a_paired_theme_gets_the_second_font():
+    """Выделенное слово — вторым шрифтом темы, сосед — шрифтом строки.
+
+    `\\fn` действует до конца строки: без явного возврата слово справа от
+    выделенного осталось бы рукописным."""
+    preset = load_preset("script")
+    assert preset.accent_font is not None
+    ass = build_ass(plan("script"))
+    dialogues = [line for line in ass.splitlines() if line.startswith("Dialogue:")]
+    line = dialogues[0]
+    accent_tag = f"\\fn{preset.accent_font.family}"
+    plain_tag = f"\\fn{preset.font.family}"
+    # Три слова блока: два обычных и выделенное «важно».
+    assert line.count(plain_tag) == 2
+    assert line.count(accent_tag) == 1
+    assert line.index(accent_tag) < line.index("важно")
+    # Шрифт не анимируется: внутри `\t(...)` его быть не должно.
+    for inside in re.findall(r"\\t\(([^)]*)\)", ass):
+        assert "\\fn" not in inside
+
+
+def test_a_theme_with_one_font_carries_no_font_tags():
+    assert "\\fn" not in "".join(
+        line for line in build_ass(plan("glass")).splitlines() if line.startswith("Dialogue:")
+    )

@@ -529,6 +529,32 @@ async def test_bootstrap_describes_every_theme_the_way_the_preview_draws_it(boot
         # так же, как это делает `options.apply_font` в пайплайне.
         m = load_metrics(p.font.file)
         assert item["cap_em"] == pytest.approx(m.cap_height / m.units_per_em, abs=1e-4)
+        # Второй шрифт темы: без него превью рисует пару одним шрифтом.
+        if p.accent_font is None:
+            assert item["accent_font"] is None, item["name"]
+        else:
+            assert item["accent_font"] == {
+                "family": p.accent_font.family,
+                "file": p.accent_font.file,
+                "weight": p.accent_font.weight,
+                "scale": p.accent_font.scale,
+            }, item["name"]
+    assert any(item["accent_font"] for item in data["presets"])
+
+
+async def test_the_font_route_serves_the_second_font_of_a_theme(client):
+    """Второго шрифта нет в каталоге выбора — его называет только тема."""
+    from src.core.options import FONTS
+    from src.core.preset import available, load_preset
+
+    catalogued = {choice.file for _, choice in FONTS.values() if choice}
+    files = {
+        load_preset(n).accent_font.file for n in available() if load_preset(n).accent_font
+    }
+    assert files and not files <= catalogued
+    for name in files:
+        r = await client.get(f"/fonts/{name}")
+        assert r.status == 200, f"{name}: второй шрифт темы не отдаётся приложению"
 
 
 async def test_themes_come_in_one_order_for_the_app_and_the_chat(booted):

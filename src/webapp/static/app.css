@@ -440,11 +440,10 @@ svg { flex: none; }
 .strip { position: relative; margin-bottom: 12px; }
 .strip__track {
   display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
-  padding: 2px 18px 4px; scroll-behavior: smooth; scroll-snap-type: x proximity;
-  scroll-padding: 0 52px;
+  /* Без scroll-snap: лента стоит там, где её оставили. С «примагничиванием»
+     она после прокрутки сама подъезжала к ближайшей таблетке. */
+  padding: 2px 18px 4px; scroll-behavior: smooth;
 }
-.strip__track::-webkit-scrollbar { display: none; }
-.strip__track > * { scroll-snap-align: center; }
 .strip__arrow {
   position: absolute; top: 50%; z-index: 2; transform: translateY(-50%);
   width: 36px; height: 36px; border-radius: 50%;

@@ -757,9 +757,21 @@ function pillName(p) {
   ]);
 }
 
+// Перерисовать ленту, не сдвинув её: после выбора лента обязана стоять там,
+// где её оставил палец. Раньше она сама ехала, ставя выбранное по центру, —
+// человек тянулся к соседней таблетке, а та уезжала из-под пальца.
+// `scrollLeft` присваивается напрямую и мгновенно: у ленты в CSS плавная
+// прокрутка, и обычное присваивание превратилось бы в ту же езду.
+function keepScroll(box, redraw) {
+  const left = box.scrollLeft;
+  redraw();
+  if (box.scrollLeft === left) return;
+  try { box.scrollTo({ left, behavior: "instant" }); } catch (_) { box.scrollLeft = left; }
+}
+
 function renderPresets() {
   const box = $("#preset-tabs");
-  box.replaceChildren(...state.boot.presets.map((p) =>
+  keepScroll(box, () => box.replaceChildren(...state.boot.presets.map((p) =>
     el("button", {
       class: `style-pill${p.name === state.preset ? " is-active" : ""}`,
       type: "button",
@@ -774,7 +786,6 @@ function renderPresets() {
         renderPresets();
         renderAccents();
         preview.render();
-        scrollToActive(box);
       },
     }, [
       // Таблетка — это образец: подпись набрана шрифтом темы и её регистром.
@@ -782,14 +793,14 @@ function renderPresets() {
       // чем темы отличаются. Текст — понятная подпись («Крупные субтитры»), а
       // не название темы: «Chisel» тому, кто видит её впервые, не говорит ничего.
       pillName(p),
-    ])));
+    ]))));
   syncArrows(box.parentNode);
 }
 
 function renderAccents() {
   const p = activePreset();
   const box = $("#accent-chips");
-  box.replaceChildren(...state.boot.accents.map((a) =>
+  keepScroll(box, () => box.replaceChildren(...state.boot.accents.map((a) =>
     el("button", {
       class: `swatch${a.key === state.accent ? " is-active" : ""}`,
       type: "button",
@@ -801,12 +812,11 @@ function renderAccents() {
         haptic();
         renderAccents();
         preview.render();
-        scrollToActive(box);
       },
     }, [
       el("i", { class: "swatch__dot", style: `background:${a.color || (p ? p.colors.accent : "#F3D28F")}` }),
       el("span", { class: "swatch__name", text: a.title }),
-    ])));
+    ]))));
   syncArrows($("#accent-chips").parentNode);
 }
 

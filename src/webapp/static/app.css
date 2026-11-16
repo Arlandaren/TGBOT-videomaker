@@ -340,24 +340,16 @@ svg { flex: none; }
    ширине 354 пропорция просила 629 px, а max-height резал до ~523: карточка
    была 3:4, то есть не той формы, что ролик. Строка, влезавшая в превью, в
    кадре не влезала, и место субтитра по вертикали показывалось не то. */
-.preview-wrap {
-  --prev-h: min(58vh, 460px);
-  position: sticky; top: var(--top-h); z-index: 4;
-  margin: 0 -18px; padding: 4px 18px 0; background: var(--bg);
-  height: calc(var(--prev-h) + 22px);
-  transition: height 220ms ease;
-}
-/* Ушли листать ленты — кадр ужимается и остаётся на виду: иначе выбор цвета
-   и шрифта меняет то, чего в этот момент не видно. Масштаб, а не новая
-   раскладка: содержимое то же, Python и превью считают по тем же числам. */
-.preview-wrap.is-compact { height: calc(var(--prev-h) * 0.46 + 18px); }
-.preview-wrap.is-compact .preview { transform: scale(0.46); }
+/* Кадр стоит на месте и не меняет размер, пока человек выбирает: страница
+   не листается, листается только открытая вкладка под ним (см. «шаг
+   оформления во всё окно» ниже). Раньше кадр прилипал и ужимался вдвое —
+   ровно тогда, когда на него надо смотреть. */
+.preview-wrap { --prev-h: min(58vh, 460px); flex: none; }
 .preview {
   position: relative; overflow: hidden;
   height: var(--prev-h); width: calc(var(--prev-h) * 9 / 16); max-width: 100%;
   margin: 0 auto; border-radius: 26px; background: #111;
   box-shadow: 0 12px 40px rgb(10 10 20 / 25%);
-  transform-origin: top center; transition: transform 220ms ease;
 }
 .preview__bg {
   position: absolute; inset: 0;
@@ -410,18 +402,52 @@ svg { flex: none; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-.design__controls { display: flex; flex-direction: column; }
+.design__controls { display: flex; flex-direction: column; gap: 12px; }
 
-/* ---------------------------------------------------------------- ленты выбора */
-/* Стиль, шрифт и цвет — каждый одной лентой «таблеток», листается вбок.
-   Стрелки по краям для мыши, палец листает и так; стрелка видна, только
-   когда в её сторону есть куда листать. */
-.picker { padding: 16px 0 6px; overflow: hidden; }
-.picker__head { display: flex; align-items: baseline; gap: 8px; padding: 0 18px 8px; }
-.picker__head h2 {
+/* ---------------------------------------------------------------- вкладки оформления */
+/* Стиль · Шрифт · Цвет · Эффекты · Музыка. Открыт один раздел — выбор не
+   уводит превью из виду. Вид — как у переключателя `.seg`. */
+.dtabs {
+  display: flex; gap: 4px; padding: 4px; border-radius: 999px; flex: none;
+  background: var(--card-2); border: 1px solid var(--line);
+  overflow-x: auto; scrollbar-width: none;
+}
+.dtabs::-webkit-scrollbar { display: none; }
+/* Пять вкладок делят ширину поровну и на 360 px помещаются целиком; уже —
+   полоса листается вбок, а не обрезает подпись. */
+.dtab {
+  position: relative; flex: 1 0 auto; min-height: 40px; padding: 0 8px; border-radius: 999px;
+  font-weight: 700; font-size: clamp(12px, 3.5vw, 14px); color: var(--muted); white-space: nowrap;
+  text-align: center;
+  transition: background 140ms ease, color 140ms ease;
+}
+.dtab.is-active { background: var(--pill); color: var(--pill-text); }
+/* Трек прикреплён — видно и с закрытой вкладки. */
+.dtab.has-value::after {
+  content: ""; position: absolute; top: 7px; right: 7px;
+  width: 7px; height: 7px; border-radius: 50%; background: #ff4d8a;
+}
+.dpanels { overscroll-behavior: contain; }
+/* Подпись темы на маленьком кадре налезала на субтитр и обрезалась
+   многоточием; выбранная тема и так подсвечена во вкладке. */
+.preview { container-type: size; }
+@container (max-height: 320px) { .preview__tag { display: none; } }
+.dpanel__head { display: flex; align-items: baseline; gap: 8px; margin: 2px 2px 10px; }
+.dpanel__head h2 {
   font-size: 12px; font-weight: 800; color: var(--muted);
   letter-spacing: 0.1em; text-transform: uppercase;
 }
+/* Во вкладке места хватает на несколько рядов: варианты лежат сеткой, и
+   видно сразу шесть-девять, а не два с половиной в ленте. */
+.dpanel .strip { margin: 0; }
+.dpanel .strip__track { flex-wrap: wrap; overflow: visible; padding: 2px 0 6px; -webkit-mask-image: none; mask-image: none; }
+.dpanel .strip__arrow { display: none; }
+.design__foot { flex: none; display: flex; flex-direction: column; gap: 4px; }
+.design__foot .cta { margin-top: 0; }
+
+/* ---------------------------------------------------------------- ленты выбора */
+/* Таблетки стиля, шрифта и цвета. Стрелки по краям для мыши, палец листает
+   и так; стрелка видна, только когда в её сторону есть куда листать. */
 .strip { position: relative; margin-bottom: 12px; }
 .strip__track {
   display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
@@ -744,13 +770,35 @@ svg { flex: none; }
 @media (min-width: 980px) {
   .design { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 28px; align-items: start; }
   .design__stage { display: block; position: sticky; top: 96px; }
-  .preview-wrap { --prev-h: min(calc(100vh - 140px), 560px); position: static; margin: 0; padding: 0; height: auto; background: none; }
-  .preview-wrap.is-compact { height: auto; }
-  .preview-wrap.is-compact .preview { transform: none; }
+  .preview-wrap { --prev-h: min(calc(100vh - 140px), 560px); }
   .step[data-step="1"] { max-width: 640px; }
 }
-@media (min-width: 720px) and (max-width: 979px) {
-  .preview-wrap { margin: 0; padding: 4px 0 0; }
+
+/* Шаг оформления во всё окно (телефон и узкий планшет). Высота шага — окно
+   минус шапка минус нижняя панель, поэтому страница не листается вовсе:
+   сверху кадр постоянного размера, под ним вкладки, ниже — кнопка. Листается
+   только содержимое вкладки. Окно — по «стабильной» высоте Telegram: она не
+   прыгает, пока пользователь тянет панель или открывает клавиатуру. */
+:root { --app-h: 100vh; }
+@supports (height: 100dvh) { :root { --app-h: 100dvh; } }
+@media (max-width: 979.98px) {
+  html.is-design .main { padding-bottom: 0; }
+  html.is-design .design {
+    --avail: calc(var(--tg-viewport-stable-height, var(--app-h)) - var(--top-h) - var(--tabbar-h, 0px) - 4px);
+    height: var(--avail);
+    display: flex; flex-direction: column; gap: 12px; padding-bottom: 12px;
+  }
+  /* Кадру — всё, что остаётся после вкладок, кнопки и ~170 px на варианты. */
+  html.is-design .preview-wrap { --prev-h: clamp(140px, calc(var(--avail) - 330px), 440px); }
+  html.is-design .design__controls { flex: 1; min-height: 0; }
+  /* Низ вкладки растворяется: видно, что вариантов больше и их можно листать. */
+  html.is-design .dpanels {
+    flex: 1; min-height: 0; overflow-y: auto; margin: 0 -18px; padding: 0 18px 14px;
+    -webkit-mask-image: linear-gradient(#000 calc(100% - 22px), transparent);
+    mask-image: linear-gradient(#000 calc(100% - 22px), transparent);
+  }
+  /* «Назад» уже есть в шапке, а строка лишь отнимала место у вариантов. */
+  html.is-design #to-step1 { display: none; }
 }
 
 /* Палец: мишень не меньше 44 px. Вид кнопок прежний — растёт только зона
@@ -801,5 +849,5 @@ svg { flex: none; }
   /* Слово не мигает раз в 280 мс, а просто стоит: таймер в app.js при этой
      настройке не запускается вовсе, и кадр собирается один раз. */
   .cap-word { transition: none; transform: none; opacity: 1; }
-  .preview, .preview-wrap { transition: none; }
+  .dtab { transition: none; }
 }

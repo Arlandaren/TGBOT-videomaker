@@ -26,6 +26,7 @@ const I18N = {
     "edit.s1_lead": "Видео, где человек говорит в камеру. Соберём из него вертикальный ролик с субтитрами.",
     "edit.limits": "до {mb} МБ · от {min} с до {max} мин",
     "edit.style": "Стиль субтитров", "edit.font": "Шрифт", "edit.color": "Цвет выделения", "edit.effects": "Эффекты",
+    "tab.style": "Стиль", "tab.color": "Цвет", "tab.music": "Музыка",
     "music.title": "Музыка по ссылке", "music.placeholder": "Ссылка на рилс, TikTok или файл", "music.paste": "Вставить",
     "music.checking": "Достаём звук…", "music.ready": "Трек {t}", "music.clear": "Убрать музыку",
     "music.hint": "Звук по ссылке тихо заиграет под вашей речью",
@@ -124,6 +125,7 @@ const I18N = {
     "edit.s1_lead": "A video of someone talking to the camera. We'll turn it into a vertical reel with captions.",
     "edit.limits": "up to {mb} MB · {min} s to {max} min",
     "edit.style": "Caption style", "edit.font": "Typeface", "edit.color": "Highlight colour", "edit.effects": "Effects",
+    "tab.style": "Style", "tab.color": "Colour", "tab.music": "Music",
     "music.title": "Music from a link", "music.placeholder": "Reel, TikTok or file link", "music.paste": "Paste",
     "music.checking": "Getting the sound…", "music.ready": "Track {t}", "music.clear": "Remove music",
     "music.hint": "The sound plays quietly under your voice",
@@ -985,6 +987,7 @@ function renderNext() {
 function setStep(step) {
   state.step = step;
   for (const s of $$("[data-step]")) s.hidden = Number(s.dataset.step) !== step;
+  syncDesignMode();
   window.scrollTo({ top: 0 });
   renderHeader();
   syncBackButton();
@@ -1003,7 +1006,49 @@ function setStep(step) {
   }
 }
 
+// Шаг оформления на телефоне занимает ровно окно: превью сверху, под ним
+// вкладки, и листается только открытая вкладка. Класс на <html>, потому что
+// подстраивать надо и отступ под нижней панелью у .main.
+function syncDesignMode() {
+  document.documentElement.classList.toggle("is-design", state.screen === "edit" && state.step === 2);
+}
+
+// Высота нижней панели нужна вёрстке шага оформления: окно минус шапка минус
+// панель. Меряем, а не угадываем: у неё отступ под «чёлку», а с 720 px она
+// скрыта вовсе.
+function syncTabbarHeight() {
+  const bar = $(".tabbar");
+  if (!bar) return;
+  const put = () => document.documentElement.style.setProperty("--tabbar-h", `${bar.offsetHeight}px`);
+  put();
+  if (window.ResizeObserver) new ResizeObserver(put).observe(bar);
+  addEventListener("resize", put, { passive: true });
+}
+
+function showDesignTab(name) {
+  state.designTab = name;
+  for (const t of $$("#design-tabs .dtab")) {
+    const on = t.dataset.tab === name;
+    t.classList.toggle("is-active", on);
+    t.setAttribute("aria-selected", on ? "true" : "false");
+  }
+  for (const p of $$(".dpanel")) p.hidden = p.dataset.panel !== name;
+  const panel = $(`.dpanel[data-panel="${name}"]`);
+  // Выбранный вариант — на виду: семнадцать стилей в два-три ряда не влезают.
+  const active = panel && panel.querySelector(".is-active");
+  const box = $(".dpanels");
+  box.scrollTop = 0;
+  if (active) {
+    const below = active.getBoundingClientRect().bottom - box.getBoundingClientRect().bottom;
+    if (below > 0) box.scrollTop = below + 8;
+  }
+  syncAllArrows();
+}
+
 function initEdit() {
+  for (const t of $$("#design-tabs .dtab")) {
+    t.addEventListener("click", () => { haptic(); showDesignTab(t.dataset.tab); });
+  }
   $("#preview-play").addEventListener("click", () => { preview.toggle(); haptic(); });
   $("#requirements").addEventListener("click", () => {
     const l = state.boot.limits;
@@ -1069,6 +1114,9 @@ function renderMusic() {
   const card = $("#music-card");
   if (!card) return;
   card.dataset.state = m.status;
+  // Точка на вкладке «Музыка»: трек прикреплён, даже когда вкладка закрыта.
+  const tab = $('.dtab[data-tab="music"]');
+  if (tab) tab.classList.toggle("has-value", m.status === "ready");
   $("#music-clear").hidden = m.status === "empty" && !$("#music-input").value;
   $("#music-paste").hidden = !$("#music-clear").hidden;
   const text = {
@@ -1870,6 +1918,7 @@ function go(screen, { push = true, replace = false } = {}) {
   }
   for (const s of $$("[data-screen]")) s.hidden = s.dataset.screen !== screen;
   for (const b of $$("[data-nav]")) b.classList.toggle("is-active", b.dataset.nav === screen);
+  syncDesignMode();
   window.scrollTo({ top: 0 });
   renderHeader();
   syncBackButton();
@@ -1968,12 +2017,17 @@ async function main() {
       preview.render();
     });
   }
-  // Превью прилипает под шапкой и ужимается, когда человек ушёл листать
-  // ленты: иначе выбор цвета и шрифта меняет то, чего в этот момент не видно.
-  const wrap = $("#preview-wrap");
-  addEventListener("scroll", () => {
-    wrap.classList.toggle("is-compact", window.scrollY > 120);
-  }, { passive: true });
+  // Превью стоит на месте и одного размера — но размер этот зависит от высоты
+  // окна (клавиатура, поворот, панель Telegram). Кегль субтитра считается от
+  // высоты кадра, поэтому на смене размера кадр перерисовывается.
+  if (window.ResizeObserver) {
+    let h = 0;
+    new ResizeObserver(([e]) => {
+      const nh = Math.round(e.contentRect.height);
+      if (nh && nh !== h) { h = nh; preview.render(); }
+    }).observe($("#preview"));
+  }
+  syncTabbarHeight();
   // Вкладка в фоне — таймер не нужен; возврат к ней пересчитывает кадр.
   document.addEventListener("visibilitychange", syncPreview);
 

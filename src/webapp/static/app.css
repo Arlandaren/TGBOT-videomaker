@@ -507,7 +507,10 @@ svg { flex: none; }
 
 .chip { padding: 0 18px 0 14px; }
 .chip__aa { font-family: var(--chip-font), system-ui, sans-serif; font-size: 22px; line-height: 1; font-weight: 400; }
-.chip__name { font-size: 14px; font-weight: 700; }
+/* Название шрифта набрано ИМ ЖЕ, а не шрифтом интерфейса: пятнадцать подписей
+   одним системным шрифтом читались как «все шрифты одинаковые», хотя образец
+   «Аа» рядом был разный. */
+.chip__name { font-family: var(--chip-font), system-ui, sans-serif; font-size: 15px; font-weight: 700; }
 
 .swatch { padding: 0 18px 0 14px; font-size: 14px; }
 .swatch__dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 1px rgb(255 255 255 / 18%); }

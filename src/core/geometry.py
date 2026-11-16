@@ -860,6 +860,23 @@ def line_box_height(
     return biggest * (lh / 2 + half) + min(all_sizes) * (lh / 2 - half)
 
 
+def line_rise(
+    sizes: Iterable[float], preset: Any, *, metrics: "FontMetrics | None" = None
+) -> float:
+    """Расстояние от верха строчного бокса до БАЗОВОЙ ЛИНИИ строки.
+
+    Тот же расчёт, что в `line_box_height` (подъём бокса кеглем F — это
+    `F·(lh/2 + c)`, и в строке участвует струт контейнера), только для строки
+    одного шрифта. Нужен там, где важно не сколько места занимает строка, а где
+    в ней стоят буквы: у титра с межстрочием 0.5 строчные боксы заходят друг на
+    друга, и положение букв по ним не узнать.
+    """
+    metrics = metrics or metrics_for(preset)
+    half = (metrics.ascender + metrics.descender) / (2 * metrics.units_per_em)
+    lh = float(preset.caption.line_height)
+    return max([float(preset.font.size), *(float(s) for s in sizes)]) * (lh / 2 + half)
+
+
 def block_rect(
     position: str,
     text_w: float,

@@ -142,6 +142,10 @@ const main = async () => {
       accentFontUrl: withPrefix(prefix, plan.accentFontUrl),
       emojiFontUrl: withPrefix(prefix, plan.emojiFontUrl),
       broll: (plan.broll ?? []).map((b) => ({ ...b, asset: withPrefix(prefix, b.asset) })),
+      // Папка с масками блока, уходящего за голову, лежит там же, где видео.
+      blocks: (plan.blocks ?? []).map((b) =>
+        b.behind ? { ...b, behind: { ...b.behind, dir: withPrefix(prefix, b.behind.dir) } } : b,
+      ),
     };
 
     const composition = await selectComposition({

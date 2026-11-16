@@ -25,7 +25,7 @@ from typing import Awaitable, Callable
 
 from src.core.config import Settings, settings as default_settings
 from src.core.proc import ProcError, arun, run
-from src.core.render_plan import RenderPlan
+from src.core.render_plan import PlanBehind, RenderPlan
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +68,30 @@ def _stage_asset(src: str | Path, assets_dir: Path) -> str:
     return dst.name
 
 
+def _stage_masks(behind: PlanBehind, assets_dir: Path) -> str | None:
+    """Кладёт маски блока в директорию джоба; имя папки относительно неё или `None`.
+
+    Имена файлов — номера кадров (`matte.write_masks`), их и ждёт рендерер.
+    """
+    src = Path(behind.dir)
+    names = [f"{n:05d}.png" for n in range(behind.first, behind.last + 1)]
+    if not all((src / name).is_file() for name in names):
+        return None
+    try:
+        return str(src.resolve().relative_to(assets_dir.resolve()))
+    except ValueError:
+        pass
+    dst = assets_dir / "matte-title"
+    dst.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        if not (dst / name).exists():
+            try:
+                os.link(src / name, dst / name)
+            except OSError:
+                shutil.copy2(src / name, dst / name)
+    return dst.name
+
+
 def prepare_assets(
     plan: RenderPlan, assets_dir: Path, *, cfg: Settings | None = None
 ) -> RenderPlan:
@@ -100,6 +124,17 @@ def prepare_assets(
                 "второй шрифт %s не найден в %s — слово нарисуется шрифтом строки",
                 accent_file, cfg.fonts_dir,
             )
+    # Маски блока, уходящего за голову, едут папкой. Не хватает хоть одной —
+    # приём снимается целиком: титр с маской на половине кадров мигал бы.
+    for block in plan.blocks:
+        if block.behind is None:
+            continue
+        staged = _stage_masks(block.behind, assets_dir)
+        if staged is None:
+            log.warning("маски титра не найдены в %s — титр нарисуется поверх", block.behind.dir)
+            block.behind = None
+        else:
+            block.behind.dir = staged
     # Шрифт эмодзи — только роликам со значками: это 10 МБ, и ролику без
     # значков везти их в бандл незачем.
     if any((b.pill is not None and b.pill.emoji) or b.icon is not None for b in plan.blocks):

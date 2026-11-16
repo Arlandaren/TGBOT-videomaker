@@ -37,10 +37,12 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal, Sequence
 
 from src.core.anchor import fallbacks, follow_offsets
+from src.core.behind import BehindDecision
 from src.core.config import Settings, settings as default_settings
 from src.core.edl import EDL, LIST_MIN_ITEMS, Emphasis, Timeline, list_runs
 from src.core.geometry import (
@@ -111,6 +113,20 @@ class PlanPill:
 
 
 @dataclass(slots=True)
+class PlanBehind:
+    """Маска «не человек» для блока, уходящего за голову (`src/core/behind.py`).
+
+    `dir` — папка с файлами `NNNNN.png` (номер — кадр выходного ролика, альфа =
+    «не человек»), `first..last` — кадры, на которые маски есть. Рендерер
+    накладывает маску кадра на блок; вне диапазона держит крайнюю.
+    """
+
+    dir: str
+    first: int
+    last: int
+
+
+@dataclass(slots=True)
 class PlanIcon:
     """Значок карточки: круглое стеклянное окошко слева от блока со стеклом.
 
@@ -176,6 +192,9 @@ class PlanBlock:
     # ЗНАЧОК карточки (`CaptionBlock.emoji` у блока со стеклом). `None` — блок
     # без значка, то есть любой блок до появления карточек.
     icon: PlanIcon | None = None
+    # Блок уходит ЗА голову говорящего: маска человека на его кадрах. Бывает
+    # только у титра, и только когда замер по маске это разрешил.
+    behind: PlanBehind | None = None
 
     @property
     def words(self) -> list[PlanWord]:
@@ -244,6 +263,7 @@ class RenderPlan:
                     title_card=bool(b.get("title_card", False)),
                     pill=PlanPill(**b["pill"]) if b.get("pill") else None,
                     icon=PlanIcon(**b["icon"]) if b.get("icon") else None,
+                    behind=PlanBehind(**b["behind"]) if b.get("behind") else None,
                 )
                 for b in data.get("blocks", [])
             ],
@@ -288,6 +308,7 @@ class RenderPlan:
                     "title_card": b.title_card,
                     "pill": asdict(b.pill) if b.pill else None,
                     "icon": asdict(b.icon) if b.icon else None,
+                    "behind": asdict(b.behind) if b.behind else None,
                 }
                 for b in self.blocks
             ],
@@ -861,8 +882,13 @@ def build_plan(
     cfg: Settings | None = None,
     meta: dict[str, Any] | None = None,
     track: FaceTrack | None = None,
+    behind: BehindDecision | None = None,
 ) -> RenderPlan:
     """EDL → RenderPlan.
+
+    `behind` — решение «титр уходит за голову» (`pipeline.matte.measure_behind`).
+    Приходит отдельным входом, как трек: это замер по готовому видео, а не
+    монтажное решение, и в EDL ему не место. Без него титр рисуется как обычно.
 
     `apply_cuts=True` означает, что видео УЖЕ нарезано по EDL.cuts и время надо
     пересчитать на выходной таймлайн. `False` — рисуем поверх исходника.
@@ -1546,7 +1572,7 @@ def build_plan(
             [*blocks, *(p for stack in stacks for p in stack)], key=lambda b: b.start
         )
 
-    def title_card_block() -> PlanBlock | None:
+    def title_card_block() -> tuple[PlanBlock, TitleCard] | None:
         """Титр ролика или `None`, если ему в этом ролике не место (STYLE_PLAN §5).
 
         Текст приезжает заголовком листа (`EDL.title`), а не из речи: титр — это
@@ -1594,6 +1620,29 @@ def build_plan(
             log.info("титр не поставлен: ролик (%.2f с) короче титра", duration)
             return None
 
+        # Титр за головой: место по вертикали подобрано по маске человека
+        # (`behind.pick_shift`). Решение годится только для ЭТОГО титра — того
+        # же кадра начала; иначе маски лягут мимо. Сдвинутый титр, которому
+        # помешал субтитр или картинка, уступает обычному, а не пропадает.
+        if (
+            behind is not None
+            and behind.on
+            and card.behind
+            and behind.first == math.floor(start * fps + 0.5)
+        ):
+            shifted = card.model_copy(update={"margin": card.margin + round(behind.dy)})
+            block = card_at(shifted, text, start, end)
+            if block is not None:
+                block.behind = PlanBehind(dir=behind.dir, first=behind.first, last=behind.last)
+                return block, shifted
+            log.info("титр за головой не встал на подобранное место — рисуем обычный")
+        block = card_at(card, text, start, end)
+        return (block, card) if block is not None else None
+
+    def card_at(
+        card: TitleCard, text: str, start: float, end: float
+    ) -> PlanBlock | None:
+        """Титр с этими числами или `None`, если ему в кадре не место."""
         card_ps = card.preset(ps)
         words = title_card_words(
             text, card, (start, end), uppercase=card_ps.font.uppercase
@@ -1641,13 +1690,21 @@ def build_plan(
             title_card=True,
         )
 
-    card_block = title_card_block()
-    if card_block is not None:
+    placed = title_card_block()
+    plan_preset = ps
+    if placed is not None:
+        card_block, card_used = placed
         # Титр идёт ПЕРВЫМ и в обрезку соседей выше не попадает намеренно: она
         # разводит блоки, стоящие в одном месте кадра друг за другом, а титр
         # стоит в своей полосе — пустой, иначе его бы тут не было, — и обрывать
         # его началом нижнего субтитра не за что.
         blocks.insert(0, card_block)
+        if card_used is not ps.caption.title_card:
+            # Титр сдвинут под голову: рендерер берёт отступ титра из пресета в
+            # плане, поэтому туда уезжает сдвинутое число. Копия — `ps` может
+            # быть общим объектом темы из кеша, его трогать нельзя.
+            plan_preset = ps.model_copy(deep=True)
+            plan_preset.caption.title_card = card_used
 
     return RenderPlan(
         version=1,
@@ -1657,7 +1714,7 @@ def build_plan(
         duration=duration,
         video=video_path,
         audio=audio_path,
-        preset=ps.model_dump(),
+        preset=plan_preset.model_dump(),
         blocks=blocks,
         broll=broll,
         meta=meta or {},

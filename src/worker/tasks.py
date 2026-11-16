@@ -334,7 +334,7 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
     from src.core.track import load_track
     from src.pipeline.crop import autocrop, framing_spans
     from src.pipeline.cut import apply_cuts
-    from src.pipeline.job import _measure_luma
+    from src.pipeline.job import _measure_behind, _measure_luma
     from src.pipeline.probe import probe
     from src.pipeline.render import arender_remotion, render_ass
     from src.pipeline.split import stage_split
@@ -434,11 +434,18 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
         # идёт и нарезка, и кроп — а трек живёт в координатах ВЫХОДНОГО кадра,
         # которые от пресета зависят (другая крупность — другое окно). Кеш дал бы
         # экономию на одном проходе YuNet ценой трека, который врёт про кадр.
+        # Маска человека под титр — тоже заново и по той же причине: кроп
+        # другой, значит и кадры титра другие.
+        behind = await asyncio.to_thread(
+            _measure_behind, edl, vertical, work, preset=style, cut_pauses=options.cut,
+            backend=settings.render_backend, cfg=settings,
+        )
         plan = build_plan(
             edl, str(vertical), fps=int(round(staged_info.fps)),
             width=staged_info.width, height=staged_info.height,
             preset=style, apply_cuts=options.cut, audio_path=audio_path, cfg=settings,
             track=load_track(work / "track.json"),
+            behind=behind,
         )
         out = work / "result.mp4"
         if settings.render_backend == "ass":

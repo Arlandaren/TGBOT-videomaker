@@ -97,6 +97,15 @@ export type PlanBlock = {
    * Числа готовые (`render_plan.PlanIcon`): диаметр, кегль эмодзи, просвет до
    * панели. Панель и значок стоят одной группой по центру кадра.
    */
+  /**
+   * Блок уходит ЗА голову говорящего: маска «не человек» по файлу на кадр,
+   * `<dir>/NNNNN.png` для кадров `first..last` (`src/pipeline/matte.py`).
+   */
+  behind?: {
+    dir: string;
+    first: number;
+    last: number;
+  } | null;
   icon?: {
     emoji: string;
     size: number;

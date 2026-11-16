@@ -28,6 +28,7 @@
 import React from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { PlanBlock, PlanWord, Preset } from "../types";
+import { behindStyle, useBehindMasks } from "./Behind";
 import {
   MIN_ANIM_FRAMES,
   animFrames,
@@ -901,6 +902,9 @@ export const Captions: React.FC<{ blocks: PlanBlock[]; preset: Preset }> = ({ bl
   // него не влияет: про вход и уход верхнего блока эталон ничего отдельного не
   // говорит, и числа анимации у регистров общие.
   const tail = blockOutFrames(preset, fps);
+  // Маски блоков, уходящих за голову. Хук стоит ДО раннего выхода: он держит
+  // рендер, пока маски не загружены, и обязан вызываться на каждом кадре.
+  const masks = useBehindMasks(blocks);
 
   const visible = blocks.filter(
     (b) => frame >= Math.round(b.start * fps) && frame <= Math.round(b.end * fps) + tail,
@@ -988,6 +992,9 @@ export const Captions: React.FC<{ blocks: PlanBlock[]; preset: Preset }> = ({ bl
               transform: (([dx, dy]) =>
                 dx || dy ? `translate(${dx}px, ${dy}px)` : undefined)(anchorShift(block)),
               willChange: block.anchor_path ? "transform" : undefined,
+              // Блок за головой: маска «не человек» на весь кадр. Обёртка и есть
+              // кадр, а собственное движение блока идёт под неподвижной маской.
+              ...behindStyle(block, frame, masks),
             }}
           >
             <Block block={block} preset={ps} />

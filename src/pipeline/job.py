@@ -125,6 +125,38 @@ def _measure_luma(
         log.warning("замер яркости фона пропущен: %s", e)
 
 
+def _measure_behind(
+    edl: EDL,
+    staged: Path,
+    work: Path,
+    *,
+    preset: Any,
+    cut_pauses: bool,
+    backend: str,
+    cfg: Settings,
+):
+    """Решение «титр уходит за голову» для `build_plan` или `None`.
+
+    Место то же, что у замера яркости: после кропа (маска считается по кадру,
+    который увидит рендерер) и до `build_plan`. Запасному рендеру маска не
+    нужна — он её не рисует. Сбой здесь не стоит ролика: титр нарисуется как
+    обычно (`matte.measure_behind` исключений не бросает, но модуль тянет
+    numpy и onnxruntime — их отсутствие тоже не повод ронять задачу).
+    """
+    if backend != "remotion":
+        return None
+    try:
+        from src.pipeline.matte import measure_behind
+
+        return measure_behind(
+            edl, staged, work, preset=preset, apply_cuts=cut_pauses,
+            track=load_track(work / "track.json"), cfg=cfg,
+        )
+    except Exception as e:  # noqa: BLE001 — приём важен, но ролик важнее
+        log.warning("титр за головой пропущен: %s", e)
+        return None
+
+
 # Тяжёлые этапы (ffmpeg, Whisper, YuNet) синхронные, и вызываются они через
 # `asyncio.to_thread`. Причина не в скорости — ускорения тут нет никакого, этапы
 # всё равно идут друг за другом, а воркер берёт один ролик за раз. Причина в том,
@@ -378,6 +410,13 @@ async def process_video(
         )
         mark("luma", t)
 
+        t = time.perf_counter()
+        behind = await asyncio.to_thread(
+            _measure_behind, edl, staged, work, preset=style, cut_pauses=cut_pauses,
+            backend=backend or cfg.render_backend, cfg=cfg,
+        )
+        mark("matte", t)
+
         # ---------------------------------------------------------- рендер
         await _notify(progress, "render")
         t = time.perf_counter()
@@ -393,6 +432,7 @@ async def process_video(
             audio_path=audio_path,
             cfg=cfg,
             track=load_track(work / "track.json"),
+            behind=behind,
         )
         (work / "plan.json").write_text(
             json.dumps(plan.to_dict(), ensure_ascii=False, indent=1), encoding="utf-8"
@@ -565,6 +605,13 @@ async def process_from_edl(
     mark("luma", t)
 
     t = time.perf_counter()
+    behind = _measure_behind(
+        edl, staged, work, preset=style, cut_pauses=cut_pauses,
+        backend=backend or cfg.render_backend, cfg=cfg,
+    )
+    mark("matte", t)
+
+    t = time.perf_counter()
     staged_info = probe(staged)
     plan = build_plan(
         edl,
@@ -577,6 +624,7 @@ async def process_from_edl(
         audio_path=audio_path,
         cfg=cfg,
         track=load_track(work / "track.json"),
+        behind=behind,
     )
     (work / "plan.json").write_text(
         json.dumps(plan.to_dict(), ensure_ascii=False, indent=1), encoding="utf-8"

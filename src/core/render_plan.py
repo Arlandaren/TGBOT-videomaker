@@ -57,6 +57,7 @@ from src.core.geometry import (
     emphasis_size,
     line_box_height,
     line_gap,
+    line_size,
     measure_word,
     metrics_for,
     word_metrics,
@@ -401,10 +402,10 @@ class _Ruler:
             word_spacing=self.word_spacing,
         )
 
-    @property
-    def space(self) -> float:
+    def space_at(self, size: float) -> float:
+        """Пробел между словами в строке этого кегля (`geometry.line_size`)."""
         return space_width(
-            self.base_size,
+            size,
             metrics=self.metrics,
             letter_spacing=self.letter_spacing,
             word_spacing=self.word_spacing,
@@ -414,7 +415,8 @@ class _Ruler:
         if not line:
             return 0.0
         total = sum(self.word(w, w.size or self.base_size) for w in line)
-        return total + self.space * (len(line) - 1)
+        space = self.space_at(line_size(w.size or self.base_size for w in line))
+        return total + space * (len(line) - 1)
 
     def fit_size(self, word: PlanWord, size: float, floor: float) -> float:
         """Кегль, при котором слово влезает в строку в одиночку.
@@ -439,14 +441,25 @@ class _Ruler:
 def _greedy(words: Sequence[PlanWord], ruler: _Ruler) -> list[list[PlanWord]]:
     """Жадная укладка по уже проставленным кеглям. Порядок слов не меняется."""
     lines: list[list[PlanWord]] = [[]]
-    width = 0.0
+    # Ширины слов текущей строки и её кегль: пробел рисуется кеглем строки
+    # (самых мелких её слов), поэтому с каждым новым словом он может стать уже,
+    # и ширину строки приходится считать целиком, а не копить.
+    owns: list[float] = []
+    smallest = float("inf")
+
+    def width_with(own: float, size: float) -> float:
+        space = ruler.space_at(min(smallest, size))
+        return sum(owns) + own + space * len(owns)
+
     for w in words:
-        own = ruler.word(w, w.size or ruler.base_size)
-        if lines[-1] and width + ruler.space + own > ruler.budget:
+        size = w.size or ruler.base_size
+        own = ruler.word(w, size)
+        if lines[-1] and width_with(own, size) > ruler.budget:
             lines.append([])
-            width = 0.0
+            owns, smallest = [], float("inf")
         lines[-1].append(w)
-        width += own + (ruler.space if len(lines[-1]) > 1 else 0.0)
+        owns.append(own)
+        smallest = min(smallest, size)
     return [line for line in lines if line]
 
 

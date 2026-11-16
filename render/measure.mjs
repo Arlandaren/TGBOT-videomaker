@@ -128,15 +128,38 @@ const buildPage = (req) => {
  * Всё измерение целиком уезжает в страницу одной функцией: `evaluate`
  * сериализует её текстом, и ничего из области видимости Node внутри не будет.
  */
-const measureInPage = (items, boxes, weight, baseSize, lineHeight, accentWeight) => {
+const measureInPage = (
+  items,
+  boxes,
+  weight,
+  baseSize,
+  lineHeight,
+  accentWeight,
+  letterSpacing,
+  wordSpacing,
+) => {
   /** Строка: спаны слов и настоящие пробелы между ними, без переносов. */
   const buildLine = (words, inline) => {
     const line = document.createElement("div");
     line.className = "line";
     if (inline) line.style.display = "inline-block";
     const spans = [];
+    // Пробел между словами -- спан кеглем СТРОКИ (самых мелких её слов), с
+    // разрядкой и поправкой к пробелу в em от этого же кегля: ровно так его
+    // рисует Captions.tsx (`gapStyle`) и считает `geometry.space_width`.
+    const lineSize = Math.min(...words.map((word) => word.size || baseSize));
     words.forEach((word, i) => {
-      if (i > 0) line.appendChild(document.createTextNode(" "));
+      if (i > 0) {
+        const gap = document.createElement("span");
+        gap.textContent = " ";
+        // Правило `.line > span` делает спаны слов inline-block; пробелу оно
+        // не годится -- в inline-block одинокий пробел схлопывается в ноль.
+        gap.style.display = "inline";
+        gap.style.fontSize = `${lineSize}px`;
+        gap.style.letterSpacing = `${letterSpacing}em`;
+        gap.style.wordSpacing = `${wordSpacing}em`;
+        line.appendChild(gap);
+      }
       const span = document.createElement("span");
       span.textContent = word.text;
       if (word.size) span.style.fontSize = `${word.size}px`;
@@ -265,6 +288,8 @@ const main = async () => {
       req.base_size ?? 100,
       req.line_height ?? 1,
       req.accent_font ? (req.accent_weight ?? 400) : null,
+      req.letter_spacing ?? 0,
+      req.word_spacing ?? 0,
     );
     process.stdout.write(JSON.stringify(result) + "\n");
   } finally {

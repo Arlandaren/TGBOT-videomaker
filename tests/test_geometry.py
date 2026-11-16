@@ -441,6 +441,71 @@ def test_a_line_loses_the_spacing_once_per_gap(metrics):
     assert tight == pytest.approx(plain - 2 * 8.8)
 
 
+def test_the_gap_follows_the_size_of_the_words_in_the_line(metrics):
+    """Пробел рисуется кеглем СТРОКИ — самых мелких её слов, а не кеглем темы.
+
+    Блок, который не влез, ужимается целиком; блок с короткой строкой растёт
+    под ширину кадра. Пока пробел стоял кеглем темы, у ужатой строки буквы
+    становились мельче, а пробел оставался прежним — слова разъезжались вдвое
+    шире задуманного (замер: каждая пятая строка в pulse). Пробел обязан быть
+    той же долей буквы при любом кегле.
+    """
+    small = [SizedWord("один", 44), SizedWord("два", 44)]
+    line = measure_line(small, metrics=metrics, letter_spacing=-0.015, base_size=88)
+    solo = sum(
+        measure_word(w.text, w.size, metrics=metrics, letter_spacing=-0.015, spacing_size=88)
+        for w in small
+    )
+    assert line - solo == pytest.approx(space_width(44, metrics=metrics, letter_spacing=-0.015))
+
+    big = [SizedWord("один", 132), SizedWord("два", 132)]
+    line = measure_line(big, metrics=metrics, letter_spacing=-0.015, base_size=88)
+    solo = sum(
+        measure_word(w.text, w.size, metrics=metrics, letter_spacing=-0.015, spacing_size=88)
+        for w in big
+    )
+    assert line - solo == pytest.approx(space_width(132, metrics=metrics, letter_spacing=-0.015))
+
+
+def test_an_accent_word_does_not_widen_the_gap(metrics):
+    """Кегль строки — кегль её обычных слов: крупное выделенное слово пробел не раздвигает."""
+    mixed = [SizedWord("одну", 60), SizedWord("истину", 150)]
+    line = measure_line(mixed, metrics=metrics, base_size=88)
+    solo = sum(measure_word(w.text, w.size, metrics=metrics) for w in mixed)
+    assert line - solo == pytest.approx(space_width(60, metrics=metrics))
+
+
+def test_the_production_ruler_spaces_a_line_by_its_own_size():
+    from src.core.render_plan import PlanWord, _Ruler
+
+    preset = load_preset("pulse").scaled(1920)
+    m = metrics_for(preset)
+    ruler = _Ruler(
+        metrics=m,
+        letter_spacing=preset.font.letter_spacing,
+        base_size=float(preset.font.size),
+        budget=800.0,
+        word_spacing=preset.font.word_spacing,
+    )
+    line = [PlanWord(text=t, start=0, end=1, size=40.0) for t in ("бота", "можно")]
+    assert ruler.line_width(line) == pytest.approx(
+        measure_line(
+            [SizedWord(w.text, w.size) for w in line],
+            metrics=m,
+            letter_spacing=preset.font.letter_spacing,
+            base_size=float(preset.font.size),
+            word_spacing=preset.font.word_spacing,
+        )
+    )
+    gap = ruler.line_width(line) - sum(ruler.word(w, w.size) for w in line)
+    assert gap == pytest.approx(
+        space_width(
+            40.0, metrics=m, letter_spacing=preset.font.letter_spacing,
+            word_spacing=preset.font.word_spacing,
+        )
+    )
+
+
 @pytest.mark.parametrize("name", ALL_PRESETS)
 def test_no_theme_sets_words_far_apart(name):
     """Зазор между словами в раскладке — не шире 0.30 em ни в одной теме.

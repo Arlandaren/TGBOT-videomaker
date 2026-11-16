@@ -282,3 +282,29 @@ def test_a_theme_with_one_font_sends_no_second_font(tmp_path):
         _request_payload(RenderRequest(plan=plan, out=tmp_path / "o.mp4", assets_dir=assets, job_key="k"))
     )
     assert payload["plan"]["accentFontUrl"] is None
+
+
+def test_the_gap_between_words_is_drawn_the_same_way_as_it_is_measured():
+    """Пробел между словами — спан кеглем СТРОКИ, и рисует его кадр так же, как меряет линейка.
+
+    Сверка 2 px идёт между Python и страницей `measure.mjs`; настоящий кадр
+    рисует Captions.tsx. Если пробел в них устроен по-разному, сверка проходит,
+    а кадр разъезжается — на ширину пробела в каждом промежутке.
+    """
+    from pathlib import Path
+
+    render = Path(__file__).resolve().parents[1] / "render"
+    captions = (render / "src" / "layers" / "Captions.tsx").read_text()
+    measure = (render / "measure.mjs").read_text()
+
+    # Кегль строки — самый мелкий кегль её слов (`geometry.line_size`).
+    assert "fontSize: Math.min(...line.map((word) => wordSize(word, preset)))" in captions
+    assert "Math.min(...words.map((word) => word.size || baseSize))" in measure
+    # Разрядка и поправка к пробелу — в em от того же кегля, с обеих сторон.
+    assert "letterSpacing: `${preset.font.letter_spacing}em`" in captions
+    assert "wordSpacing: `${preset.font.word_spacing ?? 0}em`" in captions
+    assert "gap.style.letterSpacing = `${letterSpacing}em`" in measure
+    assert "gap.style.wordSpacing = `${wordSpacing}em`" in measure
+    # И это отдельный спан с пробелом, а не голый текст в контейнере строки.
+    assert '<span style={gapStyle(line, preset)}>{" "}</span>' in captions
+    assert 'gap.textContent = " "' in measure

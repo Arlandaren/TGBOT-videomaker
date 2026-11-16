@@ -265,6 +265,25 @@ const wordSize = (word: PlanWord, preset: Preset): number => {
   return typeof own === "number" && own > 0 ? own : preset.font.size * emphasisScale(word, preset);
 };
 
+/**
+ * Пробел между словами: настоящий символ, набранный кеглем СТРОКИ.
+ *
+ * Кегль строки — самый мелкий кегль её слов (`geometry.line_size`): обычные
+ * слова блока набраны одним кеглем, выделенное крупнее. Блок, который не влез,
+ * ужимается целиком, блок с короткой строкой растёт под ширину кадра — и
+ * пробел кеглем контейнера у ужатой строки оставался прежним при измельчавших
+ * буквах: слова разъезжались вдвое шире задуманного.
+ *
+ * Разрядка и поправка темы к пробелу объявлены здесь же в em — то есть от
+ * кегля строки, как их считает `geometry.space_width`. Тем же спаном строку
+ * меряет `render/measure.mjs`.
+ */
+const gapStyle = (line: PlanWord[], preset: Preset): React.CSSProperties => ({
+  fontSize: Math.min(...line.map((word) => wordSize(word, preset))),
+  letterSpacing: `${preset.font.letter_spacing}em`,
+  wordSpacing: `${preset.font.word_spacing ?? 0}em`,
+});
+
 // ------------------------------------------------------------------ контраст (Ф9)
 
 /**
@@ -855,7 +874,7 @@ const Block: React.FC<{ block: PlanBlock; preset: Preset }> = ({ block, preset }
         >
           {line.map((word, wi) => (
             <React.Fragment key={word.word_idx}>
-              {wi > 0 ? " " : null}
+              {wi > 0 ? <span style={gapStyle(line, preset)}>{" "}</span> : null}
               <Word word={word} preset={preset} neutral={look.text} />
             </React.Fragment>
           ))}

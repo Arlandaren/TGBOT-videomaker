@@ -654,10 +654,16 @@ def test_words_in_a_line_never_overlap(name: str):
     budget = caption_text_width(preset, FRAME[0])
     # Пробел между словами меряет `space_width`, а не `measure_word(" ")`: в
     # боксе слова краевой пробел схлопывается и стоит ноль, между боксами — нет.
-    space = space_width(
-        base, metrics=metrics, letter_spacing=ls, word_spacing=preset.font.word_spacing
-    )
-    assert space > 0
+    # Рисуется он кеглем СТРОКИ — самых мелких её слов, — поэтому у каждой
+    # строки он свой: ужатая строка несёт узкий пробел, выросшая — широкий.
+    def space_of(line) -> float:
+        return space_width(
+            min(w.size or base for w in line),
+            metrics=metrics,
+            letter_spacing=ls,
+            word_spacing=preset.font.word_spacing,
+        )
+
     seen = 0
     for block in all_blocks():
         words = plan_words(block, preset)
@@ -666,6 +672,8 @@ def test_words_in_a_line_never_overlap(name: str):
             if any(w.emoji for w in line):
                 continue
             seen += 1
+            space = space_of(line)
+            assert space > 0
             x = 0.0
             previous_right = 0.0
             for i, word in enumerate(line):
@@ -680,8 +688,9 @@ def test_words_in_a_line_never_overlap(name: str):
                 )
                 assert own > 0, (name, word.text)
                 if i:
-                    # Промежуток — настоящий пробел кеглем СТРОКИ, и он не
-                    # зависит от того, насколько крупным вышел сосед.
+                    # Промежуток — настоящий пробел кеглем СТРОКИ (её обычных
+                    # слов), и он не зависит от того, насколько крупным вышел
+                    # выделенный сосед.
                     assert x - previous_right == pytest.approx(space, abs=0.01)
                 previous_right = x + own
                 x = previous_right + space

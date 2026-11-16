@@ -102,7 +102,7 @@ def prepare_assets(
             )
     # Шрифт эмодзи — только роликам со значками: это 10 МБ, и ролику без
     # значков везти их в бандл незачем.
-    if any(b.pill is not None and b.pill.emoji for b in plan.blocks):
+    if any((b.pill is not None and b.pill.emoji) or b.icon is not None for b in plan.blocks):
         if cfg.emoji_font.exists():
             plan.meta["emoji_font"] = _stage_asset(cfg.emoji_font, assets_dir)
         else:

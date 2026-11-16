@@ -112,6 +112,13 @@ class Panel(BaseModel):
     # до 41.5 из 255, то есть светлая заливка около 0.14.
     glass_color: str = "#FFFFFF"
     glass_opacity: float = 0.0
+    # Значок карточки: круглое стеклянное окошко слева от блока со стеклом
+    # (`CaptionBlock.emoji`). Диаметр и просвет до панели — пиксели при высоте
+    # кадра 1920; кегль эмодзи — доля диаметра. Выше своей панели значок не
+    # бывает: диаметр зажимается её высотой (`render_plan`).
+    icon_size: int = 104
+    icon_gap: int = 16
+    icon_emoji_scale: float = 0.52
 
 
 # Поля субтитра, которых в модели больше нет, но которые лежат в СОХРАНЁННЫХ
@@ -771,6 +778,8 @@ _PIXEL_FIELDS: tuple[tuple[str, str], ...] = (
     ("panel", "radius"),
     ("panel", "blur"),
     ("panel", "border_width"),
+    ("panel", "icon_size"),
+    ("panel", "icon_gap"),
     ("animation", "block_shift_px"),
     ("animation", "block_leave_px"),
     ("animation", "broll_slide_px"),

@@ -717,6 +717,19 @@ const Block: React.FC<{ block: PlanBlock; preset: Preset }> = ({ block, preset }
   // коробки он не влияет вовсе, и Python знает её, не зная ширины глифа.
   const icon = pill && pill.emoji && pill.emoji_box > 0 ? pill : null;
   const iconRoom = icon ? icon.emoji_box + icon.emoji_gap : 0;
+  // Значок КАРТОЧКИ — круглое стеклянное окошко слева от панели. Стоит
+  // абсолютно, за её левым краем: на коробку панели не влияет (её мерил
+  // Python), а место под него освобождает обёртка — она сдвигает панель так,
+  // чтобы по центру кадра стояла группа целиком.
+  const badge = glass && !pill ? ((block as PlanBlock).icon ?? null) : null;
+  const glassFill = {
+    backgroundColor: glass ? rgba(p.glass_color, p.glass_opacity) : "transparent",
+    backgroundImage: p.enabled
+      ? `linear-gradient(${rgba(p.color, look.panelOpacity)}, ${rgba(p.color, look.panelOpacity)})`
+      : undefined,
+    backdropFilter: glass && p.blur > 0 ? `blur(${p.blur}px) saturate(1.4)` : undefined,
+    WebkitBackdropFilter: glass && p.blur > 0 ? `blur(${p.blur}px) saturate(1.4)` : undefined,
+  };
   // Прямоугольник блока посчитан в Python по этим же метрикам: строка в бюджет
   // уложена, и ограничивать ширину здесь незачем. План без прямоугольника
   // (пресет без метрик шрифта) — другое дело: там перенос по символам, ширину
@@ -751,17 +764,12 @@ const Block: React.FC<{ block: PlanBlock; preset: Preset }> = ({ block, preset }
         gap: Math.max(0, Math.round(preset.font.size * (preset.caption.line_height - 1))),
         padding: p.enabled ? `${p.padding_y}px ${p.padding_x}px` : 0,
         paddingLeft: icon ? p.padding_x + iconRoom : undefined,
-        position: icon ? "relative" : undefined,
+        position: icon || badge ? "relative" : undefined,
         borderRadius: p.enabled ? p.radius : 0,
         // Два разных слоя в одном свойстве: снизу стекло (стиль, только у
         // помеченных блоков), сверху заслонка (закон Ф9, у любого блока, где
         // правило не взяло порог). Обычно ненулевой ровно один из них.
-        backgroundColor: glass ? rgba(p.glass_color, p.glass_opacity) : "transparent",
-        backgroundImage: p.enabled
-          ? `linear-gradient(${rgba(p.color, look.panelOpacity)}, ${rgba(p.color, look.panelOpacity)})`
-          : undefined,
-        backdropFilter: glass && p.blur > 0 ? `blur(${p.blur}px) saturate(1.4)` : undefined,
-        WebkitBackdropFilter: glass && p.blur > 0 ? `blur(${p.blur}px) saturate(1.4)` : undefined,
+        ...glassFill,
         // Рамку РИСУЕМ всегда, когда тема с панелью, — просто прозрачной там,
         // где стекла нет. Ширина рамки входит в замер `caption_rect` у всех
         // блоков одинаково, и убрать её у части из них значило бы развести
@@ -776,6 +784,39 @@ const Block: React.FC<{ block: PlanBlock; preset: Preset }> = ({ block, preset }
         willChange: "transform, opacity",
       }}
     >
+      {badge ? (
+        <span
+          style={{
+            position: "absolute",
+            right: "100%",
+            // Рамка панели лежит снаружи её поля, от которого считается `right`.
+            marginRight: badge.gap + p.border_width,
+            top: "50%",
+            width: badge.size,
+            height: badge.size,
+            transform: "translateY(-50%)",
+            boxSizing: "border-box",
+            borderRadius: "50%",
+            ...glassFill,
+            border:
+              p.border_width > 0
+                ? `${p.border_width}px solid ${rgba(p.border_color, p.border_opacity)}`
+                : undefined,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontFamily: EMOJI_FONT,
+            fontSize: badge.emoji_size,
+            fontWeight: 400,
+            lineHeight: 1,
+            letterSpacing: 0,
+            wordSpacing: 0,
+            textShadow: "none",
+          }}
+        >
+          {badge.emoji}
+        </span>
+      ) : null}
       {icon ? (
         <span
           style={{
@@ -891,6 +932,10 @@ export const Captions: React.FC<{ blocks: PlanBlock[]; preset: Preset }> = ({ bl
             ? width * quiet.edge_ratio
             : null;
         const margin = spot ? spot.y : marginOf(ps);
+        // Карточка со значком: панель центрируется в кадре БЕЗ полосы под
+        // значок, то есть по центру встаёт группа «значок + панель» — тем же
+        // числом Python сдвинул прямоугольник блока.
+        const badgeRoom = block.icon && !spot ? block.icon.size + block.icon.gap : 0;
         return (
           <div
             // Ключ — начало блока, а не его номер в ОТФИЛЬТРОВАННОМ списке: номер
@@ -905,7 +950,7 @@ export const Captions: React.FC<{ blocks: PlanBlock[]; preset: Preset }> = ({ bl
               justifyContent: left === null ? "center" : "flex-start",
               paddingTop: block.position === "top" ? margin : 0,
               paddingBottom: block.position === "bottom" ? margin : 0,
-              paddingLeft: left === null ? 0 : left,
+              paddingLeft: left === null ? badgeRoom : left,
               fontFamily: `"ReelbotCaption", "${ps.font.family}", sans-serif`,
               fontWeight: ps.font.weight,
               fontSize: ps.font.size,

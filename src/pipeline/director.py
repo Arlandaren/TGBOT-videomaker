@@ -738,7 +738,13 @@ def edl_from_plan(
                 item=is_item,
                 # Значок — один цветной эмодзи; всё остальное («звук», два
                 # эмодзи) в окошко значка не годится и молча отбрасывается.
-                emoji=single_emoji(raw.get("emoji")) if is_item else None,
+                # Носят его только пункт списка и блок со стеклом: у простого
+                # плаката значку не на чём стоять.
+                emoji=(
+                    single_emoji(raw.get("emoji"))
+                    if is_item or (bool(raw.get("panel")) and not quiet)
+                    else None
+                ),
             )
         )
 
@@ -774,6 +780,7 @@ def edl_from_plan(
     panelled = [b for b in captions if b.panel]
     for extra in panelled[PANEL_MAX:]:
         extra.panel = False
+        extra.emoji = None  # значок жил на стекле
     if len(panelled) > PANEL_MAX:
         log.info(
             "плашка: модель попросила %d блоков, оставлено %d",

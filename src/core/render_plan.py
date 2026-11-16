@@ -110,6 +110,21 @@ class PlanPill:
 
 
 @dataclass(slots=True)
+class PlanIcon:
+    """Значок карточки: круглое стеклянное окошко слева от блока со стеклом.
+
+    Числа готовые, px: диаметр (уже зажат высотой панели), кегль эмодзи и
+    просвет до панели. Панель и значок стоят в кадре одной группой по центру, и
+    `PlanBlock.rect` накрывает группу целиком.
+    """
+
+    emoji: str
+    size: float
+    emoji_size: float
+    gap: float
+
+
+@dataclass(slots=True)
 class PlanBlock:
     start: float
     end: float
@@ -157,6 +172,9 @@ class PlanBlock:
     # ней стоит не по `position`, а ровно в `rect`: место стопки выбрано под
     # лицо, а не под край кадра.
     pill: PlanPill | None = None
+    # ЗНАЧОК карточки (`CaptionBlock.emoji` у блока со стеклом). `None` — блок
+    # без значка, то есть любой блок до появления карточек.
+    icon: PlanIcon | None = None
 
     @property
     def words(self) -> list[PlanWord]:
@@ -224,6 +242,7 @@ class RenderPlan:
                     quiet=bool(b.get("quiet", False)),
                     title_card=bool(b.get("title_card", False)),
                     pill=PlanPill(**b["pill"]) if b.get("pill") else None,
+                    icon=PlanIcon(**b["icon"]) if b.get("icon") else None,
                 )
                 for b in data.get("blocks", [])
             ],
@@ -267,6 +286,7 @@ class RenderPlan:
                     "quiet": b.quiet,
                     "title_card": b.title_card,
                     "pill": asdict(b.pill) if b.pill else None,
+                    "icon": asdict(b.icon) if b.icon else None,
                 }
                 for b in self.blocks
             ],
@@ -900,6 +920,20 @@ def build_plan(
             chars = fallback_line_chars(preset_of, width)
             return wrap_words(words, chars, preset_of.caption.max_lines), []
 
+    # Полоса под значок карточки: диаметр и просвет до панели. Значок бывает и
+    # меньше (его зажимает высота панели), но резервируем по полному диаметру —
+    # перенос строк идёт раньше, чем известна высота блока.
+    icon_room = float(ps.panel.icon_size + ps.panel.icon_gap)
+
+    def wants_icon(block: Any) -> bool:
+        """Просит ли блок значок карточки и может ли тема его нарисовать."""
+        return bool(
+            getattr(block, "emoji", None)
+            and getattr(block, "panel", False)
+            and not getattr(block, "item", False)
+            and ps.panel.enabled
+        )
+
     def lay_places(
         places: Sequence[str], words: list[PlanWord], block: Any
     ) -> dict[str, _Place]:
@@ -925,6 +959,14 @@ def build_plan(
             silent = plays_quiet(block, place)
             if silent not in by_register:
                 pr = register_preset(silent)
+                if not silent and wants_icon(block):
+                    # Карточке со значком строка уже на полосу под значок:
+                    # группа «значок + панель» обязана влезть в безопасную зону.
+                    pr = pr.model_copy(deep=True)
+                    pr.geometry.max_line_width_ratio = min(
+                        pr.geometry.max_line_width_ratio,
+                        max(0.2, (caption_text_width(pr, width) - icon_room) / width),
+                    )
                 # Свои слова на каждый регистр, а не общие. Два повода: кегль
                 # `wrap_block` проставляет словам НА МЕСТЕ (он же им мерил
                 # строку), и у тихого блока выделения нет вовсе — ни золота, ни
@@ -1393,6 +1435,28 @@ def build_plan(
             )
         return [[dx, dy] for dx, dy in offsets]
 
+    def icon_of(block: Any, rect: Rect | None, silent: bool) -> PlanIcon | None:
+        """Значок карточки или `None`, если ему у этого блока не место.
+
+        Значок — украшение стекла: нет стекла (у блока или у темы) — нет и
+        значка. Тихий блок прижат к левому краю, группой по центру он не встаёт.
+        Без прямоугольника группу не посчитать. И если со значком группа шире
+        безопасной зоны, блок остаётся без него: текст важнее.
+        """
+        if not wants_icon(block) or silent or rect is None:
+            return None
+        emoji = block.emoji
+        size = float(min(ps.panel.icon_size, rect.height))
+        gap = float(ps.panel.icon_gap)
+        if size <= 0 or rect.width + size + gap > width - 2 * safe_margin_x(ps, width):
+            return None
+        return PlanIcon(
+            emoji=emoji,
+            size=round(size, 3),
+            emoji_size=round(size * ps.panel.icon_emoji_scale, 3),
+            gap=gap,
+        )
+
     blocks: list[PlanBlock] = []
     for item, item_home in zip(laid, homes):
         hits = occupied(item)
@@ -1419,6 +1483,13 @@ def build_plan(
             rect = None
         else:
             rect = chosen.rect
+        icon = icon_of(item.block, rect, chosen.quiet)
+        if icon is not None and rect is not None:
+            # Панель и значок — одна группа по центру кадра: прямоугольник
+            # блока накрывает её целиком (с ним разводится картинка и по нему
+            # меряется фон), а Captions.tsx сдвигает панель тем же числом.
+            room = icon.size + icon.gap
+            rect = Rect(rect.x - room / 2, rect.y, rect.width + room, rect.height)
         blocks.append(
             PlanBlock(
                 start=item.start,
@@ -1430,6 +1501,7 @@ def build_plan(
                 panel=bool(getattr(item.block, "panel", False)),
                 anchor_path=anchor_path_of(item, rect),
                 quiet=chosen.quiet,
+                icon=icon,
             )
         )
 

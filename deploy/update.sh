@@ -4,7 +4,11 @@
 #   deploy/update.sh               # хост `redstar` из ~/.ssh/config
 #   DEPLOY_HOST=user@host deploy/update.sh
 #
-# Код → миграции → перезапуск. Postgres и Redis не трогаются.
+# Код → миграции → перезапуск. Postgres и Redis не трогаются. Туннель Mini App
+# тоже: его адрес живёт, пока жива служба, и перезапуск убил бы приложение,
+# открытое у пользователей. Он перезапускается, только если поменялся сам файл
+# службы; правки src/webapp/tunnel.py применяются руками:
+#   ssh <хост> systemctl --user restart reelbot-tunnel
 # Новые Python- или npm-зависимости ставятся сами, если поменялись
 # pyproject.toml или render/package-lock.json.
 set -euo pipefail
@@ -50,12 +54,16 @@ if [ render/package-lock.json -nt render/node_modules/.package-lock.json ]; then
     && npm install --no-save --no-audit --no-fund "@rspack/binding-linux-x64-gnu@$(node -p "require('./node_modules/@rspack/binding/package.json').version")" \
     && node render.mjs --ensure-browser)
 fi
+TUNNEL_CHANGED=""
+cmp -s deploy/systemd/reelbot-tunnel.service ~/.config/systemd/user/reelbot-tunnel.service || TUNNEL_CHANGED=1
 cp deploy/systemd/*.service ~/.config/systemd/user/
 systemctl --user daemon-reload
+if [ -n "$TUNNEL_CHANGED" ]; then echo "→ служба туннеля изменилась"; systemctl --user restart reelbot-tunnel; fi
+systemctl --user enable --now reelbot-tunnel
 systemctl --user restart reelbot-migrate
 systemctl --user restart reelbot-worker reelbot-janitor reelbot-bot
 sleep 20
-systemctl --user is-active reelbot-postgres reelbot-redis reelbot-worker reelbot-janitor reelbot-bot
+systemctl --user is-active reelbot-postgres reelbot-redis reelbot-worker reelbot-janitor reelbot-bot reelbot-tunnel
 # Пишем ПОСЛЕ перезапуска: отметка значит «этот код запущен», а не «этот код
 # скопирован». Сам файл живёт только на сервере — следующий rsync его снесёт
 # (--delete) и этот же шаг напишет заново.

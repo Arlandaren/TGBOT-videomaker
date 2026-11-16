@@ -1,7 +1,10 @@
 [Unit]
 Description=ReelBot — Telegram-бот и Mini App
-After=reelbot-migrate.service reelbot-redis.service
+After=reelbot-migrate.service reelbot-redis.service reelbot-tunnel.service
 Requires=reelbot-migrate.service reelbot-redis.service
+# Именно Wants: туннель должен пережить перезапуск бота, а бот — перезапуск
+# туннеля (новый адрес он заметит сам по файлу и перезапустится).
+Wants=reelbot-tunnel.service
 
 [Service]
 WorkingDirectory=%h/reelbot
@@ -9,14 +12,16 @@ Environment=PATH=%h/reelbot-runtime/bin:%h/reelbot-runtime/venv/bin:%h/.nvm/vers
 Environment=LD_LIBRARY_PATH=%h/reelbot-runtime/sys/usr/lib/x86_64-linux-gnu
 Environment=HF_HOME=%h/reelbot-runtime/hf
 Environment=PYTHONUNBUFFERED=1
+# Адрес Mini App пишет сюда reelbot-tunnel.service; путь у них общий.
+Environment=WEBAPP_TUNNEL_FILE=%h/reelbot-runtime/tunnel.url
 ExecStart=%h/reelbot-runtime/venv/bin/python -m src.bot.main
 Restart=always
 RestartSec=5
 CPUQuota=100%
 MemoryMax=768M
 TimeoutStopSec=30
-# SIGTERM сначала только боту: он сам гасит cloudflared и не путает свою
-# остановку с падением туннеля.
+# SIGTERM сначала только боту: если служба туннеля не ответила и бот поднял
+# cloudflared сам, он сам его гасит и не путает свою остановку с падением туннеля.
 KillMode=mixed
 
 [Install]

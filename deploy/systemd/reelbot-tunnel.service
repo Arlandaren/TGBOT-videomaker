@@ -1,0 +1,23 @@
+[Unit]
+Description=ReelBot — туннель Mini App (адрес живёт, пока жива служба)
+
+[Service]
+WorkingDirectory=%h/reelbot
+Environment=PATH=%h/reelbot-runtime/bin:%h/reelbot-runtime/venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=LD_LIBRARY_PATH=%h/reelbot-runtime/sys/usr/lib/x86_64-linux-gnu
+Environment=PYTHONUNBUFFERED=1
+# Адрес Mini App читает отсюда reelbot-bot.service; путь у них общий.
+Environment=WEBAPP_TUNNEL_FILE=%h/reelbot-runtime/tunnel.url
+# Файл есть только при живом туннеле: бот не должен прочитать адрес прошлого
+# запуска, чем бы тот ни кончился.
+ExecStartPre=/bin/rm -f %h/reelbot-runtime/tunnel.url
+ExecStart=%h/reelbot-runtime/venv/bin/python -m src.webapp.tunnel
+ExecStopPost=/bin/rm -f %h/reelbot-runtime/tunnel.url
+Restart=always
+RestartSec=5
+CPUQuota=100%
+MemoryMax=256M
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -53,6 +54,16 @@ def make_bot() -> Bot:
     )
 
 
+# Фоновые задачи держим за ссылку: цикл событий хранит их слабо, и сборщик
+# мусора может снять задачу посреди работы.
+_background: set[asyncio.Task] = set()
+
+
+def _keep(task: asyncio.Task) -> None:
+    _background.add(task)
+    task.add_done_callback(_background.discard)
+
+
 async def start_webapp(bot: Bot):
     """Сервер Mini App, туннель и кнопка меню. Любой сбой здесь не роняет бота.
 
@@ -61,8 +72,8 @@ async def start_webapp(bot: Bot):
     """
     from aiogram.types import MenuButtonWebApp, WebAppInfo
 
+    from src.webapp import tunnel as tunnels
     from src.webapp.server import start_server
-    from src.webapp.tunnel import Tunnel, ensure_binary
 
     runner = tunnel = None
     try:
@@ -72,15 +83,28 @@ async def start_webapp(bot: Bot):
         return None, None
 
     url = settings.webapp_url.strip()
+    # Туннель отдельной службой: адрес лежит в файле и переживает перезапуск
+    # бота. Служба не ответила — поднимаем свой, приложение важнее адреса.
+    url_file = settings.webapp_tunnel_file.strip() if not url else ""
+    if url_file:
+        try:
+            url = await tunnels.wait_for_url(Path(url_file), settings.webapp_tunnel_wait_s)
+        except tunnels.TunnelError as e:
+            log.error("служба туннеля не дала адрес (%s) — поднимаю туннель сам", e)
     if not url and settings.webapp_tunnel:
         try:
-            binary = await asyncio.to_thread(ensure_binary, settings.cloudflared_bin)
-            tunnel = Tunnel(binary, f"http://{settings.webapp_host}:{settings.webapp_port}")
+            binary = await asyncio.to_thread(tunnels.ensure_binary, settings.cloudflared_bin)
+            tunnel = tunnels.Tunnel(
+                binary, f"http://{settings.webapp_host}:{settings.webapp_port}"
+            )
             url = await tunnel.start()
         except Exception as e:  # noqa: BLE001
             log.error("туннель для Mini App не поднялся: %s", e)
             tunnel = None
             url = ""
+    if url and url_file:
+        # И при своём туннеле тоже: служба поднимется позже — бот возьмёт её адрес.
+        _keep(asyncio.create_task(tunnels.watch_url(Path(url_file), url)))
     if not url:
         log.warning("у Mini App нет публичного адреса — задайте WEBAPP_URL или WEBAPP_TUNNEL=1")
         return runner, tunnel

@@ -382,6 +382,7 @@ TEXTS: dict[str, dict[str, str]] = {
     "stage.done": {"ru": "Готово", "en": "Done"},
     "stage.download": {"ru": "Скачиваю файл", "en": "Downloading the file"},
     "stage.upload": {"ru": "Загружаю результат", "en": "Uploading the result"},
+    "stage.join": {"ru": "Склеиваю видео", "en": "Joining the videos"},
     "stage.queued": {"ru": "ждёт своей очереди", "en": "waiting in the queue"},
 
     # ------------------------------------------------------------ ошибки монтажа
@@ -414,6 +415,15 @@ TEXTS: dict[str, dict[str, str]] = {
     "api.empty_file": {"ru": "Пустой файл.", "en": "The file is empty."},
     "api.too_big": {"ru": "Файл больше {mb} МБ.", "en": "The file is larger than {mb} MB."},
     "api.upload_not_found": {"ru": "Загрузка не найдена — начните заново.", "en": "Upload not found — please start again."},
+    "api.too_many_clips": {"ru": "В одном ролике — не больше {n} видео.", "en": "One reel takes up to {n} videos."},
+    "api.clips_with_split": {
+        "ru": "В режиме «Два видео» снизу и сверху — по одному видео.",
+        "en": "In “Two videos” mode it's one video on top and one below.",
+    },
+    "api.clip_unreadable": {
+        "ru": "Не получилось прочитать видео №{n}. Пришлите mp4 или mov.",
+        "en": "Couldn't read video #{n}. Please upload an mp4 or mov.",
+    },
     "api.too_many_uploads": {"ru": "Больше {n} файлов разом загружать нельзя — дождитесь или начните заново.", "en": "You can't upload more than {n} files at once — wait for them or start over."},
     "api.no_space": {"ru": "На сервере не хватает места под этот файл. Попробуйте позже или пришлите короче.", "en": "The server is out of space for this file. Try later or send a shorter one."},
     "api.bad_offset": {"ru": "Некорректный сдвиг загрузки.", "en": "Invalid upload offset."},

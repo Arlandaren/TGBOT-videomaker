@@ -172,7 +172,7 @@
               </span>
             </label>
             <label class="dropzone" id="dropzone">
-              <input type="file" id="file-input" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,.avi" hidden />
+              <input type="file" id="file-input" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,.avi" multiple hidden />
               <span class="dropzone__empty">
                 <span class="orb"><svg width="26" height="26"><use href="#i-plus"/></svg></span>
                 <b id="drop-empty-title" data-i18n="cta.choose">Выбрать видео</b>
@@ -185,6 +185,14 @@
                 <span class="round-btn" id="drop-remove" data-i18n-aria="edit.remove"><svg width="18" height="18"><use href="#i-close"/></svg></span>
               </span>
             </label>
+            </div>
+
+            <!-- Ролик из нескольких видео: список по порядку склейки. Показан
+                 вместо поля выбора, когда выбрано хотя бы одно видео. -->
+            <div class="clips" id="clips" hidden>
+              <div class="clips__head"><b id="clips-title"></b><span class="muted" id="clips-total"></span></div>
+              <div class="clips__list" id="clips-list"></div>
+              <button class="clips__add" id="clips-add" type="button"><svg width="18" height="18"><use href="#i-plus"/></svg><span data-i18n="clips.add">Добавить ещё видео</span></button>
             </div>
 
             <div class="under-drop">

@@ -685,6 +685,159 @@ async def test_an_unreadable_top_is_refused_before_charging(client, finish_env):
     assert left == [], f"после отказа на диске осталось: {[p.name for p in left]}"
 
 
+# ------------------------------------------------------------------ ролик из нескольких видео
+
+
+async def test_too_many_clips_are_refused_and_nothing_is_taken(client, finish_env):
+    """Шестое видео — отказ до того, как забрано первое: загрузки целы."""
+    from src.pipeline.join import MAX_CLIPS
+    from src.webapp import server as mod
+
+    cfg = client.server.app[mod.CFG_KEY]
+    first = await _uploaded(client, b"abcd")
+    r = await client.post(
+        f"/api/uploads/{first}/finish",
+        json={"preset": "glass", "options": {}, "extra_upload_ids": ["0" * 32] * MAX_CLIPS},
+        headers=auth(),
+    )
+    assert r.status == 400
+    assert (mod._upload_dir(cfg, first) / "data").read_bytes() == b"abcd"
+    assert finish_env["created"] == 0
+
+
+async def test_the_same_upload_twice_is_not_two_clips(client, finish_env):
+    """Один и тот же приём дважды (или сам первый) — не два куска ролика."""
+    first = await _uploaded(client, b"abcd")
+    second = await _uploaded(client, b"efgh")
+    for extra in ([first], [second, second]):
+        r = await client.post(
+            f"/api/uploads/{first}/finish",
+            json={"preset": "glass", "options": {}, "extra_upload_ids": extra},
+            headers=auth(),
+        )
+        assert r.status == 404, extra
+    assert finish_env["created"] == 0
+
+
+async def test_clips_do_not_mix_with_two_videos_mode(client, finish_env):
+    first = await _uploaded(client, b"abcd")
+    second = await _uploaded(client, b"efgh")
+    top = await _uploaded(client, b"ijkl")
+    r = await client.post(
+        f"/api/uploads/{first}/finish",
+        json={"preset": "glass", "options": {}, "top_upload_id": top, "extra_upload_ids": [second]},
+        headers=auth(),
+    )
+    assert r.status == 400
+    assert finish_env["created"] == 0
+
+
+async def test_an_unreadable_clip_is_refused_before_charging(client, finish_env):
+    """Второй файл — не видео: отказ называет его номер, баланс не тронут, на
+    диске ничего не осталось."""
+    from src.webapp import server as mod
+
+    cfg = client.server.app[mod.CFG_KEY]
+    first = await _uploaded(client, b"abcd")
+    second = await _uploaded(client, b"TOP!")
+    r = await client.post(
+        f"/api/uploads/{first}/finish",
+        json={"preset": "glass", "options": {}, "extra_upload_ids": [second]},
+        headers=auth(),
+    )
+    assert r.status == 415
+    assert "№2" in (await r.json())["error"]
+    assert finish_env["created"] == 0
+    left = list(Path(cfg.work_dir).glob("*"))
+    assert left == [], f"после отказа на диске осталось: {[p.name for p in left]}"
+
+
+async def test_the_length_limit_is_for_all_clips_together(client, finish_env, monkeypatch):
+    """Каждый кусок короче предела, вместе — длиннее: отказ, как у одного
+    длинного видео. Иначе пределом длины был бы только размер кошелька."""
+    from types import SimpleNamespace
+
+    from src.pipeline import probe as probe_mod
+    from src.pipeline import split
+    from src.webapp import server as mod
+
+    cfg = client.server.app[mod.CFG_KEY]
+    each = cfg.max_video_seconds * 0.6
+    monkeypatch.setattr(probe_mod, "probe", lambda path: SimpleNamespace(duration=each, has_audio=True))
+    monkeypatch.setattr(split, "top_video_seconds", lambda path: each)
+
+    first = await _uploaded(client, b"abcd")
+    second = await _uploaded(client, b"efgh")
+    r = await client.post(
+        f"/api/uploads/{first}/finish",
+        json={"preset": "glass", "options": {}, "extra_upload_ids": [second]},
+        headers=auth(),
+    )
+    assert r.status == 400
+    assert "длиннее" in (await r.json())["error"]
+    assert finish_env["created"] == 0
+
+
+async def test_several_clips_become_one_job_with_parts(client, finish_env, monkeypatch):
+    """Три видео — одна задача и одно списание: первое ложится исходником,
+    остальные — кусками по порядку, а склейку делает воркер."""
+    import uuid
+    from types import SimpleNamespace
+
+    from src.db import repo
+    from src.pipeline import split
+    from src.webapp import server as mod
+    from src.worker import tasks
+
+    job_id = uuid.uuid4()
+    created: list[dict] = []
+    updates: dict = {}
+    uploaded: dict[str, bytes] = {}
+
+    async def create_job(user_id, **k):
+        created.append(k)
+        return SimpleNamespace(id=job_id, **{"status": "queued"})
+
+    async def update_job(_id, **values):
+        updates.update(values)
+
+    async def upload(path, key, **_):
+        uploaded[key] = Path(path).read_bytes()
+
+    async def boom(*a, **k):
+        raise RuntimeError("дальше очереди тест не идёт")
+
+    monkeypatch.setattr(repo, "create_job", create_job)
+    monkeypatch.setattr(repo, "update_job", update_job)
+    monkeypatch.setattr(repo, "mark_failed", lambda *a, **k: _none())
+    monkeypatch.setattr(repo, "refund_job", lambda *a, **k: _none())
+    monkeypatch.setattr(mod.storage, "upload", upload)
+    monkeypatch.setattr(repo, "set_user_preset", boom)
+    monkeypatch.setattr(split, "top_video_seconds", lambda path: 20.0)
+
+    ids = [await _uploaded(client, body) for body in (b"one!", b"two!!", b"three!")]
+    r = await client.post(
+        f"/api/uploads/{ids[0]}/finish",
+        json={"preset": "glass", "options": {}, "extra_upload_ids": ids[1:]},
+        headers=auth(),
+    )
+    # Тест обрывает запрос сразу после заливки — нас интересует, что легло в хранилище.
+    assert r.status == 500
+    assert len(created) == 1, "несколько видео — одна задача и одно списание"
+    assert created[0]["source_size"] == len(b"one!") + len(b"two!!") + len(b"three!")
+    assert updates["source_parts"] == 2
+    assert updates["source_duration"] == 60.0, "длина ролика — сумма кусков"
+    assert uploaded[tasks.part_key(job_id, 1)] == b"two!!"
+    assert uploaded[tasks.part_key(job_id, 2)] == b"three!"
+    assert [v for k, v in uploaded.items() if k.endswith("source.mp4")] == [b"one!"]
+    cfg = client.server.app[mod.CFG_KEY]
+    assert list(Path(cfg.work_dir).glob("*")) == []
+
+
+async def _none():
+    return None
+
+
 async def test_a_user_can_open_two_uploads_for_one_reel(client):
     """Два файла одного ролика и один брошенный приём не упираются в квоту."""
     for _ in range(3):

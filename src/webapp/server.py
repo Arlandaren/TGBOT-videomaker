@@ -127,7 +127,10 @@ def _upload_dir(cfg: Settings, upload_id: str) -> Path:
 # Четыре, а не два: ролик «Два видео» — это два приёма разом, и один
 # брошенный приём (закрыли приложение на середине) иначе запирал бы режим до
 # истечения заявки.
-MAX_OPEN_UPLOADS = 4
+# Шесть: ролик из нескольких видео — до пяти приёмов разом (`join.MAX_CLIPS`),
+# и один брошенный сверху. Место при этом держит не счёт, а учёт обещанных
+# байт (`_promised_bytes`).
+MAX_OPEN_UPLOADS = 6
 # Запас свободного места, который приёму не отдаётся ни при каких условиях:
 # под базу, журналы и рабочие папки самого монтажа.
 DISK_RESERVE_MB = 4096
@@ -338,6 +341,12 @@ async def music_check(request: web.Request) -> web.Response:
         shutil.rmtree(folder, ignore_errors=True)
         raise
     return web.json_response({"music_id": music_id, "duration": track.duration})
+
+
+def _max_clips() -> int:
+    from src.pipeline.join import MAX_CLIPS  # отложенно, как и остальной пайплайн
+
+    return MAX_CLIPS
 
 
 def _promised_bytes(open_uploads: list[tuple[Path, dict[str, Any]]]) -> int:
@@ -568,6 +577,8 @@ async def bootstrap(request: web.Request) -> web.Response:
                 "max_minutes": cfg.max_video_minutes,
                 "max_upload_mb": cfg.webapp_max_upload_mb,
                 "chunk_bytes": cfg.webapp_chunk_mb * 1024 * 1024,
+                # Сколько видео склеивается в один ролик (`pipeline.join`).
+                "max_clips": _max_clips(),
             },
             "defaults": JobOptions().model_dump(),
             "retention_days": cfg.storage_retention_days,
@@ -789,8 +800,9 @@ async def upload_finish(request: web.Request) -> web.Response:
     очередь), возвращает ролик на баланс.
     """
     from src.bot.handlers.video import watch_job  # отложенно: хендлеры тянут весь бот
+    from src.pipeline.join import MAX_CLIPS
     from src.pipeline.probe import probe
-    from src.worker.tasks import QUEUE_CPU, get_queue
+    from src.worker.tasks import QUEUE_CPU, get_queue, part_key
 
     cfg = request.app[CFG_KEY]
     bot = request.app[BOT_KEY]
@@ -822,6 +834,28 @@ async def upload_finish(request: web.Request) -> web.Response:
             return await _fail(request, 409, "api.incomplete",
                                extra={"received": (own_top[0] / "data").stat().st_size})
         top = own_top
+    # Ролик из нескольких видео: остальные куски по порядку. Проверяются так же
+    # и там же, что верхний, — до того, как забран первый: отказ оставляет все
+    # загрузки целыми, и «Готово» можно нажать снова.
+    extra_ids = body.get("extra_upload_ids") or []
+    extras: list[tuple[Path, dict[str, Any]]] = []
+    if extra_ids:
+        if not isinstance(extra_ids, list) or len(extra_ids) > MAX_CLIPS - 1:
+            return await _fail(request, 400, "api.too_many_clips", n=MAX_CLIPS)
+        if top is not None:
+            return await _fail(request, 400, "api.clips_with_split")
+        seen_folders = {folder}
+        for extra_id in extra_ids:
+            own_extra = await _own_upload(request, extra_id)
+            if isinstance(own_extra, web.Response):
+                return own_extra
+            if own_extra[0] in seen_folders:
+                return await _fail(request, 404, "api.upload_not_found")
+            if (own_extra[0] / "data").stat().st_size != own_extra[1]["size"]:
+                return await _fail(request, 409, "api.incomplete",
+                                   extra={"received": (own_extra[0] / "data").stat().st_size})
+            seen_folders.add(own_extra[0])
+            extras.append(own_extra)
     # Забираем приём себе ДО всякой долгой работы: это и защита от двух «Готово»
     # разом (две задачи за один файл — два списанных ролика), и уход из-под
     # уборки просроченных заявок на время сборки.
@@ -836,6 +870,14 @@ async def upload_finish(request: web.Request) -> web.Response:
         if top_folder is None:
             shutil.rmtree(folder, ignore_errors=True)
             return await _fail(request, 404, "api.upload_not_found")
+    extra_folders: list[Path] = []
+    for extra_folder, _meta in extras:
+        got = _claim_upload(extra_folder)
+        if got is None:
+            for taken in (folder, *extra_folders):
+                shutil.rmtree(taken, ignore_errors=True)
+            return await _fail(request, 404, "api.upload_not_found")
+        extra_folders.append(got)
     # ВСЁ, что дальше, — под общей уборкой. Отказ после того, как приём забрали
     # (не та тема, нет баланса, очередь полна, упал ffprobe), оставлял папку
     # лежать до почасовой уборки, и в счёт обещанного места она уже не шла:
@@ -861,11 +903,29 @@ async def upload_finish(request: web.Request) -> web.Response:
             info = await asyncio.to_thread(probe, data_path)
         except Exception:  # noqa: BLE001 — ffprobe не прочитал: это не видео или битый файл
             return await _fail(request, 415, "api.unreadable")
-        if info.duration < cfg.min_video_seconds:
+        # Пределы длины и звук — у ролика целиком: три дубля по десять секунд
+        # вместе проходят, а немой кусок (запись экрана) между говорящими
+        # допустим — склейка даст ему тишину.
+        duration = info.duration
+        has_audio = info.has_audio
+        if extra_folders:
+            from src.pipeline.split import top_video_seconds
+
+            for n, extra_folder in enumerate(extra_folders, start=2):
+                try:
+                    extra_info = await asyncio.to_thread(probe, extra_folder / "data")
+                    # Картинка и обложка mp3 проходят ffprobe, а в склейке дали
+                    # бы застывший кадр.
+                    await asyncio.to_thread(top_video_seconds, extra_folder / "data")
+                except Exception:  # noqa: BLE001 — не видео или ffprobe не прочитал
+                    return await _fail(request, 415, "api.clip_unreadable", n=n)
+                duration += extra_info.duration
+                has_audio = has_audio or extra_info.has_audio
+        if duration < cfg.min_video_seconds:
             return _json_error(400, error_text("too_short", lang, **limits))
-        if info.duration > cfg.max_video_seconds:
+        if duration > cfg.max_video_seconds:
             return _json_error(400, error_text("too_long", lang, **limits))
-        if not info.has_audio:
+        if not has_audio:
             return _json_error(400, error_text("no_audio", lang, **limits))
         if top_folder is not None:
             # Верхнему не нужны ни звук, ни пределы длины: он без звука, а
@@ -884,7 +944,7 @@ async def upload_finish(request: web.Request) -> web.Response:
                 user.id,
                 source_file_id=None,
                 source_key=None,
-                source_size=meta["size"],
+                source_size=meta["size"] + sum(int(m["size"]) for _, m in extras),
                 preset=preset,
                 chat_id=user.id,
                 options=options.model_dump(),
@@ -896,7 +956,14 @@ async def upload_finish(request: web.Request) -> web.Response:
         try:
             key = storage.key_for(SOURCES, str(job.id), "source.mp4")
             await storage.upload(data_path, key, content_type="video/mp4")
-            await repo.update_job(job.id, source_key=key, source_duration=info.duration, preset=preset)
+            await repo.update_job(job.id, source_key=key, source_duration=duration, preset=preset)
+            if extra_folders:
+                # Куски едут в хранилище как есть, склеит их воркер в начале
+                # задачи (`tasks.join_source_parts`): перекодирование — минута
+                # процессора, и держать на ней запрос приложения нельзя.
+                for i, extra_folder in enumerate(extra_folders, start=1):
+                    await storage.upload(extra_folder / "data", part_key(job.id, i), content_type="video/mp4")
+                await repo.update_job(job.id, source_parts=len(extra_folders))
             if top_folder is not None:
                 top_key = storage.key_for(SOURCES, str(job.id), "top.mp4")
                 await storage.upload(top_folder / "data", top_key, content_type="video/mp4")
@@ -941,6 +1008,8 @@ async def upload_finish(request: web.Request) -> web.Response:
         shutil.rmtree(folder, ignore_errors=True)
         if top_folder is not None:
             shutil.rmtree(top_folder, ignore_errors=True)
+        for extra_folder in extra_folders:
+            shutil.rmtree(extra_folder, ignore_errors=True)
 
     if status_id is not None:
         watch_job(bot, user.id, status_id, str(job.id), preset)

@@ -114,6 +114,11 @@ class Job(Base):
     # источник
     source_file_id: Mapped[str | None] = mapped_column(String(256))
     source_key: Mapped[str | None] = mapped_column(String(512))  # ключ в S3
+    # Ролик из нескольких видео: сколько ещё кусков лежит рядом с исходником
+    # (`sources/<задача>/part1.mp4`…) и ждёт склейки. Воркер склеивает их в
+    # начале задачи, кладёт результат на место исходника и обнуляет счётчик —
+    # дальше это обычный ролик из одного файла. NULL и 0 — склеивать нечего.
+    source_parts: Mapped[int | None] = mapped_column(Integer)
     # Второй исходник режима «Два видео» — верхняя половина кадра, без звука.
     # NULL — обычный ролик из одного видео.
     top_source_key: Mapped[str | None] = mapped_column(String(512))

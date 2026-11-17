@@ -47,6 +47,9 @@ const I18N = {
     "req.duration": "Длительность от {min} с до {max} мин.", "req.size": "Размер до {mb} МБ.",
     "req.speaker": "В кадре — говорящий человек, звук с речью.",
     "req.orientation": "Подойдёт и вертикальное, и горизонтальное: кадр 9:16 соберём сами.",
+    "req.clips": "Можно до {n} видео: склеим по порядку в один ролик. Длина считается по всем вместе.",
+    "clips.title": "Ваши видео · {n}", "clips.total": "всего {t}", "clips.add": "Добавить ещё видео",
+    "clips.max": "В одном ролике — не больше {n} видео.",
     "file.too_long": "Видео длиннее {max} мин — сервер его не примет.",
     "file.too_short": "Видео короче {min} с — монтировать нечего.",
     "size.mb": "МБ", "size.gb": "ГБ", "dur.s": "с",
@@ -146,6 +149,9 @@ const I18N = {
     "req.duration": "Length from {min} s to {max} min.", "req.size": "Up to {mb} MB.",
     "req.speaker": "A person talking on camera, with audible speech.",
     "req.orientation": "Portrait or landscape — we'll build the 9:16 frame ourselves.",
+    "req.clips": "Up to {n} videos: we join them in order into one reel. The length is counted across all of them.",
+    "clips.title": "Your videos · {n}", "clips.total": "{t} total", "clips.add": "Add another video",
+    "clips.max": "One reel takes up to {n} videos.",
     "file.too_long": "The video is longer than {max} min — the server won't accept it.",
     "file.too_short": "The video is shorter than {min} s — nothing to edit.",
     "size.mb": "MB", "size.gb": "GB", "dur.s": "s",
@@ -244,6 +250,9 @@ const state = {
   // верхнее, то, что показывают.
   layout: "single",
   topFile: null,
+  // Ролик из нескольких видео: куски в порядке склейки, `{ file, duration,
+  // thumb }`. Первый кусок — он же `file`; в «Двух видео» кусок всегда один.
+  clips: [],
   // «Музыка из рилса»: ссылку проверяет сервер (`POST /api/music`), `id` уходит
   // в `finish`. `seq` отбрасывает ответы на ссылки, которые уже заменили.
   music: { status: "empty", id: null, duration: null, error: null, seq: 0, url: "" },
@@ -944,6 +953,9 @@ function renderLayout() {
   // нет вовсе: верхнюю половину пользователь показывает сам.
   $("#send-in-chat").hidden = split;
   $('[data-option="broll"]').closest(".toggle-row").hidden = split;
+  // В «Двух видео» снизу одно видео: от списка остаётся первое.
+  if (split && state.clips.length > 1) state.clips.length = 1;
+  renderClips();
   renderNext();
   renderCta();
 }
@@ -987,25 +999,92 @@ const SLOTS = {
   top: { key: "topFile", zone: "#top-dropzone", thumb: "#top-thumb", title: "#top-title", sub: "#top-sub", input: "#top-input", remove: "#top-remove" },
 };
 
-function setFile(file, which = "bottom") {
-  const slot = SLOTS[which];
-  state[slot.key] = file;
-  const zone = $(slot.zone);
-  const thumb = $(slot.thumb);
-  zone.classList.toggle("has-file", !!file);
-  thumb.style.backgroundImage = "";
-  thumb.classList.remove("has-image");
-  renderNext();
-  if (!file) {
-    $(slot.input).value = "";
-    renderCta();
-    return;
+// Сколько видео склеивается в один ролик. Число даёт сервер (`pipeline.join`).
+function maxClips() {
+  return (state.boot && state.boot.limits.max_clips) || 1;
+}
+
+function clipOf(file) {
+  return state.clips.find((c) => c.file === file);
+}
+
+// Длина ролика считается по всем кускам вместе: сервер проверяет её так же.
+function warnTotalLength() {
+  const lim = state.boot.limits;
+  if (!state.clips.length || state.clips.some((c) => !isFinite(c.duration))) return;
+  const total = state.clips.reduce((n, c) => n + c.duration, 0);
+  if (total > lim.max_minutes * 60 + 1) toast(tr("file.too_long", { max: lim.max_minutes }));
+  else if (state.clips.length === 1 && total < lim.min_seconds) toast(tr("file.too_short", { min: lim.min_seconds }));
+}
+
+// Добавить видео в ролик. В «Двух видео» кусок один — новый заменяет прежний.
+function addClips(files) {
+  if (!files.length) return;
+  if (state.layout === "split") { setFile(files[0]); return; }
+  const first = !state.clips.length;
+  for (const file of files) {
+    if (state.clips.length >= maxClips()) { toast(tr("clips.max", { n: maxClips() })); break; }
+    const clip = { file, duration: NaN, thumb: "" };
+    state.clips.push(clip);
+    // Первый кусок осматривает `setFile` — он же держит поле «Двух видео».
+    if (state.clips[0] === clip) continue;
+    inspectVideo(file, () => state.clips.includes(clip), (d) => {
+      clip.duration = d;
+      renderClips();
+      warnTotalLength();
+    }, (dataUrl) => { clip.thumb = dataUrl; renderClips(); });
   }
-  $(slot.title).textContent = file.name || tr("edit.untitled");
-  $(slot.sub).textContent = fmtSize(file.size);
-  // Длительность читаем браузером до загрузки: слишком длинное видео лучше
-  // отбить сразу, а не после минуты заливки по мобильной сети. Заодно снимаем
-  // кадр на обложку: имя файла вроде `IMG_4821.mov` не говорит, то ли это видео.
+  if (first) setFile(state.clips[0].file);
+  else { renderClips(); renderCta(); }
+}
+
+function removeClip(index) {
+  state.clips.splice(index, 1);
+  const head = state.clips[0] ? state.clips[0].file : null;
+  // Убрали первый — его место занимает следующий, и поле «Двух видео» должно
+  // показывать уже его.
+  if (state.file !== head) setFile(head);
+  else { renderClips(); renderCta(); }
+}
+
+// Список видео показан вместо поля выбора, как только выбрано хотя бы одно. В
+// «Двух видео» списка нет: там два поля в рамке кадра.
+function renderClips() {
+  const show = state.layout !== "split" && state.clips.length > 0;
+  $("#clips").hidden = !show;
+  $("#dropzone").hidden = show;
+  if (!show) return;
+  const n = state.clips.length;
+  $("#clips-title").textContent = tr("clips.title", { n });
+  const known = state.clips.every((c) => isFinite(c.duration));
+  const total = state.clips.reduce((sum, c) => sum + (c.duration || 0), 0);
+  $("#clips-total").textContent = known ? tr("clips.total", { t: fmtDuration(total) }) : "";
+  $("#clips-list").replaceChildren(...state.clips.map((clip, i) => {
+    const thumb = el("span", { class: `clip__thumb${clip.thumb ? " has-image" : ""}` }, [
+      icon("film", 20), el("i", { class: "clip__no", text: String(i + 1) }),
+    ]);
+    if (clip.thumb) thumb.style.backgroundImage = `url(${clip.thumb})`;
+    const meta = [isFinite(clip.duration) ? fmtDuration(clip.duration) : "", fmtSize(clip.file.size)].filter(Boolean).join(" · ");
+    return el("div", { class: "clip" }, [
+      thumb,
+      el("span", { class: "clip__text" }, [
+        el("b", { text: clip.file.name || tr("edit.untitled") }),
+        el("span", { class: "muted", text: meta }),
+      ]),
+      el("button", {
+        class: "clip__remove", type: "button", "aria-label": tr("edit.remove"),
+        onclick: () => { if (!state.busy) { removeClip(i); haptic(); } },
+      }, [icon("close", 18)]),
+    ]);
+  }));
+  $("#clips-add").hidden = n >= maxClips();
+}
+
+// Длительность читаем браузером до загрузки: слишком длинное видео лучше
+// отбить сразу, а не после минуты заливки по мобильной сети. Заодно снимаем
+// кадр на обложку: имя файла вроде `IMG_4821.mov` не говорит, то ли это видео.
+// `alive()` — файл всё ещё выбран; `onMeta(секунды)`, `onThumb(dataURL)`.
+function inspectVideo(file, alive, onMeta, onThumb) {
   const url = URL.createObjectURL(file);
   const probe = document.createElement("video");
   probe.preload = "metadata";
@@ -1027,32 +1106,66 @@ function setFile(file, which = "bottom") {
   const guard = setTimeout(done, 3000);
   probe.onloadedmetadata = () => {
     const d = probe.duration;
-    if (state[slot.key] !== file) { done(); return; }
-    $(slot.sub).textContent = `${fmtSize(file.size)} · ${fmtDuration(d)}`;
-    // Пределы длины — у речи. Верхнему они не нужны: короткое просто раньше
-    // раскроет нижнее на весь экран, длинное обрежется.
-    const lim = state.boot.limits;
-    if (which === "bottom" && isFinite(d) && d > lim.max_minutes * 60 + 1) toast(tr("file.too_long", { max: lim.max_minutes }));
-    else if (which === "bottom" && isFinite(d) && d < lim.min_seconds) toast(tr("file.too_short", { min: lim.min_seconds }));
+    if (!alive()) { done(); return; }
+    onMeta(d);
     try { probe.currentTime = Math.min(0.5, (isFinite(d) ? d : 1) / 2); } catch (_) { done(); }
   };
   probe.onseeked = () => {
     try {
       const side = Math.min(probe.videoWidth, probe.videoHeight);
-      if (side && state[slot.key] === file) {
+      if (side && alive()) {
         const c = document.createElement("canvas");
         c.width = c.height = 128;
         c.getContext("2d").drawImage(
           probe, (probe.videoWidth - side) / 2, (probe.videoHeight - side) / 2, side, side, 0, 0, 128, 128,
         );
-        thumb.style.backgroundImage = `url(${c.toDataURL("image/jpeg", 0.72)})`;
-        thumb.classList.add("has-image");
+        onThumb(c.toDataURL("image/jpeg", 0.72));
       }
     } catch (_) { /* кодек не отдаёт кадр в canvas — остаётся иконка */ }
     done();
   };
   probe.onerror = done;
   probe.src = url;
+}
+
+function setFile(file, which = "bottom") {
+  const slot = SLOTS[which];
+  state[slot.key] = file;
+  // Нижнее поле и первый кусок ролика — один и тот же файл: выбор в поле
+  // заводит список заново, а сброс поля его очищает.
+  if (which === "bottom") {
+    if (!file) state.clips = [];
+    else if (!state.clips.length || state.clips[0].file !== file) state.clips = [{ file, duration: NaN, thumb: "" }];
+  }
+  const zone = $(slot.zone);
+  const thumb = $(slot.thumb);
+  zone.classList.toggle("has-file", !!file);
+  thumb.style.backgroundImage = "";
+  thumb.classList.remove("has-image");
+  renderNext();
+  renderClips();
+  if (!file) {
+    $(slot.input).value = "";
+    renderCta();
+    return;
+  }
+  $(slot.title).textContent = file.name || tr("edit.untitled");
+  $(slot.sub).textContent = fmtSize(file.size);
+  inspectVideo(file, () => state[slot.key] === file, (d) => {
+    $(slot.sub).textContent = `${fmtSize(file.size)} · ${fmtDuration(d)}`;
+    // Пределы длины — у речи. Верхнему они не нужны: короткое просто раньше
+    // раскроет нижнее на весь экран, длинное обрежется.
+    if (which !== "bottom") return;
+    const clip = clipOf(file);
+    if (clip) clip.duration = d;
+    renderClips();
+    warnTotalLength();
+  }, (dataUrl) => {
+    thumb.style.backgroundImage = `url(${dataUrl})`;
+    thumb.classList.add("has-image");
+    const clip = which === "bottom" ? clipOf(file) : null;
+    if (clip) { clip.thumb = dataUrl; renderClips(); }
+  });
   renderCta();
 }
 
@@ -1120,7 +1233,8 @@ function initEdit() {
       tr("req.size", { mb: l.max_upload_mb }),
       tr("req.speaker"),
       tr("req.orientation"),
-    ].join("\n"));
+      maxClips() > 1 ? tr("req.clips", { n: maxClips() }) : "",
+    ].filter(Boolean).join("\n"));
   });
   $("#send-in-chat").addEventListener("click", () => {
     haptic();
@@ -1129,7 +1243,15 @@ function initEdit() {
 
   for (const [which, slot] of Object.entries(SLOTS)) {
     const input = $(slot.input);
-    input.addEventListener("change", () => setFile(input.files[0] || null, which));
+    input.addEventListener("change", () => {
+      const files = Array.from(input.files || []);
+      if (which !== "bottom") { setFile(files[0] || null, which); return; }
+      // Нижнее поле принимает несколько видео разом и добавляет к уже
+      // выбранным. Отмена выбора ничего не сбрасывает: убирают видео крестиком.
+      // Значение чистим, чтобы тот же файл можно было выбрать снова.
+      if (files.length && !state.busy) addClips(files);
+      input.value = "";
+    });
     const zone = $(slot.zone);
     zone.addEventListener("click", (ev) => {
       if (state[slot.key] && ev.target.closest(slot.remove)) {
@@ -1144,10 +1266,24 @@ function initEdit() {
     zone.addEventListener("drop", (ev) => {
       ev.preventDefault();
       zone.classList.remove("is-over");
-      const f = ev.dataTransfer.files[0];
-      if (f && !state.busy) setFile(f, which);
+      const dropped = Array.from(ev.dataTransfer.files || []);
+      if (!dropped.length || state.busy) return;
+      if (which === "bottom") addClips(dropped);
+      else setFile(dropped[0], which);
     });
   }
+
+  // «Добавить ещё видео»: тот же выбор файлов, что у поля, плюс перетаскивание.
+  const add = $("#clips-add");
+  add.addEventListener("click", () => { if (!state.busy) { haptic(); $("#file-input").click(); } });
+  add.addEventListener("dragover", (ev) => { ev.preventDefault(); add.classList.add("is-over"); });
+  add.addEventListener("dragleave", () => add.classList.remove("is-over"));
+  add.addEventListener("drop", (ev) => {
+    ev.preventDefault();
+    add.classList.remove("is-over");
+    const dropped = Array.from(ev.dataTransfer.files || []);
+    if (dropped.length && !state.busy) addClips(dropped);
+  });
 
   for (const box of $$("[data-option]")) {
     box.addEventListener("change", () => { state.options[box.dataset.option] = box.checked; haptic(); });
@@ -1340,7 +1476,8 @@ async function uploadOne(file, onBytes) {
 // общая по байтам: два прогресса подряд читались бы как «загрузилось и
 // началось заново».
 async function uploadAndStart() {
-  const files = state.layout === "split" ? [state.file, state.topFile] : [state.file];
+  const split = state.layout === "split";
+  const files = split ? [state.file, state.topFile] : state.clips.map((c) => c.file);
   const total = files.reduce((n, f) => n + f.size, 0) || 1;
   let before = 0;
   const show = (sent) => {
@@ -1358,7 +1495,10 @@ async function uploadAndStart() {
     // Шрифта в опциях нет: его задаёт стиль (отдельный выбор убран).
     options: { ...state.options, accent: state.accent },
   };
-  if (ids[1]) body.top_upload_id = ids[1];
+  // Второй файл — верх «Двух видео», а в обычном режиме остальные файлы —
+  // продолжение ролика: сервер склеит их по порядку в один исходник.
+  if (split) { if (ids[1]) body.top_upload_id = ids[1]; }
+  else if (ids.length > 1) body.extra_upload_ids = ids.slice(1);
   // Трек уходит, только если уже проверен. Пока ссылка проверяется, ролик
   // собирается без музыки — ждать её кнопка не обязана.
   if (state.music.status === "ready" && state.music.id) body.music_id = state.music.id;

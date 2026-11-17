@@ -309,7 +309,13 @@ async def test_split_job_skips_broll_and_stages_two_videos(harness, monkeypatch)
     until = calls["stage_split"]["until"]
     # Верх меряется по видеодорожке (3 с), а не по контейнеру (12 с): иначе
     # кадр считался бы поделённым весь ролик, и верх замер бы на 3-й секунде.
-    assert result.edl.split_until == until == pytest.approx(2.0)
+    # Сам момент — граница блока субтитров, последняя до конца верхнего. Число
+    # не зашито: границы двигает удержание блоков (`render_plan.held_start`).
+    from src.core.render_plan import block_windows
+
+    bounds = {x for window in block_windows(result.edl, cfg=cfg) for x in window}
+    assert result.edl.split_until == until == max(b for b in bounds if b <= 3.0)
+    assert 1.0 <= until <= 3.0
     assert seen["stage_split"] is False, "сборка кадра занимает event loop"
     assert seen["top_video_seconds"] is False, "замер верхнего видео занимает event loop"
 

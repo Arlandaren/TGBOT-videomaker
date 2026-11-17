@@ -136,6 +136,45 @@ async def fetch_source(job: Any, dst: Path) -> Path:
     raise JobError("Исходный файл потерялся. Пришлите видео ещё раз.", "source_lost")
 
 
+def part_key(job_id: Any, index: int) -> str:
+    """Ключ куска ролика из нескольких видео; `index` — с единицы, нулевой кусок — сам исходник."""
+    return storage.key_for(SOURCES, str(job_id), f"part{index}.mp4")
+
+
+async def join_source_parts(job: Any, src: Path, work: Path) -> Path:
+    """Ролик из нескольких видео: докачать куски и склеить в один исходник.
+
+    Склейка кладётся в хранилище НА МЕСТО исходника, а счётчик кусков
+    обнуляется. Так перерендер и повтор задачи после перезапуска воркера видят
+    обычный ролик из одного файла и не склеивают заново.
+    """
+    from src.pipeline.join import join_clips
+
+    count = int(getattr(job, "source_parts", None) or 0)
+    if count <= 0:
+        return src
+    clips = [src]
+    for i in range(1, count + 1):
+        part = work / f"part{i}.mp4"
+        try:
+            await storage.download(part_key(job.id, i), part)
+        except FileNotFoundError as e:
+            raise JobError("Исходный файл потерялся. Пришлите видео ещё раз.", "source_lost") from e
+        clips.append(part)
+    joined = work / "joined.mp4"
+    await asyncio.to_thread(join_clips, clips, joined)
+    for clip in clips:
+        clip.unlink(missing_ok=True)
+    joined.replace(src)
+    if job.source_key:
+        await storage.upload(src, job.source_key, content_type="video/mp4")
+        await repo.update_job(job.id, source_parts=0)
+        for i in range(1, count + 1):
+            with suppress(Exception):  # кусок доберёт уборка хранилища по сроку
+                await storage.delete(part_key(job.id, i))
+    return src
+
+
 async def fetch_top_source(job: Any, dst: Path) -> Path | None:
     """Верхнее видео режима «Два видео» или `None`, если ролик из одного.
 
@@ -222,6 +261,9 @@ async def process_job(ctx: dict[str, Any], job_id: str) -> dict[str, Any]:
         async with heartbeat(redis, str(job.id)):
             await publish("Скачиваю файл", 0.01, "download")
             src_path = await fetch_source(job, work / "source.mp4")
+            if getattr(job, "source_parts", None):
+                await publish("Склеиваю видео", 0.02, "join")
+                src_path = await join_source_parts(job, src_path, work)
             top_path = await fetch_top_source(job, work / "top.mp4")
             music_path = await fetch_music(job, work)
 
@@ -647,6 +689,8 @@ async def purge_expired_files(ctx: dict[str, Any]) -> dict[str, int]:
     for job in jobs:
         keys = {job.source_key, getattr(job, "top_source_key", None),
                 getattr(job, "music_key", None), job.result_key}
+        # Куски несклеенного ролика (задача упала до склейки).
+        keys |= {part_key(job.id, i) for i in range(1, int(getattr(job, "source_parts", None) or 0) + 1)}
         for key in keys - {None}:
             try:
                 await storage.delete(key)

@@ -11,15 +11,16 @@ Telegram хранит её, пока бот не пришлёт другую.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from aiogram import BaseMiddleware, Bot, F, Router
 from aiogram.types import Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from src.bot.handlers import common
-from src.bot.keyboards import app_keyboard, main_keyboard
+from src.bot.handlers.payments import share_text
+from src.bot.keyboards import app_keyboard, main_keyboard, share_keyboard
 from src.core.config import settings
-from src.core.i18n import LANGS, lang_of, t, tokens_text
+from src.core.i18n import LANGS, lang_of, people_word, t, tokens_text, videos_word
 from src.core.referral import code_of
 from src.db import repo
 
@@ -98,11 +99,25 @@ async def on_button(message: Message, bot: Bot) -> None:
     if action == "start":
         # Инлайн-кнопка несёт СВЕЖИЙ адрес приложения — в отличие от клавиатуры,
         # которая лежит в чате с прошлого запуска.
-        await message.answer(common.welcome_text(lang), reply_markup=app_keyboard(None, lang))
-    elif action == "balance":
         await message.answer(
-            t("stats.balance", lang, n=tokens_text(db_user.balance, lang)),
-            reply_markup=app_keyboard("balance", lang),
+            t(
+                "start.steps", lang,
+                min_s=f"{settings.min_video_seconds:.0f}",
+                max_m=f"{settings.max_video_minutes:.0f}",
+            ),
+            reply_markup=app_keyboard(None, lang, "btn.begin", "start"),
+        )
+    elif action == "balance":
+        done = db_user.videos_done or 0
+        enough = db_user.balance // max(1, settings.tokens_per_video)
+        await message.answer(
+            t(
+                "menu.balance", lang,
+                balance=tokens_text(db_user.balance, lang),
+                enough=f"{enough} {videos_word(enough, lang)}",
+                done=f"{done} {videos_word(done, lang)}",
+            ),
+            reply_markup=app_keyboard("balance", lang, "btn.topup", "balance"),
         )
     elif action == "videos":
         await message.answer(t("menu.videos", lang), reply_markup=app_keyboard("videos", lang))
@@ -113,12 +128,24 @@ async def on_button(message: Message, bot: Bot) -> None:
             await message.answer(t("menu.referral_off", lang))
         else:
             me = await bot.me()
+            link = f"https://t.me/{me.username}?start={code_of(user.id)}"
+            # Счётчики — справка, а не суть сообщения: без базы ссылка всё равно
+            # должна прийти, пусть и с нулями.
+            invited = earned = 0
+            try:
+                stats = await repo.referral_stats(user.id, since=datetime.now(timezone.utc))
+                invited, earned = stats["invited"], stats["earned"]
+            except Exception as e:  # noqa: BLE001
+                log.warning("сводка приглашений для %s не собралась: %s", user.id, e)
             await message.answer(
                 t(
                     "menu.referral", lang,
                     percent=settings.referral_percent,
-                    link=f"https://t.me/{me.username}?start={code_of(user.id)}",
+                    link=link,
+                    invited=f"{invited} {people_word(invited, lang)}",
+                    earned=share_text(earned, lang),
                 ),
+                reply_markup=share_keyboard(link, lang),
                 disable_web_page_preview=True,
             )
     elif action == "channel":

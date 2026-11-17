@@ -62,6 +62,10 @@ def plural(n: int, lang: str | None, forms_ru: tuple[str, str, str], forms_en: t
     return {1: forms_ru[0], 2: forms_ru[1], 3: forms_ru[1], 4: forms_ru[1]}.get(a % 10, forms_ru[2])
 
 
+def people_word(n: int, lang: str | None) -> str:
+    return plural(n, lang, ("человек", "человека", "человек"), ("person", "people"))
+
+
 def videos_word(n: int, lang: str | None) -> str:
     return plural(n, lang, ("ролик", "ролика", "роликов"), ("video", "videos"))
 
@@ -95,32 +99,47 @@ TEXTS: dict[str, dict[str, str]] = {
     # ------------------------------------------------------------ старт и помощь
     "start.welcome": {
         "ru": (
-            "Привет! Я — {brand}, бот-монтажёр 🎬\n\n"
-            "Снимаете видео, где говорите на камеру о работе, экспертизе или своём дне? "
-            "Присылайте сырой файл — дальше я сам:\n\n"
-            "✂️ вырежу паузы, «эээ» и неловкие заминки\n"
-            "🎥 оживлю картинку: смена планов, кадр 9:16, лицо в центре\n"
-            "💬 поставлю трендовые субтитры с акцентом на главном слове\n"
-            "🖼 подберу картинки по смыслу и добавлю звуковые акценты\n\n"
-            "Через пару минут — готовый Reels, который сразу можно выкладывать. "
-            "Без монтажёра, без CapCut, без вечера за таймлайном.\n\n"
-            "📎 Видео от {min_s} с до {max_m} мин, подойдёт и горизонтальное\n"
-            "🎨 Стиль и цвет субтитров — в приложении, кнопка ниже"
+            "Привет! Я — бот-монтажёр {brand} 🎬\n\n"
+            "Кидаете мне сырое видео, где вы говорите на камеру о своей работе, "
+            "экспертизе, дне — а я сам:\n\n"
+            "✅ вырежу все паузы и «эээ»\n"
+            "✅ сделаю картинку динамичной\n"
+            "✅ поставлю трендовые субтитры\n"
+            "✅ добавлю картинки по смыслу\n"
+            "✅ расставлю звуковые акценты\n\n"
+            "На выходе — готовый Reels. Без монтажёра, без CapCut."
         ),
         "en": (
             "Hi! I'm {brand}, your video editing bot 🎬\n\n"
-            "Recorded yourself talking about your work, expertise or day? "
-            "Send me the raw file — I'll take it from there:\n\n"
-            "✂️ cut the pauses, “umm”s and awkward stumbles\n"
-            "🎥 make it dynamic: shot changes, 9:16 frame, face centered\n"
-            "💬 add trending captions with the key word highlighted\n"
-            "🖼 pick matching images and add sound accents\n\n"
-            "A few minutes later you get a Reel that's ready to post. "
-            "No editor, no CapCut, no evening lost on a timeline.\n\n"
-            "📎 Videos from {min_s} s to {max_m} min, landscape works too\n"
-            "🎨 Caption style and colour are in the app — button below"
+            "Send me a raw video of you talking on camera about your work, "
+            "expertise or day — and I'll do the rest:\n\n"
+            "✅ cut every pause and “umm”\n"
+            "✅ make the picture dynamic\n"
+            "✅ add trending captions\n"
+            "✅ add images that match the meaning\n"
+            "✅ place sound accents\n\n"
+            "You get a finished Reel. No editor, no CapCut."
         ),
     },
+    # Ответ на «Начать монтаж»: что делать дальше, тремя шагами.
+    "start.steps": {
+        "ru": (
+            "✨ Всего три шага:\n\n"
+            "1. Загружаете видео, где вы говорите на камеру\n"
+            "2. Выбираете стиль и оформление\n"
+            "3. Через пару минут забираете готовый Reels\n\n"
+            "Видео от {min_s} с до {max_m} мин, подойдёт и горизонтальное."
+        ),
+        "en": (
+            "✨ Just three steps:\n\n"
+            "1. Upload a video of you talking on camera\n"
+            "2. Pick a style and look\n"
+            "3. A few minutes later, collect your finished Reel\n\n"
+            "Videos from {min_s} s to {max_m} min, landscape works too."
+        ),
+    },
+    "btn.begin": {"ru": "Приступить", "en": "Get started"},
+    "btn.topup": {"ru": "Пополнить баланс", "en": "Top up"},
     # Условия одной строкой под приветствием (`handlers.common.offer_text`).
     # `cost` — цена ролика в токенах, `pack` — самый маленький пакет.
     "start.offer_trial_one": {
@@ -161,29 +180,47 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "The buttons below are your shortcuts.",
     },
     "menu.videos": {
-        "ru": "Ваши ролики и прогресс монтажа — в приложении.",
-        "en": "Your reels and editing progress live in the app.",
+        "ru": "Ваши ролики — откройте приложение, чтобы посмотреть детали и прогресс монтажа:",
+        "en": "Your reels — open the app to see the details and editing progress:",
+    },
+    "menu.balance": {
+        "ru": "Ваш баланс: {balance}\nХватит на ~{enough}\nСмонтировано всего: {done}",
+        "en": "Your balance: {balance}\nEnough for ~{enough}\nEdited in total: {done}",
     },
     "menu.referral": {
         "ru": (
-            "🎁 Приглашайте друзей — получаете {percent}% их покупок токенами.\n\n"
+            "Приглашайте друзей — получайте токены.\n"
+            "За каждую успешную оплату приглашённого друга получаете {percent}% "
+            "от купленных им токенов на баланс.\n\n"
             "Ваша ссылка:\n{link}\n\n"
-            "Бонус приходит в тот момент, когда друг оплачивает пакет."
+            "Приглашено: {invited}\n"
+            "Заработано: {earned}"
         ),
         "en": (
-            "🎁 Invite friends — you get {percent}% of their purchases in tokens.\n\n"
+            "Invite friends — earn tokens.\n"
+            "For every successful payment by a friend you invited, you get {percent}% "
+            "of the tokens they bought on your balance.\n\n"
             "Your link:\n{link}\n\n"
-            "The bonus arrives the moment a friend pays for a package."
+            "Invited: {invited}\n"
+            "Earned: {earned}"
         ),
     },
     "menu.referral_off": {
         "ru": "Программа приглашений сейчас выключена.",
         "en": "The referral programme is switched off right now.",
     },
-    "menu.referral_share": {"ru": "Отправить другу", "en": "Share with a friend"},
+    "menu.referral_share": {"ru": "Поделиться", "en": "Share"},
     "menu.support": {
-        "ru": "Вопрос или что-то сломалось — напишите {contact}.",
-        "en": "A question or something broken — write to {contact}.",
+        "ru": (
+            "Чем помочь?\n\n"
+            "Если видео не проходит, монтаж завис, списались лишние токены "
+            "или остался любой другой вопрос — пишите {contact}, разберёмся."
+        ),
+        "en": (
+            "How can we help?\n\n"
+            "If a video won't go through, an edit is stuck, extra tokens were charged "
+            "or you have any other question — write to {contact} and we'll sort it out."
+        ),
     },
     # Контакт поддержки не задан (SUPPORT_CONTACT пуст и у владельца нет
     # @username). Покупателю — без служебных подробностей; владельцу об этом

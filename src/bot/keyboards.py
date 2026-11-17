@@ -95,14 +95,30 @@ def _app_url(section: str | None) -> str | None:
     return f"{_webapp_url}/?screen={section}" if section else _webapp_url
 
 
-def app_keyboard(section: str | None = None, lang: str | None = None) -> InlineKeyboardMarkup | None:
-    """Кнопка «открыть приложение». Без адреса приложения — без кнопки, а не с битой."""
+def app_keyboard(
+    section: str | None = None, lang: str | None = None,
+    label: str = "btn.open_app", icon: str = "app",
+) -> InlineKeyboardMarkup | None:
+    """Кнопка «открыть приложение». Без адреса приложения — без кнопки, а не с битой.
+
+    `label` и `icon` — подпись и значок: кнопка под балансом зовёт пополнить,
+    под тремя шагами — приступить, а открывают обе одно и то же приложение.
+    """
     url = _app_url(section)
     if not url:
         return None
     kb = InlineKeyboardBuilder()
-    kb.button(text=t("btn.open_app", lang), web_app=WebAppInfo(url=url),
-              icon_custom_emoji_id=icons.icon("app"))
+    kb.button(text=t(label, lang), web_app=WebAppInfo(url=url),
+              icon_custom_emoji_id=icons.icon(icon), style=icons.STYLES.get(icon))
+    return kb.as_markup()
+
+
+def share_keyboard(link: str, lang: str | None = None) -> InlineKeyboardMarkup:
+    """«Поделиться» под ссылкой приглашения: Telegram сам предложит выбрать чат."""
+    from urllib.parse import quote
+
+    kb = InlineKeyboardBuilder()
+    kb.button(text=t("menu.referral_share", lang), url=f"https://t.me/share/url?url={quote(link, safe='')}")
     return kb.as_markup()
 
 

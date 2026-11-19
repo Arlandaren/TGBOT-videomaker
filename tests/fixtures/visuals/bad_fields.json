@@ -1,0 +1,45 @@
+{
+ "note": "Негодная форма: плашка без текста и с текстом длиннее потолка, стикер с ключом вне набора и с двумя эмодзи, декор без знака, неизвестный вид, лишние поля, не те типы, мусор вместо элементов. Что можно подрезать — подрезается, остальное выпадает.",
+ "visuals": {
+  "version": 7,
+  "overlays": [
+   {"kind": "chip", "word_idx": 7},
+   {"kind": "chip", "word_idx": 8, "text": "   "},
+   {"kind": "chip", "word_idx": 9, "text": "очень длинный текст плашки, который никуда не влезет"},
+   {"kind": "sticker", "word_idx": 14, "sticker": "unicorn"},
+   {"kind": "sticker", "word_idx": 15, "sticker": "unicorn", "emoji": "🦄"},
+   {"kind": "sticker", "word_idx": 18, "emoji": "🔥🔥"},
+   {"kind": "decor", "word_idx": 19},
+   {"kind": "banner", "word_idx": 20, "text": "x"},
+   {"kind": "chip", "word_idx": 24, "text": "рост", "zzz": 1, "style": "neon", "slot": "moon", "seed": "x"},
+   {"kind": "sticker", "word_idx": "seven", "sticker": "house"},
+   {"kind": "decor", "word_idx": 29, "glyph": "heart"},
+   "просто строка",
+   42,
+   null,
+   {"kind": "chip", "word_idx": 34, "text": "  Ипотека   дорого  ", "emoji": "не эмодзи"},
+   {"kind": "sticker", "word_idx": 41, "sticker": "house", "text": "подпись", "glyph": "question"}
+  ],
+  "scenes": [
+   {"layout": "hologram", "word_from": 6, "word_to": 13},
+   {"layout": "phone", "word_from": "a", "word_to": 13},
+   {
+    "layout": "phone",
+    "word_from": 49,
+    "word_to": 54,
+    "heading": "заголовок длиннее тридцати двух знаков совершенно точно",
+    "items": "не список",
+    "extra": true
+   }
+  ]
+ },
+ "expect": {
+  "overlays": 4,
+  "scenes": 1,
+  "texts": ["рост", "Ипотека дорого"],
+  "stickers": ["house"],
+  "emojis": ["🦄"],
+  "headings": [null],
+  "scene_items": [0]
+ }
+}

@@ -1,0 +1,37 @@
+{
+ "note": "Битые ссылки на слова: несуществующие и отрицательные индексы, вырезанное слово (5 — «Эээ»), конец раньше начала, конец на вырезанном слове, перевёрнутая сцена, элемент сцены вне сцены. Негодное начало губит элемент, негодный конец — только снимается.",
+ "visuals": {
+  "overlays": [
+   {"kind": "sticker", "word_idx": 999, "sticker": "house"},
+   {"kind": "sticker", "word_idx": -1, "sticker": "house"},
+   {"kind": "sticker", "word_idx": 5, "sticker": "thinking"},
+   {"kind": "chip", "word_idx": 10, "until_word_idx": 3, "text": "9 500 000 ₽"},
+   {"kind": "sticker", "word_idx": 24, "until_word_idx": 5, "sticker": "chart_up"},
+   {"kind": "sticker", "word_idx": 29, "until_word_idx": 29, "sticker": "bank"},
+   {"kind": "decor", "word_idx": 49, "until_word_idx": 999, "glyph": "sparkle"}
+  ],
+  "scenes": [
+   {"layout": "card_top", "word_from": 999, "word_to": 1000},
+   {"layout": "paper", "word_from": 13, "word_to": 6},
+   {"layout": "phone", "word_from": 5, "word_to": 13},
+   {
+    "layout": "card_top",
+    "word_from": 36,
+    "word_to": 42,
+    "items": [
+     {"kind": "sticker", "word_idx": 10, "sticker": "banknote"},
+     {"kind": "sticker", "word_idx": 999, "sticker": "banknote"},
+     {"kind": "chip", "word_idx": 37, "text": "проценты"}
+    ]
+   }
+  ]
+ },
+ "expect": {
+  "overlays": 4,
+  "scenes": 1,
+  "texts": ["9 500 000 ₽"],
+  "stickers": ["chart_up", "bank"],
+  "until_all_null": true,
+  "scene_items": [1]
+ }
+}

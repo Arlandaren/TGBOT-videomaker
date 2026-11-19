@@ -80,7 +80,12 @@ const mountAssets = (assetsDir, jobKey) => {
   } catch {
     /* ссылки ещё нет */
   }
-  fs.symlinkSync(path.resolve(assetsDir), link, "dir");
+  // На Windows — соединение каталогов (junction), а не символическая ссылка:
+  // ссылке нужны права администратора или режим разработчика, и без них рендер
+  // падал на EPERM, не начавшись. Соединению права не нужны, а удаляется оно так
+  // же, как ссылка, — содержимое папки джоба при этом не трогается (проверено).
+  // На Linux тип игнорируется, там по-прежнему обычная ссылка.
+  fs.symlinkSync(path.resolve(assetsDir), link, process.platform === "win32" ? "junction" : "dir");
   return `media/${jobKey}`;
 };
 

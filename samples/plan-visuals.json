@@ -1,0 +1,1564 @@
+{
+ "version": 1,
+ "fps": 24,
+ "width": 1080,
+ "height": 1920,
+ "duration": 18.47,
+ "video": "vertical.mp4",
+ "audio": "audio.wav",
+ "preset": {
+  "name": "pulse",
+  "title": "Pulse",
+  "order": 0,
+  "font": {
+   "family": "Montserrat ExtraBold",
+   "file": "Montserrat-ExtraBold.ttf",
+   "weight": 800,
+   "size": 76,
+   "uppercase": false,
+   "letter_spacing": -0.015,
+   "word_spacing": 0.0
+  },
+  "accent_font": null,
+  "colors": {
+   "active": "#FDFAF2",
+   "past": "#FDFAF2",
+   "ghost": "#FDFAF2",
+   "past_opacity": 1.0,
+   "ghost_opacity": 0.0,
+   "accent": "#F3D28F",
+   "shout": "#FF6A3D",
+   "outline": "#05070A",
+   "shadow": "#000000"
+  },
+  "panel": {
+   "enabled": true,
+   "color": "#0B0F14",
+   "opacity": 0.0,
+   "blur": 12,
+   "radius": 30,
+   "padding_x": 34,
+   "padding_y": 22,
+   "border_color": "#FFFFFF",
+   "border_opacity": 0.55,
+   "border_width": 2,
+   "glass_color": "#FFFFFF",
+   "glass_opacity": 0.14,
+   "icon_size": 104,
+   "icon_gap": 16,
+   "icon_emoji_scale": 0.52
+  },
+  "caption": {
+   "position": "bottom",
+   "margin": 380,
+   "line_height": 1.06,
+   "align": "center",
+   "max_lines": 2,
+   "min_word_scale": 0.4,
+   "fill_max_scale": 2.0,
+   "pinned": true,
+   "quiet": {
+    "enabled": true,
+    "position": "top",
+    "font_size": 41,
+    "margin": 140,
+    "line_height": 1.2,
+    "align": "left",
+    "edge": "left",
+    "edge_ratio": 0.18,
+    "max_lines": 4,
+    "max_line_width_ratio": 0.3,
+    "panel": false
+   },
+   "title_card": {
+    "enabled": true,
+    "start": 0.2,
+    "duration": 1.1,
+    "word_step": 0.1,
+    "font_size": 65,
+    "margin": 332,
+    "accent_scale": 4.25,
+    "line_height": 0.5,
+    "max_lines": 2,
+    "max_line_width_ratio": 1.0,
+    "panel": false,
+    "behind": true
+   },
+   "pill": {
+    "enabled": true,
+    "font_size": 46,
+    "line_height": 1.2,
+    "padding_x": 30,
+    "padding_y": 15,
+    "radius": 80,
+    "blur": 16,
+    "border_width": 2,
+    "border_color": "#FFFFFF",
+    "border_opacity": 0.36,
+    "tint_color": "#0E1116",
+    "tint_opacity": 0.42,
+    "glass_color": "#FFFFFF",
+    "glass_opacity": 0.06,
+    "gap": 14,
+    "emoji_scale": 1.1,
+    "emoji_box": 1.3,
+    "emoji_gap": 12,
+    "left_ratio": 0.2,
+    "right_ratio": 0.9,
+    "top_ratios": [
+     0.6,
+     0.66,
+     0.54,
+     0.72,
+     0.14,
+     0.2
+    ],
+    "bottom_ratio": 0.84,
+    "min_scale": 0.8,
+    "max_letter_spacing": 0.04
+   }
+  },
+  "animation": {
+   "pop_scale": 1.05,
+   "pop_ms": 200,
+   "spring_damping": 12.0,
+   "spring_stiffness": 190.0,
+   "spring_mass": 0.7,
+   "block_in_ms": 140,
+   "block_out_ms": 70,
+   "block_overlap_min_ms": 220,
+   "block_leave_falloff": 1.35,
+   "block_leave_scale": 0.94,
+   "block_gap_ms": 60,
+   "block_in_zoom": 0.03,
+   "accent_scale": 2.3,
+   "shout_scale": 2.6,
+   "shout_rotate": -3.0,
+   "block_shift_px": 22,
+   "block_leave_px": 48,
+   "broll_slide_px": 173,
+   "kb_scale": 0.04,
+   "kb_shift_ratio": 0.012,
+   "broll_in_ms": 600,
+   "broll_in_blur": 0.012,
+   "broll_overshoot": 0.03,
+   "leak_ms": 0,
+   "leak_hue": 0.0,
+   "word_in_ms": 150,
+   "word_rise_px": 16
+  },
+  "geometry": {
+   "max_line_width_ratio": 0.74,
+   "safe_area_ratio": 0.07,
+   "broll_inset_ratio": 0.44,
+   "broll_margin_ratio": 0.05,
+   "broll_top_ratio": 0.16,
+   "broll_bottom_ratio": 0.58,
+   "broll_card_ratio": 0.8
+  },
+  "contrast": {
+   "enabled": false,
+   "min_ratio": 4.5,
+   "luma_dark": 0.2,
+   "luma_light": 0.8,
+   "panel_opacity_dark": 0.0,
+   "panel_opacity_light": 0.0,
+   "text_dark": "#FDFAF2",
+   "text_light": "#FDFAF2"
+  },
+  "grade": {
+   "enabled": true,
+   "contrast": 1.08,
+   "saturation": 1.12,
+   "gamma": 0.98,
+   "vignette": 0.22
+  },
+  "crop": {
+   "face_height_ratio": 0.22,
+   "tight_face_height_ratio": 0.28,
+   "eye_line_ratio": 0.36,
+   "headroom_ratio": 0.05,
+   "max_scale": 1.0,
+   "track_min_cutoff": 1.0,
+   "track_beta": 0.007
+  },
+  "camera": {
+   "enabled": true,
+   "drift_per_s": 0.01,
+   "drift_max": 0.05,
+   "punch_scale": 1.1
+  },
+  "audio": {
+   "target_lufs": -16.0,
+   "music_gain_db": -20.0,
+   "duck_db": -12.0,
+   "sfx_gain_db": -6.0,
+   "caption_gain_db": -16.0,
+   "music_fade_s": 0.5,
+   "music": null
+  },
+  "background": "#000000"
+ },
+ "blocks": [
+  {
+   "start": 0.15,
+   "end": 1.7,
+   "position": "top",
+   "lines": [
+    [
+     {
+      "text": "Я",
+      "start": 0.15,
+      "end": 0.91,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 0,
+      "size": 41.0
+     },
+     {
+      "text": "думаю",
+      "start": 0.91,
+      "end": 1.11,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 1,
+      "size": 41.0
+     },
+     {
+      "text": "что",
+      "start": 1.27,
+      "end": 1.35,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 2,
+      "size": 41.0
+     }
+    ]
+   ],
+   "rect": {
+    "x": 194.4,
+    "y": 140.0,
+    "width": 275.4,
+    "height": 49.2
+   },
+   "bg_luma": null,
+   "panel": false,
+   "anchor_path": null,
+   "quiet": true,
+   "title_card": false,
+   "pill": null,
+   "icon": null,
+   "behind": null
+  },
+  {
+   "start": 1.7,
+   "end": 2.86,
+   "position": "top",
+   "lines": [
+    [
+     {
+      "text": "каждый",
+      "start": 1.35,
+      "end": 1.59,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 3,
+      "size": 41.0
+     }
+    ],
+    [
+     {
+      "text": "человек",
+      "start": 1.59,
+      "end": 2.09,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 4,
+      "size": 41.0
+     },
+     {
+      "text": "в",
+      "start": 2.09,
+      "end": 2.39,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 5,
+      "size": 41.0
+     }
+    ],
+    [
+     {
+      "text": "этом",
+      "start": 2.39,
+      "end": 2.51,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 6,
+      "size": 41.0
+     }
+    ]
+   ],
+   "rect": {
+    "x": 194.4,
+    "y": 140.0,
+    "width": 219.76,
+    "height": 163.6
+   },
+   "bg_luma": null,
+   "panel": false,
+   "anchor_path": null,
+   "quiet": true,
+   "title_card": false,
+   "pill": null,
+   "icon": null,
+   "behind": null
+  },
+  {
+   "start": 2.86,
+   "end": 3.76,
+   "position": "top",
+   "lines": [
+    [
+     {
+      "text": "мире",
+      "start": 2.51,
+      "end": 2.67,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 7,
+      "size": 41.0
+     },
+     {
+      "text": "должен",
+      "start": 2.67,
+      "end": 2.93,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 8,
+      "size": 41.0
+     }
+    ],
+    [
+     {
+      "text": "понять",
+      "start": 2.93,
+      "end": 3.41,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 9,
+      "size": 41.0
+     }
+    ]
+   ],
+   "rect": {
+    "x": 194.4,
+    "y": 140.0,
+    "width": 301.68,
+    "height": 106.4
+   },
+   "bg_luma": null,
+   "panel": false,
+   "anchor_path": null,
+   "quiet": true,
+   "title_card": false,
+   "pill": null,
+   "icon": null,
+   "behind": null
+  },
+  {
+   "start": 3.76,
+   "end": 4.78,
+   "position": "top",
+   "lines": [
+    [
+     {
+      "text": "одну",
+      "start": 3.41,
+      "end": 3.95,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 10,
+      "size": 41.0
+     },
+     {
+      "text": "истину",
+      "start": 3.95,
+      "end": 4.43,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 11,
+      "size": 41.0
+     }
+    ]
+   ],
+   "rect": {
+    "x": 194.4,
+    "y": 140.0,
+    "width": 278.31,
+    "height": 49.2
+   },
+   "bg_luma": null,
+   "panel": false,
+   "anchor_path": null,
+   "quiet": true,
+   "title_card": false,
+   "pill": null,
+   "icon": null,
+   "behind": null
+  },
+  {
+   "start": 4.78,
+   "end": 7.11,
+   "position": "bottom",
+   "lines": [
+    [
+     {
+      "text": "не",
+      "start": 4.64,
+      "end": 5.7,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 14,
+      "size": 76.0
+     },
+     {
+      "text": "стоит",
+      "start": 5.8,
+      "end": 6.04,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 15,
+      "size": 76.0
+     }
+    ],
+    [
+     {
+      "text": "бежать",
+      "start": 6.04,
+      "end": 6.76,
+      "emphasis": "accent",
+      "emoji": null,
+      "word_idx": 16,
+      "size": 174.8
+     }
+    ]
+   ],
+   "rect": {
+    "x": 153.97,
+    "y": 1221.15,
+    "width": 772.05,
+    "height": 318.85
+   },
+   "bg_luma": null,
+   "panel": false,
+   "anchor_path": null,
+   "quiet": false,
+   "title_card": false,
+   "pill": null,
+   "icon": null,
+   "behind": null
+  },
+  {
+   "start": 7.11,
+   "end": 8.61,
+   "position": "bottom",
+   "lines": [
+    [
+     {
+      "text": "за",
+      "start": 6.76,
+      "end": 7.5,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 17,
+      "size": 76.0
+     },
+     {
+      "text": "одной",
+      "start": 7.5,
+      "end": 7.72,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 18,
+      "size": 76.0
+     }
+    ],
+    [
+     {
+      "text": "целью",
+      "start": 7.72,
+      "end": 8.26,
+      "emphasis": "accent",
+      "emoji": null,
+      "word_idx": 19,
+      "size": 174.8
+     }
+    ]
+   ],
+   "rect": {
+    "x": 194.13,
+    "y": 1221.15,
+    "width": 691.73,
+    "height": 318.85
+   },
+   "bg_luma": null,
+   "panel": false,
+   "anchor_path": null,
+   "quiet": false,
+   "title_card": false,
+   "pill": null,
+   "icon": null,
+   "behind": null
+  },
+  {
+   "start": 8.61,
+   "end": 9.77,
+   "position": "bottom",
+   "lines": [
+    [
+     {
+      "text": "когда",
+      "start": 8.26,
+      "end": 8.44,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 20,
+      "size": 76.0
+     },
+     {
+      "text": "есть",
+      "start": 8.44,
+      "end": 8.92,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 21,
+      "size": 76.0
+     }
+    ],
+    [
+     {
+      "text": "несколько",
+      "start": 8.92,
+      "end": 9.42,
+      "emphasis": "accent",
+      "emoji": null,
+      "word_idx": 22,
+      "size": 137.78
+     }
+    ]
+   ],
+   "rect": {
+    "x": 104.4,
+    "y": 1260.39,
+    "width": 871.2,
+    "height": 279.61
+   },
+   "bg_luma": null,
+   "panel": false,
+   "anchor_path": null,
+   "quiet": false,
+   "title_card": false,
+   "pill": null,
+   "icon": null,
+   "behind": null
+  },
+  {
+   "start": 9.77,
+   "end": 12.67,
+   "position": "bottom",
+   "lines": [
+    [
+     {
+      "text": "других",
+      "start": 9.42,
+      "end": 10.54,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 23,
+      "size": 76.0
+     }
+    ],
+    [
+     {
+      "text": "целей",
+      "start": 10.94,
+      "end": 12.32,
+      "emphasis": "shout",
+      "emoji": null,
+      "word_idx": 24,
+      "size": 197.6
+     }
+    ]
+   ],
+   "rect": {
+    "x": 170.24,
+    "y": 1196.98,
+    "width": 739.52,
+    "height": 343.02
+   },
+   "bg_luma": null,
+   "panel": false,
+   "anchor_path": null,
+   "quiet": false,
+   "title_card": false,
+   "pill": null,
+   "icon": null,
+   "behind": null
+  },
+  {
+   "start": 12.67,
+   "end": 13.67,
+   "position": "bottom",
+   "lines": [
+    [
+     {
+      "text": "То",
+      "start": 12.66,
+      "end": 12.7,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 25,
+      "size": 152.0
+     },
+     {
+      "text": "есть",
+      "start": 12.7,
+      "end": 12.88,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 26,
+      "size": 152.0
+     }
+    ],
+    [
+     {
+      "text": "если",
+      "start": 12.88,
+      "end": 13.18,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 27,
+      "size": 152.0
+     },
+     {
+      "text": "ты",
+      "start": 13.18,
+      "end": 13.32,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 28,
+      "size": 152.0
+     }
+    ]
+   ],
+   "rect": {
+    "x": 175.15,
+    "y": 1164.76,
+    "width": 729.7,
+    "height": 375.24
+   },
+   "bg_luma": null,
+   "panel": false,
+   "anchor_path": null,
+   "quiet": false,
+   "title_card": false,
+   "pill": null,
+   "icon": null,
+   "behind": null
+  },
+  {
+   "start": 13.67,
+   "end": 14.75,
+   "position": "bottom",
+   "lines": [
+    [
+     {
+      "text": "думаешь",
+      "start": 13.32,
+      "end": 13.76,
+      "emphasis": "accent",
+      "emoji": null,
+      "word_idx": 29,
+      "size": 159.62
+     }
+    ],
+    [
+     {
+      "text": "о",
+      "start": 13.76,
+      "end": 14.08,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 30,
+      "size": 76.0
+     },
+     {
+      "text": "том",
+      "start": 14.08,
+      "end": 14.4,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 31,
+      "size": 76.0
+     }
+    ]
+   ],
+   "rect": {
+    "x": 104.39,
+    "y": 1237.24,
+    "width": 871.22,
+    "height": 302.76
+   },
+   "bg_luma": null,
+   "panel": false,
+   "anchor_path": null,
+   "quiet": false,
+   "title_card": false,
+   "pill": null,
+   "icon": null,
+   "behind": null
+  },
+  {
+   "start": 14.75,
+   "end": 16.73,
+   "position": "bottom",
+   "lines": [
+    [
+     {
+      "text": "что",
+      "start": 14.58,
+      "end": 14.8,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 32,
+      "size": 76.0
+     },
+     {
+      "text": "можно",
+      "start": 14.8,
+      "end": 15.32,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 33,
+      "size": 76.0
+     }
+    ],
+    [
+     {
+      "text": "делать",
+      "start": 15.32,
+      "end": 16.38,
+      "emphasis": "accent",
+      "emoji": null,
+      "word_idx": 34,
+      "size": 174.8
+     }
+    ]
+   ],
+   "rect": {
+    "x": 171.72,
+    "y": 1221.15,
+    "width": 736.57,
+    "height": 318.85
+   },
+   "bg_luma": null,
+   "panel": false,
+   "anchor_path": null,
+   "quiet": false,
+   "title_card": false,
+   "pill": null,
+   "icon": null,
+   "behind": null
+  },
+  {
+   "start": 16.73,
+   "end": 18.47,
+   "position": "bottom",
+   "lines": [
+    [
+     {
+      "text": "сегодня",
+      "start": 16.38,
+      "end": 17.0,
+      "emphasis": "none",
+      "emoji": null,
+      "word_idx": 35,
+      "size": 76.0
+     }
+    ],
+    [
+     {
+      "text": "завтра",
+      "start": 17.26,
+      "end": 18.22,
+      "emphasis": "accent",
+      "emoji": null,
+      "word_idx": 36,
+      "size": 174.8
+     }
+    ]
+   ],
+   "rect": {
+    "x": 187.01,
+    "y": 1221.15,
+    "width": 705.98,
+    "height": 318.85
+   },
+   "bg_luma": null,
+   "panel": false,
+   "anchor_path": null,
+   "quiet": false,
+   "title_card": false,
+   "pill": null,
+   "icon": null,
+   "behind": null
+  }
+ ],
+ "broll": [],
+ "meta": {
+  "camera": [
+   {
+    "start": 0.0,
+    "end": 18.5833,
+    "scale_from": 1.0,
+    "scale_to": 1.05,
+    "ox": 501.04,
+    "oy": 802.25
+   }
+  ],
+  "visuals": {
+   "version": 1,
+   "overlays": [
+    {
+     "kind": "chip",
+     "start": 0.5,
+     "end": 2.5,
+     "in_frames": 10,
+     "out_frames": 8,
+     "rect": {
+      "x": 560,
+      "y": 980,
+      "width": 440,
+      "height": 96
+     },
+     "rotate": -6.0,
+     "anim": "pop",
+     "layer": "front",
+     "seed": 0,
+     "style": "tag",
+     "words": [
+      "9",
+      "500",
+      "000",
+      "₽"
+     ],
+     "font": "caption",
+     "font_size": 56,
+     "letter_spacing": -0.015,
+     "word_spacing": 0.0,
+     "line_height": 1.1,
+     "padding_x": 35,
+     "padding_y": 19,
+     "radius": 20,
+     "border_width": 0.0,
+     "border_color": "",
+     "fill": "#FFFFFF",
+     "fill_opacity": 1.0,
+     "color": "#111111",
+     "emoji": null,
+     "emoji_box": 0.0,
+     "emoji_size": 0.0,
+     "emoji_gap": 0.0,
+     "asset": null,
+     "glyph_size": 0.0,
+     "float_px": 0.0,
+     "glyph": null,
+     "marks": null,
+     "pin": null,
+     "behind": null
+    },
+    {
+     "kind": "chip",
+     "start": 2.875,
+     "end": 4.625,
+     "in_frames": 10,
+     "out_frames": 8,
+     "rect": {
+      "x": 257,
+      "y": 1330,
+      "width": 566,
+      "height": 116
+     },
+     "rotate": 0.0,
+     "anim": "pop",
+     "layer": "front",
+     "seed": 0,
+     "style": "pill",
+     "words": [
+      "одна",
+      "истина"
+     ],
+     "font": "caption",
+     "font_size": 60,
+     "letter_spacing": -0.015,
+     "word_spacing": 0.0,
+     "line_height": 1.1,
+     "padding_x": 37,
+     "padding_y": 20,
+     "radius": 58.0,
+     "border_width": 0.0,
+     "border_color": "",
+     "fill": "#F3D28F",
+     "fill_opacity": 1.0,
+     "color": "#14110A",
+     "emoji": "💡",
+     "emoji_box": 72,
+     "emoji_size": 57,
+     "emoji_gap": 14,
+     "asset": null,
+     "glyph_size": 0.0,
+     "float_px": 0.0,
+     "glyph": null,
+     "marks": null,
+     "pin": null,
+     "behind": null
+    },
+    {
+     "kind": "decor",
+     "start": 8.25,
+     "end": 10.25,
+     "in_frames": 12,
+     "out_frames": 10,
+     "rect": {
+      "x": 60,
+      "y": 220,
+      "width": 960,
+      "height": 900
+     },
+     "rotate": 0.0,
+     "anim": "fade",
+     "layer": "front",
+     "seed": 3,
+     "style": null,
+     "words": null,
+     "font": "caption",
+     "font_size": 0.0,
+     "letter_spacing": 0.0,
+     "word_spacing": 0.0,
+     "line_height": 1.0,
+     "padding_x": 0.0,
+     "padding_y": 0.0,
+     "radius": 0.0,
+     "border_width": 0.0,
+     "border_color": "",
+     "fill": "",
+     "fill_opacity": 1.0,
+     "color": "#FFFFFF",
+     "emoji": null,
+     "emoji_box": 0.0,
+     "emoji_size": 0.0,
+     "emoji_gap": 0.0,
+     "asset": null,
+     "glyph_size": 0.0,
+     "float_px": 0.0,
+     "glyph": "question",
+     "marks": [
+      {
+       "x": 160,
+       "y": 380,
+       "size": 150,
+       "rotate": -14,
+       "opacity": 0.55,
+       "phase": 0.0
+      },
+      {
+       "x": 900,
+       "y": 330,
+       "size": 120,
+       "rotate": 12,
+       "opacity": 0.5,
+       "phase": 0.3
+      },
+      {
+       "x": 130,
+       "y": 860,
+       "size": 110,
+       "rotate": 8,
+       "opacity": 0.45,
+       "phase": 0.6
+      },
+      {
+       "x": 940,
+       "y": 800,
+       "size": 160,
+       "rotate": -10,
+       "opacity": 0.55,
+       "phase": 0.15
+      },
+      {
+       "x": 540,
+       "y": 250,
+       "size": 100,
+       "rotate": 4,
+       "opacity": 0.4,
+       "phase": 0.8
+      },
+      {
+       "x": 860,
+       "y": 1090,
+       "size": 90,
+       "rotate": -18,
+       "opacity": 0.4,
+       "phase": 0.45
+      }
+     ],
+     "pin": null,
+     "behind": null
+    },
+    {
+     "kind": "sticker",
+     "start": 8.5,
+     "end": 10.5,
+     "in_frames": 10,
+     "out_frames": 8,
+     "rect": {
+      "x": 470,
+      "y": 250,
+      "width": 140,
+      "height": 140
+     },
+     "rotate": -8.0,
+     "anim": "pop",
+     "layer": "front",
+     "seed": 1,
+     "style": null,
+     "words": null,
+     "font": "caption",
+     "font_size": 0.0,
+     "letter_spacing": 0.0,
+     "word_spacing": 0.0,
+     "line_height": 1.0,
+     "padding_x": 0.0,
+     "padding_y": 0.0,
+     "radius": 0.0,
+     "border_width": 0.0,
+     "border_color": "",
+     "fill": "",
+     "fill_opacity": 1.0,
+     "color": "",
+     "emoji": "🎯",
+     "emoji_box": 0.0,
+     "emoji_size": 0.0,
+     "emoji_gap": 0.0,
+     "asset": null,
+     "glyph_size": 140.0,
+     "float_px": 10.0,
+     "glyph": null,
+     "marks": null,
+     "pin": null,
+     "behind": null
+    }
+   ],
+   "scenes": [
+    {
+     "layout": "paper",
+     "start": 5.042,
+     "end": 7.708,
+     "in_frames": 12,
+     "out_frames": 12,
+     "window": {
+      "x": 420,
+      "y": 420,
+      "width": 600,
+      "height": 760
+     },
+     "radius": 44.0,
+     "tilt": 3.0,
+     "scale": 0.62,
+     "tx": -11.0,
+     "ty": -137.0,
+     "bg": {
+      "kind": "paper",
+      "color": "#F3EFE6",
+      "color2": "#F3EFE6",
+      "grid": 54.0,
+      "line_color": "#C9D3E0",
+      "asset": null
+     },
+     "chrome": "none",
+     "bezel": 0.0,
+     "bezel_color": "#000000",
+     "heading": {
+      "kind": "chip",
+      "start": 5.375,
+      "end": 7.208,
+      "in_frames": 10,
+      "out_frames": 8,
+      "rect": {
+       "x": 70,
+       "y": 200,
+       "width": 640,
+       "height": 110
+      },
+      "rotate": 0.0,
+      "anim": "slide",
+      "layer": "front",
+      "seed": 0,
+      "style": "heading",
+      "words": [
+       "ОДНА",
+       "ЦЕЛЬ"
+      ],
+      "font": "caption",
+      "font_size": 92,
+      "letter_spacing": -0.015,
+      "word_spacing": 0.0,
+      "line_height": 1.1,
+      "padding_x": 57,
+      "padding_y": 31,
+      "radius": 55.0,
+      "border_width": 0.0,
+      "border_color": "",
+      "fill": "",
+      "fill_opacity": 0.0,
+      "color": "#1B2A4A",
+      "emoji": null,
+      "emoji_box": 0.0,
+      "emoji_size": 0.0,
+      "emoji_gap": 0.0,
+      "asset": null,
+      "glyph_size": 0.0,
+      "float_px": 0.0,
+      "glyph": null,
+      "marks": null,
+      "pin": null,
+      "behind": null
+     },
+     "items": [
+      {
+       "kind": "sticker",
+       "start": 5.5,
+       "end": 7.208,
+       "in_frames": 10,
+       "out_frames": 8,
+       "rect": {
+        "x": 130,
+        "y": 540,
+        "width": 150,
+        "height": 150
+       },
+       "rotate": -6.0,
+       "anim": "pop",
+       "layer": "front",
+       "seed": 2,
+       "style": null,
+       "words": null,
+       "font": "caption",
+       "font_size": 0.0,
+       "letter_spacing": 0.0,
+       "word_spacing": 0.0,
+       "line_height": 1.0,
+       "padding_x": 0.0,
+       "padding_y": 0.0,
+       "radius": 0.0,
+       "border_width": 0.0,
+       "border_color": "",
+       "fill": "",
+       "fill_opacity": 1.0,
+       "color": "",
+       "emoji": "🏃",
+       "emoji_box": 0.0,
+       "emoji_size": 0.0,
+       "emoji_gap": 0.0,
+       "asset": null,
+       "glyph_size": 140.0,
+       "float_px": 8.0,
+       "glyph": null,
+       "marks": null,
+       "pin": null,
+       "behind": null
+      },
+      {
+       "kind": "photo",
+       "start": 6.0,
+       "end": 7.208,
+       "in_frames": 10,
+       "out_frames": 8,
+       "rect": {
+        "x": 70,
+        "y": 960,
+        "width": 300,
+        "height": 220
+       },
+       "rotate": -4.0,
+       "anim": "pop",
+       "layer": "front",
+       "seed": 0,
+       "style": null,
+       "words": null,
+       "font": "caption",
+       "font_size": 0.0,
+       "letter_spacing": 0.0,
+       "word_spacing": 0.0,
+       "line_height": 1.0,
+       "padding_x": 0.0,
+       "padding_y": 0.0,
+       "radius": 18.0,
+       "border_width": 10.0,
+       "border_color": "#FFFFFF",
+       "fill": "",
+       "fill_opacity": 1.0,
+       "color": "",
+       "emoji": null,
+       "emoji_box": 0.0,
+       "emoji_size": 0.0,
+       "emoji_gap": 0.0,
+       "asset": "photo-demo.jpg",
+       "glyph_size": 0.0,
+       "float_px": 0.0,
+       "glyph": null,
+       "marks": null,
+       "pin": null,
+       "behind": null
+      },
+      {
+       "kind": "chip",
+       "start": 6.25,
+       "end": 7.208,
+       "in_frames": 10,
+       "out_frames": 8,
+       "rect": {
+        "x": 70,
+        "y": 820,
+        "width": 330,
+        "height": 96
+       },
+       "rotate": 0.0,
+       "anim": "pop",
+       "layer": "front",
+       "seed": 0,
+       "style": "pill",
+       "words": [
+        "одна",
+        "цель"
+       ],
+       "font": "caption",
+       "font_size": 50,
+       "letter_spacing": -0.015,
+       "word_spacing": 0.0,
+       "line_height": 1.1,
+       "padding_x": 31,
+       "padding_y": 17,
+       "radius": 48.0,
+       "border_width": 0.0,
+       "border_color": "",
+       "fill": "#2F6BFF",
+       "fill_opacity": 1.0,
+       "color": "#FFFFFF",
+       "emoji": null,
+       "emoji_box": 0.0,
+       "emoji_size": 0.0,
+       "emoji_gap": 0.0,
+       "asset": null,
+       "glyph_size": 0.0,
+       "float_px": 0.0,
+       "glyph": null,
+       "marks": null,
+       "pin": null,
+       "behind": null
+      }
+     ]
+    },
+    {
+     "layout": "card_top",
+     "start": 11.0,
+     "end": 14.0,
+     "in_frames": 12,
+     "out_frames": 12,
+     "window": {
+      "x": 60,
+      "y": 110,
+      "width": 960,
+      "height": 760
+     },
+     "radius": 56.0,
+     "tilt": 0.0,
+     "scale": 0.889,
+     "tx": 0.0,
+     "ty": -313.0,
+     "bg": {
+      "kind": "gradient",
+      "color": "#101522",
+      "color2": "#1B2540",
+      "grid": 0.0,
+      "line_color": "#000000",
+      "asset": null
+     },
+     "chrome": "none",
+     "bezel": 0.0,
+     "bezel_color": "#000000",
+     "heading": null,
+     "items": [
+      {
+       "kind": "map",
+       "start": 11.667,
+       "end": 13.5,
+       "in_frames": 10,
+       "out_frames": 8,
+       "rect": {
+        "x": 80,
+        "y": 910,
+        "width": 440,
+        "height": 280
+       },
+       "rotate": -3.0,
+       "anim": "pop",
+       "layer": "front",
+       "seed": 7,
+       "style": null,
+       "words": null,
+       "font": "caption",
+       "font_size": 0.0,
+       "letter_spacing": 0.0,
+       "word_spacing": 0.0,
+       "line_height": 1.0,
+       "padding_x": 0.0,
+       "padding_y": 0.0,
+       "radius": 24.0,
+       "border_width": 8.0,
+       "border_color": "#FFFFFF",
+       "fill": "",
+       "fill_opacity": 1.0,
+       "color": "#2F6BFF",
+       "emoji": null,
+       "emoji_box": 0.0,
+       "emoji_size": 0.0,
+       "emoji_gap": 0.0,
+       "asset": null,
+       "glyph_size": 0.0,
+       "float_px": 0.0,
+       "glyph": null,
+       "marks": null,
+       "pin": {
+        "x": 250.0,
+        "y": 150.0
+       },
+       "behind": null
+      },
+      {
+       "kind": "photo",
+       "start": 12.083,
+       "end": 13.5,
+       "in_frames": 10,
+       "out_frames": 8,
+       "rect": {
+        "x": 540,
+        "y": 930,
+        "width": 440,
+        "height": 270
+       },
+       "rotate": 4.0,
+       "anim": "pop",
+       "layer": "front",
+       "seed": 0,
+       "style": null,
+       "words": null,
+       "font": "caption",
+       "font_size": 0.0,
+       "letter_spacing": 0.0,
+       "word_spacing": 0.0,
+       "line_height": 1.0,
+       "padding_x": 0.0,
+       "padding_y": 0.0,
+       "radius": 24.0,
+       "border_width": 8.0,
+       "border_color": "#FFFFFF",
+       "fill": "",
+       "fill_opacity": 1.0,
+       "color": "",
+       "emoji": null,
+       "emoji_box": 0.0,
+       "emoji_size": 0.0,
+       "emoji_gap": 0.0,
+       "asset": "photo-demo.jpg",
+       "glyph_size": 0.0,
+       "float_px": 0.0,
+       "glyph": null,
+       "marks": null,
+       "pin": null,
+       "behind": null
+      },
+      {
+       "kind": "chip",
+       "start": 12.417,
+       "end": 13.5,
+       "in_frames": 10,
+       "out_frames": 8,
+       "rect": {
+        "x": 300,
+        "y": 880,
+        "width": 200,
+        "height": 64
+       },
+       "rotate": -4.0,
+       "anim": "pop",
+       "layer": "front",
+       "seed": 0,
+       "style": "label",
+       "words": [
+        "ЗДЕСЬ"
+       ],
+       "font": "caption",
+       "font_size": 40,
+       "letter_spacing": -0.015,
+       "word_spacing": 0.0,
+       "line_height": 1.1,
+       "padding_x": 25,
+       "padding_y": 14,
+       "radius": 12,
+       "border_width": 0.0,
+       "border_color": "",
+       "fill": "#2F6BFF",
+       "fill_opacity": 1.0,
+       "color": "#FFFFFF",
+       "emoji": null,
+       "emoji_box": 0.0,
+       "emoji_size": 0.0,
+       "emoji_gap": 0.0,
+       "asset": null,
+       "glyph_size": 0.0,
+       "float_px": 0.0,
+       "glyph": null,
+       "marks": null,
+       "pin": null,
+       "behind": null
+      },
+      {
+       "kind": "sticker",
+       "start": 12.667,
+       "end": 13.5,
+       "in_frames": 10,
+       "out_frames": 8,
+       "rect": {
+        "x": 780,
+        "y": 800,
+        "width": 200,
+        "height": 200
+       },
+       "rotate": 12.0,
+       "anim": "pop",
+       "layer": "front",
+       "seed": 4,
+       "style": null,
+       "words": null,
+       "font": "caption",
+       "font_size": 0.0,
+       "letter_spacing": 0.0,
+       "word_spacing": 0.0,
+       "line_height": 1.0,
+       "padding_x": 0.0,
+       "padding_y": 0.0,
+       "radius": 0.0,
+       "border_width": 0.0,
+       "border_color": "",
+       "fill": "",
+       "fill_opacity": 1.0,
+       "color": "",
+       "emoji": null,
+       "emoji_box": 0.0,
+       "emoji_size": 0.0,
+       "emoji_gap": 0.0,
+       "asset": "sticker-demo.png",
+       "glyph_size": 0.0,
+       "float_px": 8.0,
+       "glyph": null,
+       "marks": null,
+       "pin": null,
+       "behind": null
+      }
+     ]
+    },
+    {
+     "layout": "phone",
+     "start": 14.5,
+     "end": 17.5,
+     "in_frames": 12,
+     "out_frames": 12,
+     "window": {
+      "x": 190,
+      "y": 250,
+      "width": 700,
+      "height": 1244
+     },
+     "radius": 90.0,
+     "tilt": 0.0,
+     "scale": 0.6481,
+     "tx": 0.0,
+     "ty": 0.0,
+     "bg": {
+      "kind": "still",
+      "color": "#000000",
+      "color2": "#000000",
+      "grid": 0.0,
+      "line_color": "#000000",
+      "asset": "bg-still.jpg"
+     },
+     "chrome": "phone",
+     "bezel": 18.0,
+     "bezel_color": "#0B0B0D",
+     "heading": null,
+     "items": [
+      {
+       "kind": "chip",
+       "start": 15.5,
+       "end": 17.0,
+       "in_frames": 10,
+       "out_frames": 8,
+       "rect": {
+        "x": 110,
+        "y": 130,
+        "width": 300,
+        "height": 72
+       },
+       "rotate": -3.0,
+       "anim": "pop",
+       "layer": "front",
+       "seed": 0,
+       "style": "label",
+       "words": [
+        "СЕГОДНЯ"
+       ],
+       "font": "caption",
+       "font_size": 44,
+       "letter_spacing": -0.015,
+       "word_spacing": 0.0,
+       "line_height": 1.1,
+       "padding_x": 27,
+       "padding_y": 15,
+       "radius": 12,
+       "border_width": 0.0,
+       "border_color": "",
+       "fill": "#2F6BFF",
+       "fill_opacity": 1.0,
+       "color": "#FFFFFF",
+       "emoji": null,
+       "emoji_box": 0.0,
+       "emoji_size": 0.0,
+       "emoji_gap": 0.0,
+       "asset": null,
+       "glyph_size": 0.0,
+       "float_px": 0.0,
+       "glyph": null,
+       "marks": null,
+       "pin": null,
+       "behind": null
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "fontUrl": "Montserrat-ExtraBold.ttf",
+ "accentFontUrl": null,
+ "emojiFontUrl": "NotoColorEmoji.ttf"
+}

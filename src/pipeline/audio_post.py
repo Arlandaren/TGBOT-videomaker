@@ -71,6 +71,10 @@ CAPTION_SFX_MIN_GAP_S = 1.5
 # Щелчок уходит в тишину ПЕРЕД словом: блок начинается на первом слове, то есть
 # ровно на атаке слога — худшее место с точки зрения разборчивости речи.
 CAPTION_SFX_LEAD_S = 0.04
+# Щелчок на каждом субтитре выключен по просьбе владельца (19.11.2026): нынешний
+# шумовой тик режет слух. Механизм цел — включается здесь, когда будет выбран
+# звук приятнее. Картинки (whoosh) и резы (swish) звучат как раньше.
+CAPTION_TICKS = False
 
 # Дакинг. sidechaincompress не умеет «убавь ровно на N дБ»: он давит на
 # over_db * (1 - 1/ratio), где over_db — насколько ключ выше порога. Порог
@@ -434,7 +438,13 @@ def _punch_ins(edl: EDL, tl: Timeline) -> list[tuple[int, float]]:
     return out
 
 
-def plan_sfx(edl: EDL, *, preset: Preset, apply_cuts: bool = True) -> list[Sfx]:
+def plan_sfx(
+    edl: EDL,
+    *,
+    preset: Preset,
+    apply_cuts: bool = True,
+    caption_ticks: bool | None = None,
+) -> list[Sfx]:
     """Куда ставить звуковые акценты. Чистая функция от готового монтажа.
 
     Акцента заслуживают два события: вход картинки и рез с укрупнением
@@ -445,7 +455,12 @@ def plan_sfx(edl: EDL, *, preset: Preset, apply_cuts: bool = True) -> list[Sfx]:
     При `apply_cuts=False` резов в картинке нет вообще (кроп ведёт весь ролик
     одной крупностью — `crop.framing_spans`), поэтому и подчёркивать нечего:
     остаются только картинки.
+
+    `caption_ticks` — щелчок на появлении субтитра; `None` — как в
+    `CAPTION_TICKS`.
     """
+    if caption_ticks is None:
+        caption_ticks = CAPTION_TICKS
     tl = _timeline(edl, apply_cuts=apply_cuts)
     by_idx = {w.idx: w for w in edl.words}
     gain = preset.audio.sfx_gain_db
@@ -471,7 +486,7 @@ def plan_sfx(edl: EDL, *, preset: Preset, apply_cuts: bool = True) -> list[Sfx]:
     # Щелчки — ПОСЛЕДНИМИ, и это не стиль, а приоритет: порядок добавления в
     # `accepted` решает, кто кому уступает. Блок, уже подчёркнутый картинкой или
     # резом, второго звука не получает.
-    for block in edl.captions:
+    for block in edl.captions if caption_ticks else ():
         first = next(
             (
                 (w, win)

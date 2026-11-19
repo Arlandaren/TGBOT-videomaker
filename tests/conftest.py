@@ -128,3 +128,128 @@ async def db():
         repo._sessionmaker = None
 
 
+# --------------------------------------------------- сеть в тестах закрыта
+#
+# Тест не имеет права сходить в интернет: за половиной адресов, которые знает
+# этот код, стоят платные API (LLM, генерация картинок, платежи). Двойники и
+# `MockTransport` это и так обеспечивают — пока кто-нибудь не забудет подставить
+# двойника при живом ключе в окружении. Тогда тест молча потратит деньги и
+# останется зелёным. Предохранитель делает такой вызов невозможным: он падает
+# до того, как из машины уйдёт хоть один пакет.
+#
+# Закрыто на трёх уровнях, потому что одного не хватает:
+#   - разрешение имён (`socket.getaddrinfo`) — через него идёт почти всё;
+#   - само соединение (`socket.connect`) — адрес цифрами имён не разрешает;
+#   - `IocpProactor.connect` — на Windows asyncio соединяется через `ConnectEx`
+#     мимо `socket.connect`, и без этой заплатки адрес цифрами проходил бы;
+#   - настоящие транспорты httpx — чтобы ошибка называла адрес, а не сокет.
+# Свой компьютер открыт: на нём Postgres, тестовые серверы aiohttp и Redis.
+#
+# Тесты с меткой `slow` не закрыты: они грузят модель распознавания, а её
+# библиотека сверяется с хабом даже при полном кеше. LLM и картинки они не
+# вызывают — там `llm=None` или двойник.
+
+import asyncio  # noqa: E402
+import ipaddress  # noqa: E402
+import socket  # noqa: E402
+import sys  # noqa: E402
+from urllib.parse import urlsplit  # noqa: E402
+
+import httpx  # noqa: E402
+
+
+class NetworkBlocked(OSError):
+    """Тест попытался выйти в сеть. Подставь двойника или `httpx.MockTransport`."""
+
+
+def _dsn_host() -> str:
+    try:
+        return (urlsplit(DSN).hostname or "").lower()
+    except ValueError:
+        return ""
+
+
+_LOCAL_NAMES = {"", "localhost", _dsn_host()}
+
+
+def is_local_host(host: Any) -> bool:
+    """Свой ли это компьютер: имя `localhost` или адрес обратной петли."""
+    if host is None:
+        return True
+    if isinstance(host, (bytes, bytearray)):
+        host = bytes(host).decode("ascii", "ignore")
+    name = str(host).strip().strip("[]").lower()
+    if name in _LOCAL_NAMES or name.endswith(".localhost"):
+        return True
+    try:
+        ip = ipaddress.ip_address(name.split("%", 1)[0])
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_unspecified
+
+
+def _refuse(host: Any) -> None:
+    if not is_local_host(host):
+        raise NetworkBlocked(
+            f"тест пошёл в сеть ({host!r}): настоящие запросы из тестов запрещены — "
+            f"подставь двойника или httpx.MockTransport"
+        )
+
+
+def _address_host(address: Any) -> Any:
+    # Кортеж — это (хост, порт, ...) у AF_INET и AF_INET6. Строка или байты —
+    # путь к сокету AF_UNIX: это всегда свой компьютер.
+    return address[0] if isinstance(address, tuple) and address else None
+
+
+@pytest.fixture(autouse=True)
+def _no_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    if request.node.get_closest_marker("slow") is not None:
+        return
+
+    real_getaddrinfo = socket.getaddrinfo
+    real_connect = socket.socket.connect
+    real_connect_ex = socket.socket.connect_ex
+    real_send = httpx.HTTPTransport.handle_request
+    real_asend = httpx.AsyncHTTPTransport.handle_async_request
+
+    def getaddrinfo(host: Any, *args: Any, **kwargs: Any) -> Any:
+        _refuse(host)
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    def connect(self: socket.socket, address: Any) -> Any:
+        _refuse(_address_host(address))
+        return real_connect(self, address)
+
+    def connect_ex(self: socket.socket, address: Any) -> Any:
+        _refuse(_address_host(address))
+        return real_connect_ex(self, address)
+
+    def send(self: httpx.HTTPTransport, req: httpx.Request) -> httpx.Response:
+        _refuse(req.url.host)
+        return real_send(self, req)
+
+    async def asend(self: httpx.AsyncHTTPTransport, req: httpx.Request) -> httpx.Response:
+        _refuse(req.url.host)
+        return await real_asend(self, req)
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", send)
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", asend)
+
+    if sys.platform == "win32":
+        from asyncio import windows_events
+
+        real_iocp_connect = windows_events.IocpProactor.connect
+
+        def iocp_connect(self: Any, conn: Any, address: Any) -> Any:
+            _refuse(_address_host(address))
+            return real_iocp_connect(self, conn, address)
+
+        monkeypatch.setattr(windows_events.IocpProactor, "connect", iocp_connect)
+    # Обращение к модулю держит импорт живым для линтера: asyncio нужен здесь
+    # только ради ветки Windows выше.
+    assert asyncio is not None
+

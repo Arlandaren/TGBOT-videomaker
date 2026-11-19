@@ -1,0 +1,43 @@
+{
+ "note": "Сцены против правил: слишком короткая и слишком длинная, в хуке и в хвосте ролика, поверх списка (слова 31–33) и поверх вставки (слово 44), внахлёст и ближе шести секунд друг к другу, пять элементов в одной. Остаются две самые ранние совместимые; свободный элемент на время сцены выпадает.",
+ "visuals": {
+  "overlays": [
+   {"kind": "chip", "word_idx": 10, "text": "9 500 000 ₽"},
+   {"kind": "chip", "word_idx": 26, "text": "21%"},
+   {"kind": "sticker", "word_idx": 37, "sticker": "bank"},
+   {"kind": "sticker", "word_idx": 49, "sticker": "bell"}
+  ],
+  "scenes": [
+   {
+    "layout": "card_top",
+    "word_from": 36,
+    "word_to": 42,
+    "items": [
+     {"kind": "chip", "word_idx": 36, "text": "18%"},
+     {"kind": "sticker", "word_idx": 38, "sticker": "bank"},
+     {"kind": "map", "word_idx": 40, "text": "Алматы"},
+     {"kind": "photo", "word_idx": 41, "text": "ипотека"},
+     {"kind": "chip", "word_idx": 42, "text": "считай"}
+    ]
+   },
+   {"layout": "paper", "word_from": 8, "word_to": 14},
+   {"layout": "phone", "word_from": 6, "word_to": 13},
+   {"layout": "card_top", "word_from": 16, "word_to": 17},
+   {"layout": "paper", "word_from": 6, "word_to": 30},
+   {"layout": "phone", "word_from": 1, "word_to": 8},
+   {"layout": "phone", "word_from": 50, "word_to": 56},
+   {"layout": "card_top", "word_from": 29, "word_to": 36},
+   {"layout": "paper", "word_from": 41, "word_to": 47},
+   {"layout": "phone", "word_from": 49, "word_to": 54}
+  ]
+ },
+ "expect": {
+  "overlays": 2,
+  "scenes": 2,
+  "texts": ["21%"],
+  "absent_texts": ["9 500 000 ₽"],
+  "stickers": ["bell"],
+  "layouts": ["phone", "card_top"],
+  "scene_items": [0, 3]
+ }
+}

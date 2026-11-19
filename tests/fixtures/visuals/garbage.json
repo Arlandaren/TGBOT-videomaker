@@ -1,0 +1,10 @@
+{
+ "note": "Мусор на месте листа: списки не списки, элементы не объекты. Чистка обязана вернуть пустой лист, а не упасть.",
+ "visuals": {
+  "version": 7,
+  "overlays": "ой",
+  "scenes": [1, null, "x", {"layout": null}, {"word_from": 6}],
+  "extra": {"anything": [1, 2, 3]}
+ },
+ "expect": {"overlays": 0, "scenes": 0}
+}

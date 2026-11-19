@@ -1,0 +1,45 @@
+{
+ "note": "Перебор по плотности: тридцать элементов на соседних словах. Остаться должно не больше потолка (7 на 28 с): пять плашек с числами первыми, затем самая ранняя плашка-слово и самый ранний стикер.",
+ "visuals": {
+  "overlays": [
+   {"kind": "decor", "word_idx": 0, "until_word_idx": 4, "glyph": "question"},
+   {"kind": "sticker", "word_idx": 2, "sticker": "house"},
+   {"kind": "sticker", "word_idx": 6, "sticker": "family"},
+   {"kind": "chip", "word_idx": 7, "text": "купили"},
+   {"kind": "chip", "word_idx": 8, "text": "её"},
+   {"kind": "chip", "word_idx": 9, "text": "за сколько"},
+   {"kind": "chip", "word_idx": 10, "text": "9 500 000 ₽", "style": "tag"},
+   {"kind": "sticker", "word_idx": 11, "sticker": "banknote"},
+   {"kind": "sticker", "word_idx": 12, "sticker": "coin"},
+   {"kind": "sticker", "word_idx": 13, "sticker": "banknote"},
+   {"kind": "decor", "word_idx": 14, "glyph": "sparkle"},
+   {"kind": "sticker", "word_idx": 15, "sticker": "hourglass"},
+   {"kind": "chip", "word_idx": 16, "text": "3 года"},
+   {"kind": "sticker", "word_idx": 17, "sticker": "calendar"},
+   {"kind": "sticker", "word_idx": 18, "sticker": "house"},
+   {"kind": "sticker", "word_idx": 19, "emoji": "💰"},
+   {"kind": "decor", "word_idx": 20, "glyph": "arrow"},
+   {"kind": "chip", "word_idx": 21, "text": "11,5 млн"},
+   {"kind": "sticker", "word_idx": 22, "sticker": "money_bag"},
+   {"kind": "decor", "word_idx": 23, "glyph": "exclaim"},
+   {"kind": "sticker", "word_idx": 24, "sticker": "chart_up"},
+   {"kind": "chip", "word_idx": 26, "text": "21%"},
+   {"kind": "decor", "word_idx": 27, "glyph": "exclaim"},
+   {"kind": "sticker", "word_idx": 29, "sticker": "money_bag"},
+   {"kind": "sticker", "word_idx": 34, "sticker": "bank"},
+   {"kind": "chip", "word_idx": 36, "text": "18%"},
+   {"kind": "sticker", "word_idx": 37, "sticker": "hundred"},
+   {"kind": "sticker", "word_idx": 43, "sticker": "money_bag"},
+   {"kind": "sticker", "word_idx": 49, "sticker": "bell"},
+   {"kind": "decor", "word_idx": 53, "glyph": "sparkle"}
+  ],
+  "scenes": []
+ },
+ "expect": {
+  "overlays": 7,
+  "scenes": 0,
+  "texts": ["9 500 000 ₽", "3 года", "11,5 млн", "21%", "18%", "купили"],
+  "absent_texts": ["её", "за сколько"],
+  "stickers": ["house"]
+ }
+}

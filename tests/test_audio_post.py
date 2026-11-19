@@ -677,10 +677,19 @@ def test_sfx_land_in_the_edl(tmp_path, voice_video):
     assert edl.sfx == []
     build_audio(edl, voice_video, tmp_path / "a.wav", cfg=cfg_with(tmp_path))
     assert [s.name for s in edl.sfx if s.name != SFX_TICK] == [SFX_WHOOSH]
-    assert any(s.name == SFX_TICK for s in edl.sfx), "щелчки субтитров тоже обязаны попасть в лист"
 
 
 # ------------------------------------------------------------------ щелчок субтитра
+
+
+def test_caption_ticks_are_off_by_default():
+    """Щелчок на субтитрах выключен (`CAPTION_TICKS`), остальные акценты на месте."""
+    edl = simple_edl(broll=[Broll(word_idx=4, duration=1.5, query="cat",
+                                  anim=BrollAnim.POP_IN, anchor="center")])
+    got = plan_sfx(edl, preset=load_preset("glass"))
+    assert [s.name for s in got] == [SFX_WHOOSH]
+    on = plan_sfx(edl, preset=load_preset("glass"), caption_ticks=True)
+    assert any(s.name == SFX_TICK for s in on), "включённый щелчок пропал"
 
 
 def test_every_caption_block_gets_a_tick():
@@ -691,7 +700,7 @@ def test_every_caption_block_gets_a_tick():
     нельзя: блок с резом внутри разъехался бы с картинкой.
     """
     edl = simple_edl()
-    ticks = [s for s in plan_sfx(edl, preset=load_preset("glass")) if s.name == SFX_TICK]
+    ticks = [s for s in plan_sfx(edl, preset=load_preset("glass"), caption_ticks=True) if s.name == SFX_TICK]
     assert [s.at_word_idx for s in ticks] == [b.words[0].word_idx for b in edl.captions]
 
 
@@ -699,7 +708,7 @@ def test_the_tick_is_the_quietest_of_the_three():
     """Щелчок звучит на каждом блоке, а картинка — пару раз за ролик. Громкость
     редкого события на частом превращается в стрекот."""
     glass = load_preset("glass")
-    tick = [s for s in plan_sfx(simple_edl(), preset=glass) if s.name == SFX_TICK][0]
+    tick = [s for s in plan_sfx(simple_edl(), preset=glass, caption_ticks=True) if s.name == SFX_TICK][0]
     assert tick.gain_db == glass.audio.caption_gain_db
     assert tick.gain_db < glass.audio.sfx_gain_db - 6, "щелчок не тише акцентов"
 
@@ -709,7 +718,7 @@ def test_the_tick_yields_to_a_picture():
     вставкой, второго звука не получает."""
     edl = simple_edl(broll=[Broll(word_idx=3, duration=1.5, query="cat",
                                   anim=BrollAnim.POP_IN, anchor="center")])
-    got = plan_sfx(edl, preset=load_preset("glass"))
+    got = plan_sfx(edl, preset=load_preset("glass"), caption_ticks=True)
     assert [s.name for s in got if s.at_word_idx == 3] == [SFX_WHOOSH]
 
 
@@ -729,7 +738,7 @@ def test_ticks_keep_their_own_distance():
         captions=[CaptionBlock(words=[CaptionWord(word_idx=i) for i in g])
                   for g in [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9], [10, 11]]],
     )
-    ticks = [s for s in plan_sfx(edl, preset=load_preset("glass")) if s.name == SFX_TICK]
+    ticks = [s for s in plan_sfx(edl, preset=load_preset("glass"), caption_ticks=True) if s.name == SFX_TICK]
     times = [ws[s.at_word_idx].start for s in ticks]
     assert len(times) < len(edl.captions), "частые блоки не проредились"
     assert all(b - a >= CAPTION_SFX_MIN_GAP_S for a, b in zip(times, times[1:]))
@@ -738,7 +747,7 @@ def test_ticks_keep_their_own_distance():
 def test_a_block_cut_out_of_the_reel_gets_no_tick():
     edl = simple_edl(cuts=[Cut(src_in=0.0, src_out=1.4, reason="hook"),
                            Cut(src_in=3.0, src_out=6.2, reason="keep")])
-    ticks = [s for s in plan_sfx(edl, preset=load_preset("glass")) if s.name == SFX_TICK]
+    ticks = [s for s in plan_sfx(edl, preset=load_preset("glass"), caption_ticks=True) if s.name == SFX_TICK]
     kept = {w.idx for c in edl.kept_cuts for w in edl.words if c.src_in <= w.start < c.src_out}
     assert all(s.at_word_idx in kept for s in ticks), "щелчок на вырезанном слове"
 
@@ -749,7 +758,7 @@ def test_the_tick_lands_before_the_first_word(tmp_path, monkeypatch):
     from src.pipeline.audio_post import CAPTION_SFX_LEAD_S, SFX_PROFILES, sfx_marks
 
     edl = simple_edl()
-    ticks = [s for s in plan_sfx(edl, preset=load_preset("glass")) if s.name == SFX_TICK]
+    ticks = [s for s in plan_sfx(edl, preset=load_preset("glass"), caption_ticks=True) if s.name == SFX_TICK]
     marks = [m for m in sfx_marks(edl, ticks) if m.path.stem == SFX_TICK]
     assert marks, "метки щелчка не собрались"
     # Второй блок: первый упёрся бы в ноль и дал бы head_trim.

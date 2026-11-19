@@ -1,0 +1,38 @@
+{
+ "note": "Правило честности: числа, которых нет в речи рядом. «500 000 ₽» — обрывок сказанного «9 500 000»; «12 млн» при сказанном «11,5»; «21%» в четырёх словах от самого числа; цифра в эмодзи; число в заголовке и в элементе сцены.",
+ "visuals": {
+  "overlays": [
+   {"kind": "chip", "word_idx": 2, "text": "квартира №1"},
+   {"kind": "chip", "word_idx": 10, "text": "9 500 000 ₽"},
+   {"kind": "chip", "word_idx": 14, "text": "500 000 ₽"},
+   {"kind": "chip", "word_idx": 16, "until_word_idx": 17, "text": "3 года"},
+   {"kind": "chip", "word_idx": 21, "text": "12 млн"},
+   {"kind": "chip", "word_idx": 26, "text": "+21%"},
+   {"kind": "chip", "word_idx": 30, "text": "21%"},
+   {"kind": "chip", "word_idx": 36, "text": "18% годовых"},
+   {"kind": "chip", "word_idx": 44, "text": "100 000 ₽"},
+   {"kind": "sticker", "word_idx": 49, "emoji": "5️⃣"}
+  ],
+  "scenes": [
+   {
+    "layout": "paper",
+    "word_from": 36,
+    "word_to": 42,
+    "heading": "Ставка 25%",
+    "items": [
+     {"kind": "chip", "word_idx": 36, "text": "18%"},
+     {"kind": "chip", "word_idx": 38, "text": "20% годовых"},
+     {"kind": "sticker", "word_idx": 40, "sticker": "bank"}
+    ]
+   }
+  ]
+ },
+ "expect": {
+  "overlays": 3,
+  "scenes": 1,
+  "texts": ["9 500 000 ₽", "3 года", "+21%"],
+  "absent_texts": ["квартира №1", "500 000 ₽", "12 млн", "21%", "18% годовых", "100 000 ₽"],
+  "headings": [null],
+  "scene_items": [2]
+ }
+}

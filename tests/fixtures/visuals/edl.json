@@ -1,0 +1,683 @@
+{
+ "version": 1,
+ "preset": "pulse",
+ "source_duration": 28.5,
+ "words": [
+  {
+   "idx": 0,
+   "text": "Сколько",
+   "start": 0.0,
+   "end": 0.4
+  },
+  {
+   "idx": 1,
+   "text": "стоит",
+   "start": 0.5,
+   "end": 0.9
+  },
+  {
+   "idx": 2,
+   "text": "квартира",
+   "start": 1.0,
+   "end": 1.4
+  },
+  {
+   "idx": 3,
+   "text": "в",
+   "start": 1.5,
+   "end": 1.9
+  },
+  {
+   "idx": 4,
+   "text": "Алматы?",
+   "start": 2.0,
+   "end": 2.4
+  },
+  {
+   "idx": 5,
+   "text": "Эээ",
+   "start": 2.5,
+   "end": 2.9
+  },
+  {
+   "idx": 6,
+   "text": "мы",
+   "start": 3.0,
+   "end": 3.4
+  },
+  {
+   "idx": 7,
+   "text": "купили",
+   "start": 3.5,
+   "end": 3.9
+  },
+  {
+   "idx": 8,
+   "text": "её",
+   "start": 4.0,
+   "end": 4.4
+  },
+  {
+   "idx": 9,
+   "text": "за",
+   "start": 4.5,
+   "end": 4.9
+  },
+  {
+   "idx": 10,
+   "text": "9",
+   "start": 5.0,
+   "end": 5.4
+  },
+  {
+   "idx": 11,
+   "text": "500",
+   "start": 5.5,
+   "end": 5.9
+  },
+  {
+   "idx": 12,
+   "text": "000",
+   "start": 6.0,
+   "end": 6.4
+  },
+  {
+   "idx": 13,
+   "text": "рублей,",
+   "start": 6.5,
+   "end": 6.9
+  },
+  {
+   "idx": 14,
+   "text": "а",
+   "start": 7.0,
+   "end": 7.4
+  },
+  {
+   "idx": 15,
+   "text": "через",
+   "start": 7.5,
+   "end": 7.9
+  },
+  {
+   "idx": 16,
+   "text": "3",
+   "start": 8.0,
+   "end": 8.4
+  },
+  {
+   "idx": 17,
+   "text": "года",
+   "start": 8.5,
+   "end": 8.9
+  },
+  {
+   "idx": 18,
+   "text": "она",
+   "start": 9.0,
+   "end": 9.4
+  },
+  {
+   "idx": 19,
+   "text": "стоит",
+   "start": 9.5,
+   "end": 9.9
+  },
+  {
+   "idx": 20,
+   "text": "уже",
+   "start": 10.0,
+   "end": 10.4
+  },
+  {
+   "idx": 21,
+   "text": "11,5",
+   "start": 10.5,
+   "end": 10.9
+  },
+  {
+   "idx": 22,
+   "text": "миллионов.",
+   "start": 11.0,
+   "end": 11.4
+  },
+  {
+   "idx": 23,
+   "text": "Это",
+   "start": 11.5,
+   "end": 11.9
+  },
+  {
+   "idx": 24,
+   "text": "рост",
+   "start": 12.0,
+   "end": 12.4
+  },
+  {
+   "idx": 25,
+   "text": "на",
+   "start": 12.5,
+   "end": 12.9
+  },
+  {
+   "idx": 26,
+   "text": "21",
+   "start": 13.0,
+   "end": 13.4
+  },
+  {
+   "idx": 27,
+   "text": "процент!",
+   "start": 13.5,
+   "end": 13.9
+  },
+  {
+   "idx": 28,
+   "text": "В",
+   "start": 14.0,
+   "end": 14.4
+  },
+  {
+   "idx": 29,
+   "text": "цену",
+   "start": 14.5,
+   "end": 14.9
+  },
+  {
+   "idx": 30,
+   "text": "вошли",
+   "start": 15.0,
+   "end": 15.4
+  },
+  {
+   "idx": 31,
+   "text": "ремонт,",
+   "start": 15.5,
+   "end": 15.9
+  },
+  {
+   "idx": 32,
+   "text": "мебель,",
+   "start": 16.0,
+   "end": 16.4
+  },
+  {
+   "idx": 33,
+   "text": "техника.",
+   "start": 16.5,
+   "end": 16.9
+  },
+  {
+   "idx": 34,
+   "text": "Ипотека",
+   "start": 17.0,
+   "end": 17.4
+  },
+  {
+   "idx": 35,
+   "text": "под",
+   "start": 17.5,
+   "end": 17.9
+  },
+  {
+   "idx": 36,
+   "text": "18",
+   "start": 18.0,
+   "end": 18.4
+  },
+  {
+   "idx": 37,
+   "text": "процентов",
+   "start": 18.5,
+   "end": 18.9
+  },
+  {
+   "idx": 38,
+   "text": "годовых",
+   "start": 19.0,
+   "end": 19.4
+  },
+  {
+   "idx": 39,
+   "text": "это",
+   "start": 19.5,
+   "end": 19.9
+  },
+  {
+   "idx": 40,
+   "text": "дорого.",
+   "start": 20.0,
+   "end": 20.4
+  },
+  {
+   "idx": 41,
+   "text": "Поэтому",
+   "start": 20.5,
+   "end": 20.9
+  },
+  {
+   "idx": 42,
+   "text": "считай",
+   "start": 21.0,
+   "end": 21.4
+  },
+  {
+   "idx": 43,
+   "text": "деньги,",
+   "start": 21.5,
+   "end": 21.9
+  },
+  {
+   "idx": 44,
+   "text": "думай",
+   "start": 22.0,
+   "end": 22.4
+  },
+  {
+   "idx": 45,
+   "text": "головой",
+   "start": 22.5,
+   "end": 22.9
+  },
+  {
+   "idx": 46,
+   "text": "и",
+   "start": 23.0,
+   "end": 23.4
+  },
+  {
+   "idx": 47,
+   "text": "не",
+   "start": 23.5,
+   "end": 23.9
+  },
+  {
+   "idx": 48,
+   "text": "торопись.",
+   "start": 24.0,
+   "end": 24.4
+  },
+  {
+   "idx": 49,
+   "text": "Подпишись,",
+   "start": 24.5,
+   "end": 24.9
+  },
+  {
+   "idx": 50,
+   "text": "чтобы",
+   "start": 25.0,
+   "end": 25.4
+  },
+  {
+   "idx": 51,
+   "text": "не",
+   "start": 25.5,
+   "end": 25.9
+  },
+  {
+   "idx": 52,
+   "text": "пропустить",
+   "start": 26.0,
+   "end": 26.4
+  },
+  {
+   "idx": 53,
+   "text": "следующий",
+   "start": 26.5,
+   "end": 26.9
+  },
+  {
+   "idx": 54,
+   "text": "разбор",
+   "start": 27.0,
+   "end": 27.4
+  },
+  {
+   "idx": 55,
+   "text": "рынка",
+   "start": 27.5,
+   "end": 27.9
+  },
+  {
+   "idx": 56,
+   "text": "недвижимости.",
+   "start": 28.0,
+   "end": 28.4
+  }
+ ],
+ "cuts": [
+  {
+   "src_in": 0.0,
+   "src_out": 2.5,
+   "reason": "hook"
+  },
+  {
+   "src_in": 2.5,
+   "src_out": 3.0,
+   "reason": "drop_filler"
+  },
+  {
+   "src_in": 3.0,
+   "src_out": 28.5,
+   "reason": "keep"
+  }
+ ],
+ "captions": [
+  {
+   "words": [
+    {
+     "word_idx": 0
+    },
+    {
+     "word_idx": 1
+    },
+    {
+     "word_idx": 2,
+     "emphasis": "accent"
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 3
+    },
+    {
+     "word_idx": 4,
+     "emphasis": "accent"
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 6
+    },
+    {
+     "word_idx": 7,
+     "emphasis": "accent"
+    },
+    {
+     "word_idx": 8
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 9
+    },
+    {
+     "word_idx": 10
+    },
+    {
+     "word_idx": 11,
+     "emphasis": "accent"
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 12
+    },
+    {
+     "word_idx": 13,
+     "emphasis": "accent"
+    },
+    {
+     "word_idx": 14
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 15,
+     "emphasis": "accent"
+    },
+    {
+     "word_idx": 16
+    },
+    {
+     "word_idx": 17
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 18
+    },
+    {
+     "word_idx": 19,
+     "emphasis": "accent"
+    },
+    {
+     "word_idx": 20
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 21
+    },
+    {
+     "word_idx": 22,
+     "emphasis": "accent"
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 23
+    },
+    {
+     "word_idx": 24,
+     "emphasis": "accent"
+    },
+    {
+     "word_idx": 25
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 26
+    },
+    {
+     "word_idx": 27,
+     "emphasis": "accent"
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 28
+    },
+    {
+     "word_idx": 29
+    },
+    {
+     "word_idx": 30,
+     "emphasis": "accent"
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 31
+    }
+   ],
+   "quiet": false,
+   "item": true
+  },
+  {
+   "words": [
+    {
+     "word_idx": 32
+    }
+   ],
+   "quiet": false,
+   "item": true
+  },
+  {
+   "words": [
+    {
+     "word_idx": 33
+    }
+   ],
+   "quiet": false,
+   "item": true
+  },
+  {
+   "words": [
+    {
+     "word_idx": 34,
+     "emphasis": "accent"
+    },
+    {
+     "word_idx": 35
+    },
+    {
+     "word_idx": 36
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 37,
+     "emphasis": "accent"
+    },
+    {
+     "word_idx": 38
+    },
+    {
+     "word_idx": 39
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 40,
+     "emphasis": "accent"
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 41,
+     "emphasis": "accent"
+    },
+    {
+     "word_idx": 42
+    },
+    {
+     "word_idx": 43
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 44
+    },
+    {
+     "word_idx": 45,
+     "emphasis": "accent"
+    },
+    {
+     "word_idx": 46
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 47
+    },
+    {
+     "word_idx": 48,
+     "emphasis": "accent"
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 49,
+     "emphasis": "accent"
+    },
+    {
+     "word_idx": 50
+    },
+    {
+     "word_idx": 51
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 52,
+     "emphasis": "accent"
+    },
+    {
+     "word_idx": 53
+    },
+    {
+     "word_idx": 54
+    }
+   ],
+   "quiet": false
+  },
+  {
+   "words": [
+    {
+     "word_idx": 55
+    },
+    {
+     "word_idx": 56,
+     "emphasis": "accent"
+    }
+   ],
+   "quiet": false
+  }
+ ],
+ "broll": [
+  {
+   "word_idx": 44,
+   "duration": 2.0,
+   "query": "thinking person",
+   "anim": "pop_in",
+   "anchor": "card"
+  }
+ ]
+}

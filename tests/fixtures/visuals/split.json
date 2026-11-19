@@ -1,0 +1,28 @@
+{
+ "note": "Режим «Два видео» (split_until = 6.0 с): кадр уже поделён, сцен в таком ролике нет вовсе, а свободный элемент до шестой секунды выпадает — трек лица снят с полного кадра. Элемент после шестой секунды остаётся, и тот, что стоял бы на времени сцены, тоже.",
+ "edl": {"split_until": 6.0},
+ "visuals": {
+  "overlays": [
+   {"kind": "chip", "word_idx": 10, "text": "9 500 000 ₽"},
+   {"kind": "sticker", "word_idx": 13, "sticker": "banknote"},
+   {"kind": "chip", "word_idx": 26, "text": "21%"},
+   {"kind": "chip", "word_idx": 36, "text": "18%"}
+  ],
+  "scenes": [
+   {"layout": "phone", "word_from": 6, "word_to": 13},
+   {
+    "layout": "card_top",
+    "word_from": 36,
+    "word_to": 42,
+    "items": [{"kind": "chip", "word_idx": 36, "text": "18%"}]
+   }
+  ]
+ },
+ "expect": {
+  "overlays": 3,
+  "scenes": 0,
+  "texts": ["21%", "18%"],
+  "absent_texts": ["9 500 000 ₽"],
+  "stickers": ["banknote"]
+ }
+}

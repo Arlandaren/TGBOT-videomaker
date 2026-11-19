@@ -1,0 +1,21 @@
+{
+ "note": "Повторы и элементы на одном слове: одна и та же плашка четыре раза, стикер и декор на том же слове, концы далеко за пределами срока жизни (слово 56). Остаётся по одному элементу на момент, срок зажимается максимумом вида.",
+ "visuals": {
+  "overlays": [
+   {"kind": "chip", "word_idx": 10, "text": "9 500 000 ₽"},
+   {"kind": "chip", "word_idx": 10, "text": "9 500 000 ₽"},
+   {"kind": "chip", "word_idx": 10, "text": "9 500 000 ₽"},
+   {"kind": "chip", "word_idx": 10, "text": "9 500 000 ₽"},
+   {"kind": "sticker", "word_idx": 10, "sticker": "house"},
+   {"kind": "decor", "word_idx": 10, "until_word_idx": 56, "glyph": "question"},
+   {"kind": "chip", "word_idx": 21, "until_word_idx": 56, "text": "11,5 млн"},
+   {"kind": "chip", "word_idx": 26, "until_word_idx": 56, "text": "21%"}
+  ],
+  "scenes": []
+ },
+ "expect": {
+  "overlays": 3,
+  "scenes": 0,
+  "texts": ["9 500 000 ₽", "11,5 млн", "21%"]
+ }
+}

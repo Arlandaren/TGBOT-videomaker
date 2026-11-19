@@ -22,14 +22,12 @@ def _tunnel_url():
     set_webapp_url(was)
 
 
-def test_the_keyboard_has_five_buttons_in_one_two_two():
-    """Раскладка — часть задачи: первая кнопка во всю ширину, дальше парами."""
+def test_the_keyboard_is_two_by_two_like_the_reference():
+    """Раскладка как у Brandly: «Начать монтаж · Баланс», «Реф. программа · Поддержка»."""
     kb = main_keyboard("ru")
-    assert [len(row) for row in kb.keyboard] == [1, 2, 2, 1]
+    assert [len(row) for row in kb.keyboard] == [2, 2]
     assert [b.text for row in kb.keyboard for b in row] == [
-        t("kb.start", "ru"), t("kb.balance", "ru"),
-        t("kb.videos", "ru"), t("kb.referral", "ru"), t("kb.support", "ru"),
-        t("kb.channel", "ru"),
+        "Начать монтаж", "Баланс", "Реф. программа", "Поддержка",
     ]
     # Без этих двух клавиатура либо занимает пол-экрана, либо исчезает после
     # первого нажатия — и пользователь остаётся без навигации.
@@ -163,17 +161,17 @@ async def test_a_broken_delivery_never_eats_the_answer(monkeypatch):
 # ------------------------------------------------------------ «Наш канал»
 
 
-def test_the_channel_button_sits_alone_at_the_bottom():
-    kb = main_keyboard("ru")
-    assert [len(row) for row in kb.keyboard] == [1, 2, 2, 1]
-    last = kb.keyboard[-1][0]
-    assert last.text == t("kb.channel", "ru") == "Наш канал"
-    assert menu.action_for(last.text) == "channel"
+def test_buttons_gone_from_the_keyboard_still_work_on_old_keyboards():
+    """«Мои ролики» и «Наш канал» с клавиатуры ушли, но у людей висит прежняя."""
+    labels = {b.text for row in main_keyboard("ru").keyboard for b in row}
+    for action in ("videos", "channel"):
+        assert t(f"kb.{action}", "ru") not in labels
+        assert menu.action_for(t(f"kb.{action}", "ru")) == action
 
 
 def test_the_channel_keyboard_reaches_old_chats_once_more():
-    """Кнопки канала нет у тех, кто уже получил прежнюю клавиатуру."""
-    assert menu.SEEN_FLAG not in ("kb", "kb2")
+    """Клавиатуру 2 × 2 получат и те, у кого уже была прежняя."""
+    assert menu.SEEN_FLAG not in ("kb", "kb2", "kb3")
 
 
 async def test_the_channel_button_opens_the_channel(monkeypatch):
@@ -253,27 +251,26 @@ def _patch_db(monkeypatch, lang="ru"):
     return saved
 
 
-async def test_start_sends_one_welcome_carrying_the_menu(monkeypatch):
-    """Кнопки меню едут вместе с приветствием: строки «Кнопки внизу — для
-    быстрых действий» больше нет (просьба владельца 16.11.2026)."""
-    from aiogram.types import ReplyKeyboardMarkup
+async def test_start_sends_the_welcome_then_the_menu(monkeypatch):
+    """Как у Brandly: приветствие с инлайн-кнопками, следом «Меню внизу 👇»
+    с нижней клавиатурой (просьба владельца 19.11.2026)."""
+    from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 
     from src.bot.handlers import common
 
     saved = _patch_db(monkeypatch)
     msg = _StartMsg()
     await common.on_start(msg, None)
-    assert len(msg.sent) == 1, [s[0][:30] for s in msg.sent]
-    text, markup = msg.sent[0]
-    assert text == common.welcome_text("ru")
-    assert isinstance(markup, ReplyKeyboardMarkup)
+    assert [type(m) for _, m in msg.sent] == [InlineKeyboardMarkup, ReplyKeyboardMarkup]
+    assert msg.sent[0][0] == common.welcome_text("ru")
+    assert msg.sent[1][0] == "Меню внизу 👇"
     assert {menu.SEEN_FLAG: 1} in saved, "иначе разовая доставка пришлёт клавиатуру ещё раз"
 
 
 async def test_picking_a_language_greets_with_the_menu_too(monkeypatch):
     from types import SimpleNamespace
 
-    from aiogram.types import ReplyKeyboardMarkup
+    from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 
     from src.bot.handlers import common
 
@@ -292,6 +289,6 @@ async def test_picking_a_language_greets_with_the_menu_too(monkeypatch):
     callback = SimpleNamespace(data="lang:ru", from_user=msg.from_user, message=msg, answer=answer)
     await common.on_language_pick(callback, bot=None)
     assert msg.deleted, "сообщение с выбором языка убирается, а не висит рядом с приветствием"
-    assert [type(m) for _, m in msg.sent] == [ReplyKeyboardMarkup]
+    assert [type(m) for _, m in msg.sent] == [InlineKeyboardMarkup, ReplyKeyboardMarkup]
     assert msg.sent[0][0] == common.welcome_text("ru")
     assert {menu.SEEN_FLAG: 1} in saved

@@ -100,27 +100,27 @@ TEXTS: dict[str, dict[str, str]] = {
     "start.welcome": {
         "ru": (
             "Привет! Я — бот-монтажёр {brand} 🎬\n\n"
-            "Кидаете мне сырое видео, где вы говорите на камеру о своей работе, "
-            "экспертизе, дне — а я сам:\n\n"
+            "Кидаете мне сырое видео, где вы говорите на камеру, а я сам:\n\n"
             "✅ вырежу все паузы и «эээ»\n"
             "✅ сделаю картинку динамичной\n"
             "✅ поставлю трендовые субтитры\n"
             "✅ добавлю картинки по смыслу\n"
-            "✅ расставлю звуковые акценты\n\n"
+            "✅ можно править в редакторе\n\n"
             "На выходе — готовый Reels. Без монтажёра, без CapCut."
         ),
         "en": (
             "Hi! I'm {brand}, your video editing bot 🎬\n\n"
-            "Send me a raw video of you talking on camera about your work, "
-            "expertise or day — and I'll do the rest:\n\n"
+            "Send me a raw video of you talking on camera, and I'll do the rest:\n\n"
             "✅ cut every pause and “umm”\n"
             "✅ make the picture dynamic\n"
             "✅ add trending captions\n"
             "✅ add images that match the meaning\n"
-            "✅ place sound accents\n\n"
+            "✅ you can fine-tune it in the editor\n\n"
             "You get a finished Reel. No editor, no CapCut."
         ),
     },
+    # Кнопки под приветствием (как у Brandly): зелёная «Начать монтаж» и канал.
+    "btn.channel": {"ru": "Официальный канал", "en": "Official channel"},
     # Ответ на «Начать монтаж»: что делать дальше, тремя шагами.
     "start.steps": {
         "ru": (
@@ -140,6 +140,7 @@ TEXTS: dict[str, dict[str, str]] = {
     },
     "btn.begin": {"ru": "Приступить", "en": "Get started"},
     "btn.topup": {"ru": "Пополнить баланс", "en": "Top up"},
+    "btn.invite": {"ru": "Пригласить друга", "en": "Invite a friend"},
     # Условия одной строкой под приветствием (`handlers.common.offer_text`).
     # `cost` — цена ролика в токенах, `pack` — самый маленький пакет.
     "start.offer_trial_one": {
@@ -175,17 +176,16 @@ TEXTS: dict[str, dict[str, str]] = {
     },
     "menu.channel_soon": {"ru": "Наш канал скоро появится — следите за новостями.", "en": "Our channel is coming soon."},
     "btn.open_channel": {"ru": "Открыть канал", "en": "Open the channel"},
-    "kb.ready": {
-        "ru": "Кнопки внизу — для быстрых действий.",
-        "en": "The buttons below are your shortcuts.",
-    },
+    "kb.ready": {"ru": "Меню внизу 👇", "en": "Menu below 👇"},
     "menu.videos": {
         "ru": "Ваши ролики — откройте приложение, чтобы посмотреть детали и прогресс монтажа:",
         "en": "Your reels — open the app to see the details and editing progress:",
     },
+    # Слово в слово как у Brandly (просьба владельца 19.11.2026: «прям 1в1»),
+    # вместе с их неизменяемыми «монтажа» и «роликов» — «1 роликов» тоже так.
     "menu.balance": {
-        "ru": "Ваш баланс: {balance}\nХватит на ~{enough}\nСмонтировано всего: {done}",
-        "en": "Your balance: {balance}\nEnough for ~{enough}\nEdited in total: {done}",
+        "ru": "Ваш баланс: {balance}\nХватит на ~{enough} монтажа\nСмонтировано всего: {done} роликов",
+        "en": "Your balance: {balance}\nEnough for ~{enough} edits\nEdited in total: {done} reels",
     },
     "menu.referral": {
         "ru": (
@@ -194,7 +194,8 @@ TEXTS: dict[str, dict[str, str]] = {
             "от купленных им токенов на баланс.\n\n"
             "Ваша ссылка:\n{link}\n\n"
             "Приглашено: {invited}\n"
-            "Заработано: {earned}"
+            "Заработано: {earned}\n\n"
+            "Самозанятым и ИП — деньгами, а не токенами: нажмите «Стать партнёром»."
         ),
         "en": (
             "Invite friends — earn tokens.\n"
@@ -202,7 +203,49 @@ TEXTS: dict[str, dict[str, str]] = {
             "of the tokens they bought on your balance.\n\n"
             "Your link:\n{link}\n\n"
             "Invited: {invited}\n"
-            "Earned: {earned}"
+            "Earned: {earned}\n\n"
+            "Self-employed or a company? Get paid in money, not tokens: tap “Become a partner”."
+        ),
+    },
+    "btn.partner": {"ru": "💼 Стать партнёром", "en": "💼 Become a partner"},
+    "btn.ref_terms": {"ru": "Условия программы", "en": "Programme terms"},
+    # «Стать партнёром»: выплаты деньгами договариваются с владельцем лично —
+    # готового договора в боте нет, поэтому ведём к живому человеку.
+    "menu.partner": {
+        "ru": (
+            "Партнёрам — самозанятым и ИП — платим за приглашённых деньгами, а не токенами.\n\n"
+            "Напишите {contact}: расскажем условия и оформим партнёрство."
+        ),
+        "en": (
+            "Partners who are self-employed or run a company get paid in money, not tokens.\n\n"
+            "Write to {contact}: we'll explain the terms and set up the partnership."
+        ),
+    },
+    "menu.partner_unset": {
+        "ru": "Партнёрская программа для самозанятых и ИП скоро откроется — следите за новостями.",
+        "en": "The partner programme for the self-employed and companies is opening soon.",
+    },
+    # Правила — те, что проверяет `repo.attach_referrer` и начисление бонуса.
+    "menu.ref_terms": {
+        "ru": (
+            "Условия программы приглашений\n\n"
+            "1. Друг открывает бота по вашей ссылке.\n"
+            "2. С каждой его успешной оплаты вам на баланс приходит {percent}% "
+            "купленных им токенов.\n"
+            "3. Друг засчитывается, только если перешёл по ссылке до своей первой покупки "
+            "и ещё не приглашён кем-то другим.\n"
+            "4. Пригласить самого себя нельзя.\n\n"
+            "Бонусные токены тратятся так же, как купленные."
+        ),
+        "en": (
+            "Referral programme terms\n\n"
+            "1. Your friend opens the bot through your link.\n"
+            "2. From each of their successful payments you get {percent}% "
+            "of the tokens they bought on your balance.\n"
+            "3. A friend counts only if they followed the link before their first purchase "
+            "and weren't invited by someone else.\n"
+            "4. You can't invite yourself.\n\n"
+            "Bonus tokens are spent just like bought ones."
         ),
     },
     "menu.referral_off": {
@@ -213,14 +256,63 @@ TEXTS: dict[str, dict[str, str]] = {
     "menu.support": {
         "ru": (
             "Чем помочь?\n\n"
-            "Если видео не проходит, монтаж завис, списались лишние токены "
-            "или остался любой другой вопрос — пишите {contact}, разберёмся."
+            "В FAQ — короткие ответы на частые вопросы: сколько стоит ролик и где смотреть "
+            "цены, лимиты видео, как считаются токены и сколько хранятся готовые ролики.\n\n"
+            "Если видео не проходит, монтаж завис, списались лишние токены или вопрос "
+            "не из FAQ — пишите оператору, разберёмся."
         ),
         "en": (
             "How can we help?\n\n"
-            "If a video won't go through, an edit is stuck, extra tokens were charged "
-            "or you have any other question — write to {contact} and we'll sort it out."
+            "The FAQ has short answers to common questions: what a reel costs and where to see "
+            "prices, video limits, how tokens are counted and how long finished reels are kept.\n\n"
+            "If a video won't go through, an edit is stuck, extra tokens were charged or your "
+            "question isn't in the FAQ — write to an operator and we'll sort it out."
         ),
+    },
+    "btn.faq": {"ru": "FAQ", "en": "FAQ"},
+    "btn.operator": {"ru": "Оператор", "en": "Operator"},
+    # Кнопка смены языка под «Поддержкой» — подпись на ДРУГОМ языке.
+    "btn.switch_lang": {"ru": "🇬🇧 English", "en": "🇷🇺 Русский"},
+    "menu.operator": {
+        "ru": "Напишите {contact} — опишите, что случилось, и мы разберёмся.",
+        "en": "Write to {contact} — tell us what happened and we'll sort it out.",
+    },
+    # FAQ собирается из кусков (`menu.faq_text`): цена и сроки берутся из настроек.
+    "faq.title": {"ru": "Частые вопросы", "en": "FAQ"},
+    "faq.cost_paid": {
+        "ru": "💰 Сколько стоит ролик?\nОдин монтаж — {cost}.{trial} Пакеты токенов и цены — "
+              "в приложении, раздел «Баланс»{pack}.",
+        "en": "💰 What does a reel cost?\nOne edit is {cost}.{trial} Token packs and prices are "
+              "in the app, “Balance” section{pack}.",
+    },
+    "faq.trial_one": {"ru": " Первый ролик — бесплатно.", "en": " Your first reel is free."},
+    "faq.trial_many": {"ru": " Первые {trial} — бесплатно.", "en": " Your first {trial} are free."},
+    "faq.pack": {"ru": ": пакеты от {pack}", "en": ": packs from {pack}"},
+    "faq.limits": {
+        "ru": "🎬 Какие видео подходят?\nОт {min_s} с до {max_m} мин, где вы говорите на камеру. "
+              "Горизонтальное тоже подойдёт — кадрирую в 9:16.",
+        "en": "🎬 What videos work?\nFrom {min_s} s to {max_m} min of you talking on camera. "
+              "Landscape works too — I'll crop it to 9:16.",
+    },
+    "faq.tokens": {
+        "ru": "🪙 Как считаются токены?\nТокены списываются, когда запускается монтаж: один ролик — "
+              "{cost}. Если монтаж не удался, токены возвращаются на баланс.",
+        "en": "🪙 How are tokens counted?\nTokens are charged when an edit starts: one reel is "
+              "{cost}. If an edit fails, the tokens go back to your balance.",
+    },
+    "faq.storage": {
+        "ru": "🗂 Сколько хранятся готовые ролики?\n{days} — потом исходники и ролики удаляются "
+              "с сервера. Сам ролик остаётся у вас в чате.",
+        "en": "🗂 How long are finished reels kept?\n{days} — then the sources and reels are "
+              "deleted from the server. The reel itself stays in your chat.",
+    },
+    "faq.storage_forever": {
+        "ru": "🗂 Сколько хранятся готовые ролики?\nНе удаляем: ролики остаются и в приложении, и в чате.",
+        "en": "🗂 How long are finished reels kept?\nWe don't delete them: they stay in the app and in your chat.",
+    },
+    "faq.more": {
+        "ru": "Не нашли ответ — нажмите «Оператор».",
+        "en": "Didn't find your answer? Tap “Operator”.",
     },
     # Контакт поддержки не задан (SUPPORT_CONTACT пуст и у владельца нет
     # @username). Покупателю — без служебных подробностей; владельцу об этом

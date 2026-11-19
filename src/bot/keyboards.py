@@ -114,26 +114,75 @@ def app_keyboard(
 
 
 def share_keyboard(link: str, lang: str | None = None) -> InlineKeyboardMarkup:
-    """«Поделиться» под ссылкой приглашения: Telegram сам предложит выбрать чат."""
+    """Под ссылкой приглашения, как у Brandly: «Поделиться» (акцентная), затем
+    «Стать партнёром» и «Условия программы» — каждая в своей строке.
+
+    Telegram сам предложит выбрать чат для «Поделиться».
+    """
     from urllib.parse import quote
 
     kb = InlineKeyboardBuilder()
-    kb.button(text=t("menu.referral_share", lang), url=f"https://t.me/share/url?url={quote(link, safe='')}")
+    kb.button(text=t("menu.referral_share", lang),
+              url=f"https://t.me/share/url?url={quote(link, safe='')}", style="primary")
+    kb.button(text=t("btn.partner", lang), callback_data="menu:partner")
+    kb.button(text=t("btn.ref_terms", lang), callback_data="menu:ref_terms")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def welcome_inline_keyboard(lang: str | None = None) -> InlineKeyboardMarkup:
+    """Под приветствием: зелёная «Начать монтаж» и «Официальный канал».
+
+    Канал — только при заданном `CHANNEL_URL`: кнопка в никуда хуже, чем её нет.
+    """
+    kb = InlineKeyboardBuilder()
+    kb.button(text=t("kb.start", lang), callback_data="menu:start",
+              icon_custom_emoji_id=icons.icon("start"), style="success")
+    url = settings.channel_url.strip()
+    if url:
+        kb.button(text=t("btn.channel", lang), url=url, icon_custom_emoji_id=icons.icon("channel"))
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def balance_keyboard(lang: str | None = None) -> InlineKeyboardMarkup:
+    """Под балансом: зелёная «Пополнить баланс» (в приложение) и «Пригласить друга»."""
+    kb = InlineKeyboardBuilder()
+    url = _app_url("balance")
+    if url:
+        kb.button(text=t("btn.topup", lang), web_app=WebAppInfo(url=url),
+                  icon_custom_emoji_id=icons.icon("topup"), style="success")
+    kb.button(text=t("btn.invite", lang), callback_data="menu:referral",
+              icon_custom_emoji_id=icons.icon("referral"))
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def support_keyboard(lang: str | None = None) -> InlineKeyboardMarkup:
+    """Под «Поддержкой»: FAQ, оператор и переключатель языка — столбиком."""
+    other = next((code for code in LANGS if code != lang), None)
+    kb = InlineKeyboardBuilder()
+    kb.button(text=t("btn.faq", lang), callback_data="menu:faq", icon_custom_emoji_id=icons.icon("faq"))
+    kb.button(text=t("btn.operator", lang), callback_data="menu:operator",
+              icon_custom_emoji_id=icons.icon("support"))
+    if other:
+        kb.button(text=t("btn.switch_lang", lang), callback_data=f"lang:{other}")
+    kb.adjust(1)
     return kb.as_markup()
 
 
 # Подписи кнопок нижней клавиатуры: действие → ключ перевода. Порядок задаёт
-# раскладку — первая кнопка во всю ширину, остальные парами.
+# раскладку — 2 × 2, как у Brandly. «Мои ролики» и «Наш канал» с клавиатуры
+# ушли, но их подписи бот по-прежнему узнаёт (`menu.ACTIONS`): старая
+# клавиатура живёт у людей, пока её не заменят.
 MAIN_BUTTONS: tuple[tuple[str, ...], ...] = (
-    ("start",),
-    ("balance", "videos"),
+    ("start", "balance"),
     ("referral", "support"),
-    ("channel",),
 )
 
 
 def main_keyboard(lang: str | None = None) -> ReplyKeyboardMarkup:
-    """Постоянная клавиатура под полем ввода: пять кнопок, 1 / 2 / 2.
+    """Постоянная клавиатура под полем ввода: четыре кнопки, 2 × 2.
 
     Первая кнопка открывает Mini App НАПРЯМУЮ только при постоянном адресе
     (`WEBAPP_URL`). С туннелем адрес новый на каждом запуске, а эту клавиатуру

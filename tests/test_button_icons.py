@@ -32,7 +32,7 @@ def _icons_on(monkeypatch):
 def test_main_buttons_carry_icons_and_no_colour_emoji_in_the_label():
     kb = keyboards.main_keyboard("ru")
     buttons = {b.text: b for row in kb.keyboard for b in row}
-    for action in menu.ACTIONS:
+    for action in (a for row in keyboards.MAIN_BUTTONS for a in row):
         b = buttons[t(f"kb.{action}", "ru")]
         assert b.icon_custom_emoji_id == icons.ICONS[action], action
         assert b.text[0].isalpha(), f"в подписи осталось эмодзи: {b.text!r}"
@@ -55,7 +55,7 @@ def test_old_emoji_labels_still_work_in_every_language():
 
 def test_the_new_keyboard_is_delivered_once_more():
     """Кто уже получил клавиатуру с цветными эмодзи, получит новую — отметка другая."""
-    assert menu.SEEN_FLAG not in ("kb", "kb2")
+    assert menu.SEEN_FLAG not in ("kb", "kb2", "kb3")
 
 
 def test_icons_can_be_switched_off():

@@ -14,13 +14,17 @@ import logging
 from datetime import datetime, timezone
 
 from aiogram import BaseMiddleware, Bot, F, Router
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from src.bot.handlers.payments import share_text
-from src.bot.keyboards import app_keyboard, main_keyboard, share_keyboard
+from src.bot.keyboards import (
+    app_keyboard, balance_keyboard, main_keyboard, share_keyboard, support_keyboard,
+)
 from src.core.config import settings
-from src.core.i18n import LANGS, lang_of, people_word, t, tokens_text, videos_word
+from src.core.i18n import (
+    LANGS, lang_of, people_word, plural, t, tokens_text, videos_word,
+)
 from src.core.referral import code_of
 from src.db import repo
 
@@ -83,18 +87,51 @@ async def _support_contact() -> str | None:
     return None
 
 
+async def _db_user(user):
+    return await repo.upsert_user(
+        user.id, username=user.username, first_name=user.first_name,
+        language_code=user.language_code, is_admin=user.id in settings.admin_ids,
+    )
+
+
 @router.message(F.text.func(lambda text: action_for(text) is not None))
 async def on_button(message: Message, bot: Bot) -> None:
     user = message.from_user
     if user is None:
         return
-    db_user = await repo.upsert_user(
-        user.id, username=user.username, first_name=user.first_name,
-        language_code=user.language_code, is_admin=user.id in settings.admin_ids,
-    )
-    lang = lang_of(db_user)
+    db_user = await _db_user(user)
     action = action_for(message.text)
     log.info("кнопка %r от %s", action, user.id)
+    await run_action(action, message, db_user, bot)
+
+
+# Инлайн-кнопки под сообщениями меню: `menu:<действие>`.
+INLINE_ACTIONS = ("start", "referral", "faq", "operator", "partner", "ref_terms")
+
+
+@router.callback_query(lambda c: bool(c.data) and c.data.startswith("menu:"))
+async def on_inline(callback: CallbackQuery, bot: Bot) -> None:
+    action = (callback.data or "").split(":", 1)[1]
+    if (
+        callback.from_user is None or action not in INLINE_ACTIONS
+        or not isinstance(callback.message, Message)
+    ):
+        await callback.answer()
+        return
+    db_user = await _db_user(callback.from_user)
+    await callback.answer()
+    log.info("инлайн-кнопка %r от %s", action, callback.from_user.id)
+    await run_action(action, callback.message, db_user, bot, user=callback.from_user)
+
+
+async def run_action(action: str | None, message: Message, db_user, bot: Bot, user=None) -> None:
+    """Ответ на действие меню.
+
+    `message` — куда отвечать. У инлайн-кнопки это сообщение БОТА, поэтому
+    человека берём из `user`, а не из `message.from_user`.
+    """
+    user = user or message.from_user
+    lang = lang_of(db_user)
 
     if action == "start":
         # Инлайн-кнопка несёт СВЕЖИЙ адрес приложения — в отличие от клавиатуры,
@@ -114,10 +151,10 @@ async def on_button(message: Message, bot: Bot) -> None:
             t(
                 "menu.balance", lang,
                 balance=tokens_text(db_user.balance, lang),
-                enough=f"{enough} {videos_word(enough, lang)}",
-                done=f"{done} {videos_word(done, lang)}",
+                enough=enough,
+                done=done,
             ),
-            reply_markup=app_keyboard("balance", lang, "btn.topup", "balance"),
+            reply_markup=balance_keyboard(lang),
         )
     elif action == "videos":
         await message.answer(t("menu.videos", lang), reply_markup=app_keyboard("videos", lang))
@@ -126,28 +163,29 @@ async def on_button(message: Message, bot: Bot) -> None:
         # пригласившему не привязать — `/start` разбирает именно этот параметр.
         if settings.referral_percent <= 0:
             await message.answer(t("menu.referral_off", lang))
-        else:
-            me = await bot.me()
-            link = f"https://t.me/{me.username}?start={code_of(user.id)}"
-            # Счётчики — справка, а не суть сообщения: без базы ссылка всё равно
-            # должна прийти, пусть и с нулями.
-            invited = earned = 0
-            try:
-                stats = await repo.referral_stats(user.id, since=datetime.now(timezone.utc))
-                invited, earned = stats["invited"], stats["earned"]
-            except Exception as e:  # noqa: BLE001
-                log.warning("сводка приглашений для %s не собралась: %s", user.id, e)
-            await message.answer(
-                t(
-                    "menu.referral", lang,
-                    percent=settings.referral_percent,
-                    link=link,
-                    invited=f"{invited} {people_word(invited, lang)}",
-                    earned=share_text(earned, lang),
-                ),
-                reply_markup=share_keyboard(link, lang),
-                disable_web_page_preview=True,
-            )
+            return
+        me = await bot.me()
+        link = f"https://t.me/{me.username}?start={code_of(user.id)}"
+        # Счётчики — справка, а не суть сообщения: без базы ссылка всё равно
+        # должна прийти, пусть и с нулями.
+        invited = earned = 0
+        try:
+            stats = await repo.referral_stats(user.id, since=datetime.now(timezone.utc))
+            invited, earned = stats["invited"], stats["earned"]
+        except Exception as e:  # noqa: BLE001
+            log.warning("сводка приглашений для %s не собралась: %s", user.id, e)
+        # Превью ссылки не выключаем: под текстом встаёт карточка бота, как у
+        # Brandly, — видно, куда ведёт ссылка, которой делятся.
+        await message.answer(
+            t(
+                "menu.referral", lang,
+                percent=settings.referral_percent,
+                link=link,
+                invited=f"{invited} {people_word(invited, lang)}",
+                earned=share_text(earned, lang),
+            ),
+            reply_markup=share_keyboard(link, lang),
+        )
     elif action == "channel":
         # Ссылку на канал владелец пришлёт позже: до тех пор кнопка честно
         # говорит, что канал скоро появится, а не ведёт в никуда.
@@ -158,11 +196,62 @@ async def on_button(message: Message, bot: Bot) -> None:
             await message.answer(t("menu.channel", lang), reply_markup=kb.as_markup())
         else:
             await message.answer(t("menu.channel_soon", lang))
-    else:
+    elif action == "support":
+        await message.answer(t("menu.support", lang), reply_markup=support_keyboard(lang))
+    elif action == "faq":
+        await message.answer(faq_text(lang))
+    elif action == "operator":
         contact = await _support_contact()
         await message.answer(
-            t("menu.support", lang, contact=contact) if contact else t("menu.support_unset", lang)
+            t("menu.operator", lang, contact=contact) if contact else t("menu.support_unset", lang)
         )
+    elif action == "partner":
+        contact = await _support_contact()
+        await message.answer(
+            t("menu.partner", lang, contact=contact) if contact else t("menu.partner_unset", lang)
+        )
+    elif action == "ref_terms":
+        await message.answer(t("menu.ref_terms", lang, percent=settings.referral_percent))
+
+
+def days_word(n: int, lang: str | None) -> str:
+    return plural(n, lang, ("день", "дня", "дней"), ("day", "days"))
+
+
+def faq_text(lang: str) -> str:
+    """FAQ из настроек: цена, проба, лимиты, хранение — те же числа, по которым
+    работает бот, а не переписанные в текст и забытые при следующей смене цены."""
+    from src.bot.handlers.common import offer_pack  # круговой импорт: common тянет menu
+
+    # Режим `free_videos` здесь не объявляется: «монтаж бесплатный» владелец
+    # запретил писать где бы то ни было (16.11.2026, `test_i18n`).
+    cost = tokens_text(settings.tokens_per_video, lang)
+    trial = max(0, settings.trial_videos)
+    if trial == 0:
+        trial_line = ""
+    elif trial == 1:
+        trial_line = t("faq.trial_one", lang)
+    else:
+        trial_line = t("faq.trial_many", lang, trial=f"{trial} {videos_word(trial, lang)}")
+    pack = offer_pack(lang)
+    price = t(
+        "faq.cost_paid", lang, cost=cost, trial=trial_line,
+        pack=t("faq.pack", lang, pack=pack) if pack else "",
+    )
+    days = settings.storage_retention_days
+    storage = (
+        t("faq.storage", lang, days=f"{days} {days_word(days, lang)}") if days > 0
+        else t("faq.storage_forever", lang)
+    )
+    return "\n\n".join([
+        t("faq.title", lang),
+        price,
+        t("faq.limits", lang, min_s=f"{settings.min_video_seconds:.0f}",
+          max_m=f"{settings.max_video_minutes:.0f}"),
+        t("faq.tokens", lang, cost=cost),
+        storage,
+        t("faq.more", lang),
+    ])
 
 
 async def show_keyboard(message: Message, lang: str) -> None:
@@ -172,9 +261,10 @@ async def show_keyboard(message: Message, lang: str) -> None:
 
 
 # Отметка в `users.settings`: клавиатуру этому человеку уже присылали.
-# «kb3» — клавиатура со значками и кнопкой «Наш канал». У кого отметка «kb» или
-# «kb2» (прежние клавиатуры), тот получит новую один раз на следующем сообщении.
-SEEN_FLAG = "kb3"
+# «kb4» — клавиатура 2 × 2 как у Brandly (19.11.2026). У кого отметка «kb»,
+# «kb2» или «kb3» (прежние клавиатуры), тот получит новую один раз на следующем
+# сообщении.
+SEEN_FLAG = "kb4"
 
 
 class KeyboardOnce(BaseMiddleware):

@@ -266,10 +266,11 @@ def test_every_theme_has_its_own_plain_label():
     assert theme_label("нет такой", "ru", "Запасное") == "Запасное"
 
 
-def test_the_first_screen_states_the_terms(monkeypatch):
-    """Условия стоят в приветствии: что бесплатно и сколько стоит следующий
-    ролик. Раньше о цене человек узнавал отказом после отправки видео."""
-    from src.bot.handlers import common
+def test_the_terms_are_in_the_faq(monkeypatch):
+    """Условия — что бесплатно и сколько стоит ролик — в FAQ («Поддержка» →
+    «FAQ»). С 19.11.2026 приветствие слово в слово как у Brandly, и строки с
+    ценой в нём нет, как нет у образца."""
+    from src.bot.handlers import common, menu
 
     from src.core.config import Settings
 
@@ -281,8 +282,10 @@ def test_the_first_screen_states_the_terms(monkeypatch):
     monkeypatch.setattr(common.settings, "trial_videos", 1)
     text = common.welcome_text("ru")
     assert "Reelmaker" in text and "{brand}" not in text
+    assert "23 токена" not in text
+    faq = menu.faq_text("ru")
     # Ролик — 23 токена; пакеты от 240 токенов за 1099 ₽ (749 ⭐).
-    assert "Первый ролик — бесплатно" in text and "23 токена" in text and "1099 ₽" in text
+    assert "Первый ролик — бесплатно" in faq and "23 токена" in faq and "1099 ₽" in faq
 
     monkeypatch.setattr(common.settings, "trial_videos", 0)
     assert "бесплатно" not in common.offer_text("ru") and "23 токена" in common.offer_text("ru")

@@ -41,14 +41,9 @@ def offer_text(lang: str) -> str:
         # Строку «Сейчас монтаж бесплатный» владелец попросил убрать (15.11.2026):
         # режим работает, но в приветствии о нём не говорим.
         return ""
-    packages = settings.token_packages
-    if not packages:
+    pack = offer_pack(lang)
+    if not pack:
         return ""
-    first = packages[0]
-    pack = t(
-        "start.pack" if first.rub else "start.pack_stars", lang,
-        tokens=tokens_text(first.tokens, lang), rub=first.rub, stars=first.stars,
-    )
     key = {0: "start.offer_paid", 1: "start.offer_trial_one"}.get(
         max(0, settings.trial_videos), "start.offer_trial_many"
     )
@@ -59,16 +54,31 @@ def offer_text(lang: str) -> str:
     )
 
 
+def offer_pack(lang: str) -> str:
+    """Самый маленький пакет словами: «240 токенов за 1099 ₽ (749 ⭐)». Пусто — пакетов нет."""
+    packages = settings.token_packages
+    if not packages:
+        return ""
+    first = packages[0]
+    return t(
+        "start.pack" if first.rub else "start.pack_stars", lang,
+        tokens=tokens_text(first.tokens, lang), rub=first.rub, stars=first.stars,
+    )
+
+
 def welcome_text(lang: str) -> str:
-    text = t(
+    """Приветствие слово в слово как у Brandly (просьба владельца 19.11.2026).
+
+    Строки с ценой (`offer_text`) в нём больше нет — у образца её нет; цена,
+    проба и пакеты теперь в FAQ («Поддержка» → «FAQ», `menu.faq_text`).
+    """
+    return t(
         "start.welcome",
         lang,
         brand=settings.brand_name,
         min_s=f"{settings.min_video_seconds:.0f}",
         max_m=f"{settings.max_video_minutes:.0f}",
     )
-    offer = offer_text(lang)
-    return f"{text}\n\n{offer}" if offer else text
 
 
 async def apply_menu_button(bot: Bot, chat_id: int, lang: str) -> None:
@@ -138,19 +148,18 @@ async def on_start(message: Message, command: CommandObject | None = None) -> No
 
 
 async def greet_with_menu(message: Message, lang: str) -> None:
-    """Приветствие одним сообщением вместе с нижним меню.
+    """Приветствие с инлайн-кнопками, следом «Меню внизу 👇» с нижним меню.
 
-    Раньше меню ехало отдельной строкой «Кнопки внизу — для быстрых действий»:
-    к приветствию с инлайн-кнопками реплай-клавиатуру не прицепить (разметка у
-    сообщения одна). Владелец попросил строку убрать (16.11.2026), поэтому
-    приветствие несёт само меню, а приложение открывается кнопкой у поля ввода
-    и «Начать монтаж». Отметка `SEEN_FLAG` — чтобы разовая доставка клавиатуры
+    Два сообщения, как у Brandly (просьба владельца 19.11.2026): к приветствию
+    с инлайн-кнопками реплай-клавиатуру не прицепить — разметка у сообщения
+    одна. Отметка `SEEN_FLAG` — чтобы разовая доставка клавиатуры
     (`menu.KeyboardOnce`) не прислала её следом ещё раз.
     """
     from src.bot.handlers import menu  # круговой импорт: menu тянет common
-    from src.bot.keyboards import main_keyboard
+    from src.bot.keyboards import welcome_inline_keyboard
 
-    await message.answer(welcome_text(lang), reply_markup=main_keyboard(lang))
+    await message.answer(welcome_text(lang), reply_markup=welcome_inline_keyboard(lang))
+    await menu.show_keyboard(message, lang)
     with contextlib.suppress(Exception):  # отметка — удобство, приветствие уже ушло
         await repo.set_user_settings(message.chat.id, **{menu.SEEN_FLAG: 1})
 

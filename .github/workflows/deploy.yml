@@ -46,8 +46,16 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
+      # Зеркало Ubuntu иногда замолкает посреди скачивания (19.11.2026 прогон
+      # висел на libflite1 до лимита всей задачи). Повторы и таймаут apt
+      # перекачивают оборванный пакет сами, а лимит шага не даёт зависанию
+      # съесть 25 минут.
       - name: ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        timeout-minutes: 10
+        run: |
+          APT="-o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $APT update
+          sudo apt-get $APT install -y --no-install-recommends ffmpeg
 
       - name: Python-зависимости
         run: pip install -e ".[dev]"

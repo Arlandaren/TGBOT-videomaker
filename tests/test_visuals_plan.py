@@ -944,8 +944,11 @@ def test_schema_enums_come_from_the_sheet_types_and_the_sticker_set():
     index_file = ROOT / "assets" / "stickers" / "index.json"
     index_keys = list(json.loads(index_file.read_text(encoding="utf-8"))["stickers"])
     assert len(index_keys) > 100
-    assert overlay["sticker"]["enum"] == [*index_keys, None]
-    assert item["sticker"]["enum"] == [*index_keys, None]
+    # Ключи стикеров — в описании, а не в `enum`: чужой ключ снимается по одному
+    # (`test_an_unknown_sticker_drops_only_itself`), а не бракует весь ответ.
+    for field in (overlay["sticker"], item["sticker"]):
+        assert "enum" not in field
+        assert all(key in field["description"] for key in index_keys)
     assert one_scene["items"]["maxItems"] == SCENE_ITEMS_MAX
     assert overlay["text"]["maxLength"] == CHIP_TEXT_MAX
 
@@ -1225,12 +1228,15 @@ async def test_an_answer_with_nothing_usable_is_retried_with_the_rule_errors():
     assert got == fallback_visuals(edl)
 
 
-async def test_an_empty_answer_is_a_good_answer():
-    """Режиссёр решил, что графики не надо, — словарь поверх его решения не запускается."""
+async def test_an_empty_answer_is_filled_by_the_free_planner():
+    """Пустой лист модели добирается расстановщиком: ролик без графики — провал.
+
+    На проде модель после повтора сдалась пустым ответом, и ролик с ценами в
+    речи ушёл без единой плашки. Повтора за пустой ответ при этом нет.
+    """
     llm = client_with({"overlays": [], "scenes": []})
-    report: dict[str, Any] = {}
-    got = await plan_visuals(story(), llm=llm, cfg=flag(), report=report)
-    assert got == Visuals() and report["from_llm"] is True
+    got = await plan_visuals(story(), llm=llm, cfg=flag())
+    assert got == fallback_visuals(story()) and not got.empty
     assert len(llm.fake.calls) == 1
 
 
@@ -1239,7 +1245,22 @@ async def test_an_answer_lost_to_excess_only_is_not_retried():
     llm = client_with({"overlays": [], "scenes": [{"layout": "phone", "word_from": 50,
                                                   "word_to": 56}]})
     got = await plan_visuals(story(), llm=llm, cfg=flag())
-    assert got == Visuals() and len(llm.fake.calls) == 1
+    assert got == fallback_visuals(story()) and len(llm.fake.calls) == 1
+
+
+async def test_an_unknown_sticker_drops_only_itself():
+    """Чужой ключ стикера («telegram») не бракует весь ответ — снимается один элемент."""
+    answer = good_answer()
+    answer["overlays"].append({"kind": "sticker", "word_idx": 30, "sticker": "telegram"})
+    answer["overlays"].append({"kind": "sticker", "word_idx": 33, "sticker": "photo",
+                               "emoji": "📸"})
+    llm = client_with(answer)
+    report: dict[str, Any] = {}
+    got = await plan_visuals(story(), llm=llm, cfg=flag(), report=report)
+    assert len(llm.fake.calls) == 1 and report["from_llm"] is True
+    stickers = [o.sticker for o in got.overlays if o.kind == "sticker"]
+    assert "telegram" not in stickers and "photo" not in stickers
+    assert {o.kind for o in got.overlays} >= {"chip", "sticker"}
 
 
 async def test_a_board_left_without_content_is_dropped():

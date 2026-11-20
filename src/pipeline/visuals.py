@@ -103,10 +103,16 @@ def build_schema(stickers: Sequence[str]) -> dict[str, Any]:
     схемы стоило бы платного ретрая. Потолок есть только там, где его держит
     сама модель листа: три элемента в сцене, длина текста.
     """
+    # Без `enum`: схема не в строгом режиме, и ОДИН чужой ключ («telegram»)
+    # раньше браковал весь ответ — модель на повторе сдавалась и отдавала
+    # пустой лист (прод, 20.11.2026). Набор перечислен в описании, а чужой
+    # ключ снимается по одному в `visuals_from_answer`.
     sticker = {
         "type": ["string", "null"],
-        "enum": [*stickers, None],
-        "description": "Ключ стикера из набора. null — картинки по смыслу нет.",
+        "description": (
+            "Ключ стикера СТРОГО из набора: " + ", ".join(stickers)
+            + ". null — картинки по смыслу нет."
+        ),
     }
     emoji = {
         "type": ["string", "null"],
@@ -887,7 +893,13 @@ def visuals_from_answer(data: Mapping[str, Any]) -> Visuals:
                 emoji=single_emoji(raw.get("emoji")),
             )
         elif kind == "sticker":
-            fields.update(sticker=raw.get("sticker"), emoji=single_emoji(raw.get("emoji")))
+            key = raw.get("sticker")
+            if key is not None and key not in sticker_keys():
+                # Ключа нет в наборе — рисовать нечем. Эмодзи, если модель его
+                # дала, остаётся: стикер нарисуется глифом.
+                log.info("графика: стикера %r нет в наборе — снят", key)
+                key = None
+            fields.update(sticker=key, emoji=single_emoji(raw.get("emoji")))
         elif kind == "decor":
             fields.update(glyph=raw.get("glyph"), slot="auto")
         try:
@@ -903,7 +915,11 @@ def visuals_from_answer(data: Mapping[str, Any]) -> Visuals:
                     kind=item.get("kind"),
                     word_idx=item.get("word_idx"),
                     text=_text(item.get("text")),
-                    sticker=item.get("sticker") if item.get("kind") == "sticker" else None,
+                    sticker=(
+                        item.get("sticker")
+                        if item.get("kind") == "sticker" and item.get("sticker") in sticker_keys()
+                        else None
+                    ),
                     emoji=single_emoji(item.get("emoji")),
                 )
                 for item in raw.get("items") or []
@@ -1097,7 +1113,10 @@ async def plan_visuals(
             sheet = await _ask(edl, llm, cfg)
             if sheet is not None and report is not None:
                 report["from_llm"] = True
-        if sheet is None:
+        if sheet is None or sheet.empty:
+            # Пустой лист модели тоже добирается расстановщиком: на проде
+            # (20.11.2026) модель после повтора сдалась пустым ответом, и ролик
+            # ушёл без графики вовсе, хотя цены и стикеры в речи были.
             sheet = fallback_visuals(edl)
         # Последняя чистка — гарантия шага, а не недоверие к себе: что бы ни
         # случилось выше, наружу уходит лист, к которому у правил нет вопросов.

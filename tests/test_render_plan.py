@@ -2209,3 +2209,20 @@ def test_the_title_card_stays_over_the_top_half():
 def test_split_until_survives_the_json_round_trip():
     edl = long_edl(split_until=12.5)
     assert EDL.model_validate_json(edl.model_dump_json()).split_until == 12.5
+
+
+def test_a_block_stays_after_its_last_word_and_the_next_one_waits():
+    """В связной речи блок достаивает `sub_hold` после последнего слова, а
+    следующий встаёт позже — иначе последнее слово видно только пока звучит."""
+    from src.core.render_plan import held_start
+
+    conf = cfg()
+    # Речь идёт дальше без паузы: следующий блок ждёт весь `sub_hold`.
+    assert held_start(2.0, 4.0, 2.0, conf) == pytest.approx(2.0 + conf.sub_hold)
+    # Пауза длиннее `sub_hold` — ждать нечего.
+    assert held_start(3.0, 5.0, 2.0, conf) == 3.0
+    # Короткий блок не появляется после того, как его договорили.
+    assert held_start(2.0, 2.3, 2.0, conf) == pytest.approx(2.15)
+    # Первый блок ролика и выключенное удержание — как раньше.
+    assert held_start(2.0, 4.0, None, conf) == 2.0
+    assert held_start(2.0, 4.0, 2.0, conf.model_copy(update={"sub_hold": 0.0})) == 2.0

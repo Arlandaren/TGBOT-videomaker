@@ -943,6 +943,56 @@ def _settle(raw: Visuals, edl: EDL) -> Visuals:
     return _number_seeds(sheet)
 
 
+# Токенов на символ промпта — с запасом в худшую сторону: кириллица у
+# токенизаторов OpenAI идёт по 2.5-3.5 символа на токен, считаем по 2.
+CHARS_PER_TOKEN_WORST = 2.0
+
+
+def worst_cost(
+    llm: LLMClient, variables: Mapping[str, Any], correction: str | None, max_tokens: int
+) -> float:
+    """Цена вызова в худшем случае, $: весь вход без кеша + выход до `max_tokens`."""
+    from src.llm.client import load_prompt, render
+    from src.llm.providers import price_for
+
+    prompt = load_prompt(VISUALS_PROMPT)
+    chars = len(render(prompt.system, dict(variables))) + len(render(prompt.user, dict(variables)))
+    chars += len(json.dumps(VISUALS_SCHEMA, ensure_ascii=False)) + len(correction or "")
+    miss, _, out = price_for(llm.cfg.model_for_tier(VISUALS_TIER))
+    return (chars / CHARS_PER_TOKEN_WORST * miss + max_tokens * out) / 1_000_000
+
+
+def visuals_llm(cfg: Any = None) -> LLMClient | None:
+    """Клиент GPT для графики или `None` — модели нет, работает расстановщик.
+
+    Свой клиент, мимо `llm_provider`: режиссёр остаётся на своём провайдере, а
+    графика ходит в OpenAI, только если задан `openai_api_key` и включён
+    `visuals_llm`. Модель — `visuals_model` на всех тирах.
+    """
+    cfg = cfg or default_settings
+    key = (getattr(cfg, "openai_api_key", "") or "").strip()
+    if not (getattr(cfg, "visuals_enabled", False) and getattr(cfg, "visuals_llm", False) and key):
+        return None
+    from src.llm.openai_provider import OPENAI_BASE_URL, OpenAIProvider
+
+    model = cfg.visuals_model
+    provider = OpenAIProvider(
+        key, cfg.openai_base_url or OPENAI_BASE_URL, cfg.llm_timeout_s, thinking=False
+    )
+    # `model_copy` без проверки: тиры здесь — имена OpenAI, а валидатор
+    # конфига требует вендора у моделей шлюза fal, к которому этот клиент
+    # отношения не имеет.
+    local = cfg.model_copy(
+        update={
+            "llm_tier_cheap": model,
+            "llm_tier_smart": model,
+            "llm_tier_vision": model,
+            "llm_enabled": True,
+        }
+    )
+    return LLMClient(api_key=key, cfg=local, provider=provider)
+
+
 async def _ask(edl: EDL, llm: LLMClient, cfg: Any) -> Visuals | None:
     """Лист графики от модели или `None`, если от неё ничего годного не получено.
 
@@ -953,10 +1003,25 @@ async def _ask(edl: EDL, llm: LLMClient, cfg: Any) -> Visuals | None:
     """
     variables = prompt_variables(edl, cfg)
     correction: str | None = None
+    cap = float(getattr(cfg, "visuals_max_cost_usd", 0.0) or 0.0)
+    max_tokens = int(getattr(cfg, "visuals_max_tokens", 2500) or 2500)
+    # Потраченное — по журналу клиента: кривой ответ (LLMBadOutput) тоже
+    # оплачен, а до строки после `complete` дело в этом случае не доходит.
+    before = len(llm.usages)
     for attempt in (1, 2):
+        spent = sum(u.cost_usd for u in llm.usages[before:])
+        worst = worst_cost(llm, variables, correction, max_tokens)
+        if cap > 0 and spent + worst > cap:
+            log.warning(
+                "графика: вызов модели не уходит — худший случай $%.5f, потрачено $%.5f, "
+                "потолок $%.5f на ролик",
+                worst, spent, cap,
+            )
+            return None
         try:
             result = await llm.complete(
-                VISUALS_PROMPT, variables, VISUALS_SCHEMA, VISUALS_TIER, correction=correction
+                VISUALS_PROMPT, variables, VISUALS_SCHEMA, VISUALS_TIER,
+                correction=correction, max_tokens=max_tokens,
             )
         except LLMUnavailable as err:
             log.warning("графика: LLM недоступна (%s) — бесплатный расстановщик", err)

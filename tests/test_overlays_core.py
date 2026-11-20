@@ -233,12 +233,9 @@ def test_a_malformed_sheet_costs_the_graphics_not_the_reel():
 
 
 def test_the_sheet_is_read_from_the_edl_when_not_passed():
-    """Шов в `filmed_plan` графику не передаёт: она лежит в самом листе."""
-
-    class SheetEDL(EDL):
-        visuals: Visuals | None = None
-
-    edl = SheetEDL(**talk(30).model_dump(), visuals=Visuals(overlays=[chip(9)]))
+    """Без явного листа графика берётся из самого листа ролика (`EDL.visuals`)."""
+    edl = talk(30)
+    edl.visuals = Visuals(overlays=[chip(9)])
     plan = dressed_plan(build_plan, edl, "video.mp4", apply_cuts=False, cfg=cfg())
     assert [o["kind"] for o in visuals_of(plan)["overlays"]] == ["chip"]
 

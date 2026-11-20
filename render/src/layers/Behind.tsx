@@ -17,6 +17,7 @@
 import React from "react";
 import { continueRender, delayRender, staticFile } from "remotion";
 import type { PlanBlock } from "../types";
+import type { CameraState } from "./Camera";
 
 /** Готовые маски: папка → адреса по кадрам от `first`. `null` — маски не загрузились. */
 export type BehindMasks = Record<string, string[] | null>;
@@ -92,6 +93,7 @@ export const behindStyle = (
   block: PlanBlock,
   frame: number,
   masks: BehindMasks,
+  camera?: CameraState,
 ): React.CSSProperties => {
   const behind = block.behind;
   if (!behind) return {};
@@ -100,12 +102,23 @@ export const behindStyle = (
   // Вне диапазона держим крайнюю маску: блок в эти кадры уже почти прозрачен.
   const n = Math.min(behind.last, Math.max(behind.first, frame));
   const image = `url(${urls[n - behind.first]})`;
+  // Маска снята с кадра ДО камеры, а человек в кадре стоит после неё. Та же
+  // трансформа, что у видео: точка (ox, oy) на месте, остальное от неё
+  // разъезжается в `scale` раз — то есть маска крупнее кадра и сдвинута.
+  const scale = camera?.scale ?? 1;
+  const size = `${(scale * 100).toFixed(3)}% ${(scale * 100).toFixed(3)}%`;
+  const position =
+    camera && scale !== 1
+      ? `${(camera.ox * (1 - scale)).toFixed(2)}px ${(camera.oy * (1 - scale)).toFixed(2)}px`
+      : "0px 0px";
   return {
     maskImage: image,
     WebkitMaskImage: image,
     // Обёртка блока — весь кадр, поэтому маска кадра ложится на неё один к одному.
-    maskSize: "100% 100%",
-    WebkitMaskSize: "100% 100%",
+    maskSize: size,
+    WebkitMaskSize: size,
+    maskPosition: position,
+    WebkitMaskPosition: position,
     maskRepeat: "no-repeat",
     WebkitMaskRepeat: "no-repeat",
   };

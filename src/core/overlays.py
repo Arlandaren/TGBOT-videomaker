@@ -248,6 +248,21 @@ def _linear(channel: float) -> float:
     return channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
 
 
+# Фон светлее этого — субтитр темы (почти белый у всех тем) на нём не читается,
+# и блок получает тёмные цвета (`light_ink`). Бумага сцены — ~0.86.
+LIGHT_BG_LUMA = 0.5
+# Тёмные цвета блока на светлой сцене: чернила бумаги, синий акцент графики,
+# белая обводка вместо тёмной (тёмная на тёмном тексте читается как жирность).
+LIGHT_INK = {"text": "#14110A", "accent": "#2F6BFF", "outline": "#FFFFFF", "shadow": "#FFFFFF"}
+
+
+def light_ink(bg_luma: float | None) -> dict[str, str] | None:
+    """Цвета блока на светлой сцене или `None` — на тёмной остаются цвета темы."""
+    if bg_luma is None or bg_luma < LIGHT_BG_LUMA:
+        return None
+    return dict(LIGHT_INK)
+
+
 def luminance(color: str) -> float:
     """Относительная яркость по WCAG — та же единица, что у `bg_luma` (`luma.py`)."""
     r, g, b = (_linear(c / 255) for c in hex_to_rgb(color))
@@ -2077,6 +2092,7 @@ def dressed_plan(
         inside = min(block.end, staged_scene.end) - max(block.start, staged_scene.start)
         if palette.luma is not None and inside > (block.end - block.start) / 2:
             block.bg_luma = round(palette.luma(block.rect), 4)
+            block.ink = light_ink(block.bg_luma)
 
     if not made.empty and isinstance(plan.meta, dict):
         plan.meta["visuals"] = made.to_meta()

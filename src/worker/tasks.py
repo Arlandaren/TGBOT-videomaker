@@ -371,7 +371,7 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
     """Перерендер из сохранённого EDL с другим пресетом — без ASR и LLM (§0.4)."""
     from src.core.edl import EDL
     from src.core.preset import load_preset
-    from src.core.render_plan import build_plan
+    from src.core.camera import filmed_plan
     from src.pipeline.audio_post import build_audio
     from src.core.track import load_track
     from src.pipeline.crop import autocrop, framing_spans
@@ -482,8 +482,12 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
             _measure_behind, edl, vertical, work, preset=style, cut_pauses=options.cut,
             backend=settings.render_backend, cfg=settings,
         )
-        plan = build_plan(
-            edl, str(vertical), fps=int(round(staged_info.fps)),
+        # Галочка «Движение камеры» — из опций задачи: у листов, сохранённых до
+        # появления `EDL.camera`, её в листе нет.
+        edl.camera = edl.camera and options.camera
+        plan = filmed_plan(
+            edl, str(vertical), backend=settings.render_backend,
+            video_duration=staged_info.duration, fps=int(round(staged_info.fps)),
             width=staged_info.width, height=staged_info.height,
             preset=style, apply_cuts=options.cut, audio_path=audio_path, cfg=settings,
             track=load_track(work / "track.json"),

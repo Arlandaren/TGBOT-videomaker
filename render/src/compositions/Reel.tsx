@@ -1,26 +1,42 @@
 /**
  * Композиция ролика: видео-подложка + b-roll + субтитры.
  *
- * Камеры здесь нет: движение делается сменой крупности на резе (crop.py), а не
- * зумом поверх кадра. Зум по номеру кадра давал дёрганье и спорил с субтитрами.
+ * Камера — масштаб видео-слоя по готовым планам (`layers/Camera.ts`): медленный
+ * наезд внутри плана и укрупнение на резе там, где кроп его дать не смог.
+ * Скачок масштаба бывает только на резе, внутри плана он линеен: пружин и
+ * синусов по номеру кадра, от которых прежняя камера дёргалась, здесь нет.
+ * Субтитры и вставки стоят снаружи и с камерой не двигаются.
  *
- * Порядок слоёв снизу вверх: видео → b-roll → субтитры. Субтитры всегда сверху:
- * картинка не должна перекрывать текст.
+ * Порядок слоёв снизу вверх: сцена с видео (`visuals/Stage`) → b-roll → графика
+ * (`visuals/Overlays`) → субтитры. Субтитры всегда сверху: картинка не должна
+ * перекрывать текст. Без графики в плане (`meta.visuals` нет) `Stage` отдаёт
+ * видео как есть, а `Overlays` ничего не рисует — ролик прежний.
+ *
+ * Камера остаётся ВНУТРИ сцены: наезд масштабирует видео в его собственных
+ * координатах, а сцена потом уменьшает и сдвигает уже готовый кадр.
  */
 
 import React from "react";
 import { Video } from "@remotion/media";
-import { AbsoluteFill, Audio, staticFile } from "remotion";
+import { AbsoluteFill, Audio, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import type { RenderPlan } from "../types";
 import { Broll } from "../layers/Broll";
+import { cameraAt, cameraShots, cameraStyle } from "../layers/Camera";
 import { Captions } from "../layers/Captions";
+import { Overlays } from "../visuals/Overlays";
+import { Stage } from "../visuals/Stage";
 
 export const Reel: React.FC<RenderPlan> = (plan) => {
   const { preset } = plan;
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const shots = React.useMemo(() => cameraShots(plan), [plan.meta]);
+  const camera = cameraAt(shots, frame, fps);
 
   return (
     <AbsoluteFill style={{ backgroundColor: preset.background }}>
-      <AbsoluteFill>
+      <Stage plan={plan}>
+      <AbsoluteFill style={cameraStyle(camera)}>
         {/*
           `<Video>` из `@remotion/media`, а не `OffthreadVideo`: кадр декодирует
           сам Chromium через WebCodecs, без отдельного процесса-компоситора и
@@ -43,11 +59,13 @@ export const Reel: React.FC<RenderPlan> = (plan) => {
           />
         ) : null}
       </AbsoluteFill>
+      </Stage>
 
       {plan.audio ? <Audio src={staticFile(plan.audio)} /> : null}
 
       <Broll items={plan.broll ?? []} preset={preset} />
-      <Captions blocks={plan.blocks ?? []} preset={preset} />
+      <Overlays plan={plan} />
+      <Captions blocks={plan.blocks ?? []} preset={preset} camera={camera} />
     </AbsoluteFill>
   );
 };

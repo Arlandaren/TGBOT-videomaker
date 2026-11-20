@@ -19,6 +19,7 @@ from typing import Any, Iterable, Literal, Sequence
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.core.config import settings as default_settings
+from src.core.overlay_models import Visuals
 
 # Потолок b-roll: не чаще одной картинки на BROLL_WINDOW секунд и не больше
 # BROLL_MAX на ролик. Одна картинка на 8 с — это мельтешение: на 20-секундном
@@ -331,6 +332,17 @@ class EDL(BaseModel):
     # выбран по границам субтитров, которых у перерендера под рукой нет.
     # `None` — обычный ролик из одного видео.
     split_until: float | None = None
+    # Графика поверх ролика (`core/overlay_models.py`): плашки, стикеры, декор,
+    # сцены. Как и остальной лист — только номера слов; времена и места считает
+    # `core/overlays.py`. `None` — графики нет, ролик прежний. В листе, чтобы
+    # перерендер повторил ровно ту же графику, не спрашивая модель заново.
+    visuals: Visuals | None = None
+    # Движение камеры в рендере (`core/camera.py`): медленный наезд внутри плана
+    # и укрупнение на резе там, где кроп его дать не смог. В листе по инварианту
+    # 4: галочка «Движение камеры» живёт в опциях задачи, а перерендер получает
+    # ровно лист. У листов, сохранённых до появления поля, камера включена — их
+    # смена крупности на резах и так была решением «камера есть».
+    camera: bool = True
 
     @model_validator(mode="before")
     @classmethod

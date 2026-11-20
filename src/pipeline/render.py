@@ -142,6 +142,11 @@ def prepare_assets(
             plan.meta["emoji_font"] = _stage_asset(cfg.emoji_font, assets_dir)
         else:
             log.warning("шрифт эмодзи %s не найден — значки нарисует система", cfg.emoji_font)
+    # Графика (`meta["visuals"]`): стикеры, фото, размытый фон сцены и, если
+    # что-то рисует эмодзи глифом, тот же цветной шрифт. Без графики — ничего.
+    from src.core.overlays import stage_visual_assets
+
+    stage_visual_assets(plan, assets_dir, cfg)
     return plan
 
 

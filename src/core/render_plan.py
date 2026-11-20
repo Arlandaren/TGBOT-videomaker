@@ -154,6 +154,9 @@ class PlanBlock:
     # ведёт прозрачность панели и цвет текста, чтобы контраст взял порог (Ф9).
     # `None` — никто не мерил, пресет играет как играл.
     bg_luma: float | None = None
+    # Цвета блока на светлой сцене графики: {text, accent, outline, shadow}.
+    # Ставит `overlays.light_ink`; `None` — цвета темы.
+    ink: dict[str, str] | None = None
     # Носит ли ЭТОТ блок матовое стекло. Решение приезжает из EDL, потому что
     # оно режиссёрское, а не вычислимое: см. `CaptionBlock.panel`. Место под
     # плашку (паддинги и рамка) зарезервировано у ВСЕХ блоков одинаково, иначе
@@ -257,6 +260,7 @@ class RenderPlan:
                     lines=[[PlanWord(**w) for w in line] for line in b["lines"]],
                     rect=_rect_from(b.get("rect")),
                     bg_luma=b.get("bg_luma"),
+                    ink=b.get("ink"),
                     panel=bool(b.get("panel", False)),
                     anchor_path=b.get("anchor_path"),
                     quiet=bool(b.get("quiet", False)),
@@ -302,6 +306,7 @@ class RenderPlan:
                     "lines": [[asdict(w) for w in line] for line in b.lines],
                     "rect": b.rect.to_dict() if b.rect else None,
                     "bg_luma": b.bg_luma,
+                    "ink": b.ink,
                     "panel": b.panel,
                     "anchor_path": b.anchor_path,
                     "quiet": b.quiet,
@@ -804,6 +809,27 @@ def caption_rhythm(
     return out
 
 
+def held_start(start: float, speech_end: float, prev_end: float | None, cfg: Settings) -> float:
+    """Начало блока с учётом того, что предыдущий обязан ДОСТОЯТЬ.
+
+    Слова блока проявляются по одному, в такт речи, а блок уходит, когда
+    начинается следующий. В связной речи это значит, что последнее слово видно
+    ровно столько, сколько оно звучит (замер на эталонном плане: 0.08-0.5 с), а у
+    тем с паузой между блоками уход ещё и съедает эти доли секунды — блок
+    «пролетает», дочитать его нельзя. Поэтому предыдущий блок держится
+    `sub_hold` после своего последнего слова, а следующий встаёт позже — сразу с
+    теми словами, что уже прозвучали.
+
+    Отставание ограничено дважды: самим `sub_hold` и половиной речи блока —
+    иначе короткий блок появлялся бы, когда его уже договорили. Считается от
+    СЛОВ, а не от сдвинутых границ, поэтому по ролику не накапливается.
+    """
+    if prev_end is None:
+        return start
+    lag = min(prev_end + cfg.sub_hold - start, cfg.sub_hold, (speech_end - start) / 2)
+    return start + max(0.0, lag)
+
+
 def block_windows(
     edl: EDL, *, apply_cuts: bool = True, cfg: Settings | None = None
 ) -> list[tuple[float, float]]:
@@ -820,6 +846,7 @@ def block_windows(
     tl = edl.timeline() if apply_cuts else Timeline([], edl.source_duration)
     by_idx = {w.idx: w for w in edl.words}
     out: list[list[float]] = []
+    prev_end: float | None = None
     for block in edl.captions:
         spans = [
             win
@@ -827,7 +854,9 @@ def block_windows(
             if cw.word_idx in by_idx and (win := tl.word_window(by_idx[cw.word_idx])) is not None
         ]
         if spans:
-            out.append([round(spans[0][0], 3), round(spans[-1][1], 3) + cfg.sub_tail])
+            start = held_start(spans[0][0], spans[-1][1], prev_end, cfg)
+            out.append([round(start, 3), round(spans[-1][1], 3) + cfg.sub_tail])
+            prev_end = spans[-1][1]
     for a, b in zip(out, out[1:]):
         if a[1] > b[0]:
             a[1] = b[0]
@@ -1275,6 +1304,9 @@ def build_plan(
     phrases: list[bool] = []
     prev_word: Any = None
     prev_end = 0.0
+    # Конец речи предыдущего ОБЫЧНОГО блока: после него следующий ждёт
+    # (`held_start`). После списка ждать нечего — плашки уходят по своим правилам.
+    held_after: float | None = None
     for bi, block in enumerate(edl.captions):
         pwords = spoken(block)
         if not pwords:
@@ -1283,6 +1315,7 @@ def build_plan(
             # Пункт уже стоит плашкой. Блоком он не раскладывается, но речь
             # продолжается: следующему блоку нужно знать, чем кончился этот.
             prev_word, prev_end = by_idx[pwords[-1].word_idx], pwords[-1].end
+            held_after = None
             continue
         if bi in plain:
             # Список в кадр не встал — пункт играет обычным плакатом.
@@ -1319,11 +1352,12 @@ def build_plan(
         laid.append(
             _Laid(
                 block=block,
-                start=pwords[0].start,
+                start=held_start(pwords[0].start, pwords[-1].end, held_after, cfg),
                 end=pwords[-1].end + cfg.sub_tail,
                 places=lay_places(places, pwords, block),
             )
         )
+        held_after = pwords[-1].end
 
     homes = settle_rhythm(laid, phrases)
 

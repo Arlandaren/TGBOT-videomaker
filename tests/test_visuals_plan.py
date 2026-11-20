@@ -1050,10 +1050,12 @@ def llm_cfg(**kw: Any) -> Settings:
 
 
 def flag(on: bool = True) -> Settings:
-    """Настройки с флагом `visuals_llm`. Поля в `Settings` пока нет — ставим мимо модели."""
-    cfg = llm_cfg()
-    object.__setattr__(cfg, "visuals_llm", on)
-    return cfg
+    """Настройки с флагом `visuals_llm`.
+
+    Потолок цены здесь не проверяется (`test_visuals_wiring.py`), а двойник
+    модели считается по ценам DeepSeek, — поэтому потолок с запасом.
+    """
+    return llm_cfg(visuals_llm=on, visuals_max_cost_usd=1.0)
 
 
 def client_with(*script: Any, **kw: Any) -> LLMClient:

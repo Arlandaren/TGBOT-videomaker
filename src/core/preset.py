@@ -591,6 +591,35 @@ class Crop(BaseModel):
     track_beta: float = 0.007
 
 
+class Camera(BaseModel):
+    """Камера рендера: движение ВНУТРИ плана (`core/camera.py`).
+
+    Смена крупности на резе осталась за кропом (`Crop`), и правило «крупность
+    меняется только на резе» не тронуто. Здесь два добавления к нему.
+
+    Медленный наезд. Между резами кадр стоял намертво, а на ролике без нарезки
+    — весь ролик. Теперь план за свою жизнь подрастает на `drift_per_s` в
+    секунду, но не больше `drift_max`, и сбрасывается на следующей смене
+    крупности — то есть на резе, где скачок масштаба и так задуман. Числа
+    маленькие намеренно: 1 % в секунду читается как «камера дышит», а не как зум.
+
+    Укрупнение, которое не смог дать кроп. Вертикальному 1080p сужать окно
+    некуда (`Crop.max_scale`), и чередование общего и крупного плана на таких
+    роликах — а это большинство — оставалось только в листе. `punch_scale` —
+    масштаб крупного плана, который в этом случае добирает рендер. 10 % апскейла
+    на телефонном экране не видны; дальше начинает мылить.
+
+    Это ДАННЫЕ темы: `enabled: false` оставляет рендер темы прежним.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    drift_per_s: float = Field(0.01, ge=0.0, le=0.05)
+    drift_max: float = Field(0.05, ge=0.0, le=0.12)
+    punch_scale: float = Field(1.1, ge=1.0, le=1.3)
+
+
 class Audio(BaseModel):
     """Звуковой пост: громкость речи, подложка, дакинг, эффекты."""
 
@@ -839,6 +868,7 @@ class Preset(BaseModel):
     contrast: Contrast = Field(default_factory=Contrast)
     grade: Grade = Field(default_factory=Grade)
     crop: Crop = Field(default_factory=Crop)
+    camera: Camera = Field(default_factory=Camera)
     audio: Audio = Field(default_factory=Audio)
     background: str = "#000000"
 

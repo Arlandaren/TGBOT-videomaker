@@ -326,12 +326,19 @@ def test_the_renderer_reads_the_masks_the_way_python_writes_them():
     assert 'String(n).padStart(5, "0")}.png' in behind
     # Маска кадра — по альфе, на весь кадр, зажатая в диапазон.
     assert "Math.min(behind.last, Math.max(behind.first, frame))" in behind
-    assert 'maskSize: "100% 100%"' in behind and "WebkitMaskImage" in behind
+    # Без камеры маска ровно на весь кадр (`scale` = 1 → 100% и 0px), с камерой —
+    # та же трансформа, что у видео: крупнее в `scale` раз и сдвинута от точки
+    # (ox, oy), которая стоит на месте.
+    assert "const scale = camera?.scale ?? 1" in behind
+    assert "(scale * 100).toFixed(3)" in behind and '"0px 0px"' in behind
+    assert "camera.ox * (1 - scale)" in behind and "camera.oy * (1 - scale)" in behind
+    assert "maskSize: size" in behind and "maskPosition: position" in behind
+    assert "WebkitMaskImage" in behind
     # Маски готовы ДО первого кадра: загружены, декодированы, поставлены как data:.
     assert "delayRender" in behind and "image.decode()" in behind and "readAsDataURL" in behind
     # И рендер отпускается после перерисовки, а не из промиса.
     assert "if (masks !== null) continueRender(handle)" in behind
-    assert "...behindStyle(block, frame, masks)" in captions
+    assert "...behindStyle(block, frame, masks, camera)" in captions
     assert "useBehindMasks(blocks)" in captions
     assert captions.index("useBehindMasks(blocks)") < captions.index("if (visible.length === 0) return null")
     assert "behind?: {" in types

@@ -262,8 +262,11 @@ def _block_dialogues(
         counter += len(line)
 
     for i in range(len(words)):
-        start = block.start if i == 0 else words[i].start
-        end = words[i + 1].start if i + 1 < len(words) else block.end
+        # Блок может встать ПОЗЖЕ своих первых слов (`render_plan.held_start`:
+        # предыдущий достаивает). Реплики таких слов не должны вылезать в чужое
+        # время, поэтому всё зажато началом блока.
+        start = block.start if i == 0 else max(block.start, words[i].start)
+        end = max(block.start, words[i + 1].start) if i + 1 < len(words) else block.end
         if end <= start:
             continue
         # Окно самой реплики: `\t` живёт внутри него и наружу не выходит.

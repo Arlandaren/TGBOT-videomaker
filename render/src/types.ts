@@ -49,6 +49,11 @@ export type PlanBlock = {
   /** Средняя яркость кадра под блоком, 0..1. Меряет Python (Ф9). */
   bg_luma?: number | null;
   /**
+   * Цвета блока на светлой сцене графики («бумага»): тёмный текст вместо
+   * светлого темы. Решает Python (`overlays.light_ink`); `null` — цвета темы.
+   */
+  ink?: { text: string; accent: string; outline: string; shadow: string } | null;
+  /**
    * Носит ли ЭТОТ блок матовое стекло. В эталоне плашка есть у двух блоков из
    * тринадцати, и решение о ней режиссёрское — правило по фону измерить не
    * удалось. Место под неё зарезервировано у всех блоков одинаково, поэтому
@@ -145,6 +150,20 @@ export type PlanBroll = {
    * По `rect` этого не понять — у полного кадра он всегда кадр целиком.
    */
   aspect?: number | null;
+};
+
+/**
+ * План камеры (`src/core/camera.py`): масштаб видео от `scale_from` до
+ * `scale_to` линейно за время плана. `ox`/`oy` — точка в пикселях кадра,
+ * которая при масштабировании остаётся на месте. Едет в `meta.camera`.
+ */
+export type PlanShot = {
+  start: number;
+  end: number;
+  scale_from: number;
+  scale_to: number;
+  ox: number;
+  oy: number;
 };
 
 export type Preset = {

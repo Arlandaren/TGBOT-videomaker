@@ -29,6 +29,7 @@ import React from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { PlanBlock, PlanWord, Preset } from "../types";
 import { behindStyle, useBehindMasks } from "./Behind";
+import type { CameraState } from "./Camera";
 import {
   MIN_ANIM_FRAMES,
   animFrames,
@@ -143,6 +144,27 @@ const pillRegister = (preset: Preset, block: PlanBlock): PillRegister | null => 
 };
 
 const registerPreset = (preset: Preset, block: PlanBlock): Preset => {
+  const ps = registerOf(preset, block);
+  // Блок на светлой сцене графики («бумага»): цвета решил Python
+  // (`overlays.light_ink`), правило контраста темы здесь уже не нужно.
+  const ink = block.ink;
+  if (!ink) return ps;
+  return {
+    ...ps,
+    colors: {
+      ...ps.colors,
+      active: ink.text,
+      past: ink.text,
+      ghost: ink.text,
+      accent: ink.accent,
+      shout: ink.accent,
+      outline: ink.outline,
+      shadow: ink.shadow,
+    },
+  };
+};
+
+const registerOf = (preset: Preset, block: PlanBlock): Preset => {
   const pill = pillRegister(preset, block);
   if (pill && block.pill) {
     return {
@@ -731,7 +753,10 @@ const Block: React.FC<{ block: PlanBlock; preset: Preset }> = ({ block, preset }
   // У плашки стекло затемнено числом темы, и текст на нём белый при любом
   // фоне: правило контраста (Ф9) ей не нужно и подбирать прозрачность по
   // яркости кадра не должно — иначе соседние плашки стопки вышли бы разными.
-  const look = lookFor(preset, pill ? null : (block as PlanBlock).bg_luma);
+  // Блоку с цветами сцены (`ink`) правило контраста не нужно: их уже подобрал
+  // Python под бумагу, и смесь темы перекрасила бы текст обратно.
+  const inked = Boolean((block as PlanBlock).ink);
+  const look = lookFor(preset, pill || inked ? null : (block as PlanBlock).bg_luma);
   // Значок стоит в окошке фиксированной ширины СЛЕВА от текста. Окошко — это
   // добавка к левому полю, а сам глиф позиционирован абсолютно: на размер
   // коробки он не влияет вовсе, и Python знает её, не зная ширины глифа.
@@ -885,7 +910,12 @@ const Block: React.FC<{ block: PlanBlock; preset: Preset }> = ({ block, preset }
   );
 };
 
-export const Captions: React.FC<{ blocks: PlanBlock[]; preset: Preset }> = ({ blocks, preset }) => {
+export const Captions: React.FC<{
+  blocks: PlanBlock[];
+  preset: Preset;
+  /** Камера кадра: маска «за головой» обязана ехать вместе с видео. */
+  camera?: CameraState;
+}> = ({ blocks, preset, camera }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   // Безопасная зона у края кадра: пресет может попросить margin 0, но прижатый
@@ -994,7 +1024,7 @@ export const Captions: React.FC<{ blocks: PlanBlock[]; preset: Preset }> = ({ bl
               willChange: block.anchor_path ? "transform" : undefined,
               // Блок за головой: маска «не человек» на весь кадр. Обёртка и есть
               // кадр, а собственное движение блока идёт под неподвижной маской.
-              ...behindStyle(block, frame, masks),
+              ...behindStyle(block, frame, masks, camera),
             }}
           >
             <Block block={block} preset={ps} />

@@ -19,10 +19,12 @@ from src.core.config import Settings, settings as default_settings
 from src.core.edl import EDL, validate_edl
 from src.core.options import JobOptions, apply_accent, apply_font
 from src.core.preset import load_preset
-from src.core.render_plan import block_windows, build_plan
+from src.core.camera import filmed_plan
+from src.core.render_plan import block_windows
 from src.core.track import load_track
 from src.llm.client import LLMClient
 from src.pipeline import broll as broll_mod
+from src.pipeline.visuals import plan_visuals, visuals_llm
 from src.pipeline.asr import ASRResult, transcribe
 from src.pipeline.audio_post import build_audio
 from src.pipeline.crop import autocrop, framing_spans
@@ -294,6 +296,7 @@ async def process_video(
             # и сохранённый лист честно описывает то, что видно в кадре.
             for c in edl.cuts:
                 c.framing = "wide"
+            edl.camera = False  # и наезд внутри плана тоже (`core/camera.py`)
 
         # ---------------------------------------------------------- заголовок
         # Метаданные считаются ЗДЕСЬ, а не после рендера, как раньше: заголовок
@@ -327,6 +330,16 @@ async def process_video(
             except Exception as e:  # noqa: BLE001 — b-roll необязателен, ролик важнее
                 log.warning("b-roll пропущен: %s", e)
             mark("broll", t)
+
+        # ---------------------------------------------------------- графика
+        # Плашки, стикеры, декор и сцены по субтитрам (`pipeline/visuals.py`).
+        # Модель — своя (GPT, `visuals_llm`), с потолком цены на ролик; нет
+        # ключа или флага — бесплатный расстановщик. Шаг никогда не бросает.
+        # В «Двух видео» графики нет по той же причине, что и картинок.
+        if cfg.visuals_enabled and top_seconds is None:
+            t = time.perf_counter()
+            edl.visuals = await plan_visuals(edl, llm=visuals_llm(cfg), cfg=cfg)
+            mark("visuals", t)
 
         # ---------------------------------------------------------- монтаж
         await _notify(progress, "cut")
@@ -421,9 +434,11 @@ async def process_video(
         await _notify(progress, "render")
         t = time.perf_counter()
         staged_info = await asyncio.to_thread(probe, staged)
-        plan = build_plan(
+        plan = filmed_plan(
             edl,
             str(staged),
+            backend=backend or cfg.render_backend,
+            video_duration=staged_info.duration,
             fps=int(round(staged_info.fps)) or cfg.render_fps,
             width=staged_info.width,
             height=staged_info.height,
@@ -613,9 +628,11 @@ async def process_from_edl(
 
     t = time.perf_counter()
     staged_info = probe(staged)
-    plan = build_plan(
+    plan = filmed_plan(
         edl,
         str(staged),
+        backend=backend or cfg.render_backend,
+        video_duration=staged_info.duration,
         fps=int(round(staged_info.fps)) or cfg.render_fps,
         width=staged_info.width,
         height=staged_info.height,

@@ -127,21 +127,50 @@ async def ask(provider: OpenAIProvider, **over):
 # ------------------------------------------------------------------ выключен
 
 
-def test_provider_is_written_but_not_connected():
-    """Пока владелец не разрешил, к OpenAI не ведёт ни одна настройка.
+def test_openai_is_connected_by_the_owners_decision():
+    """Владелец 20.11.2026: «fal не будем юзать, только GPT».
 
-    Тест сторожит именно это состояние. Включаете OpenAI — он удаляется
-    осознанно, тем же коммитом, что и правка реестра и конфига.
-
-    Проверяется только то, через что запрос мог бы уйти: класс в реестре,
-    значение провайдера в конфиге, ветка в `images`. Строки цен и моделей сами
-    по себе никуда не ходят — их можно завести заранее.
+    Тест на месте прежнего «написан, но не подключён» — снят осознанно.
+    `LLM_PROVIDER=openai` даёт настоящий `OpenAIProvider` (не DeepSeek-
+    совместимый класс из реестра) с ключом `OPENAI_API_KEY`; режиссёр — terra,
+    простые шаги — luna; `IMAGE_PROVIDER=openai` рисует через Images API.
+    Значение по умолчанию у обоих по-прежнему не OpenAI: включает .env.
     """
-    assert OpenAIProvider not in providers.PROVIDERS.values()
-    assert "openai" not in get_args(Settings.model_fields["llm_provider"].annotation)
-    assert "openai" not in get_args(Settings.model_fields["image_provider"].annotation)
-    assert "openai" not in imagegen.PROVIDER_IMAGE_MODELS
-    assert not hasattr(imagegen, "generate_openai")
+    cfg = Settings(_env_file=None, bot_token="x", llm_provider="openai",
+                   image_provider="openai", openai_api_key="sk-test")
+    assert cfg.llm_api_key == "sk-test" and cfg.llm_ready
+    assert cfg.llm_base_url == "https://api.openai.com/v1"
+    assert cfg.model_for_tier("smart") == "gpt-6.1-terra"
+    assert cfg.model_for_tier("vision") == "gpt-6.1-terra"
+    assert cfg.model_for_tier("cheap") == "gpt-6-luna"
+    made = providers.make_provider("openai", cfg.llm_api_key, cfg.llm_base_url)
+    assert isinstance(made, OpenAIProvider) and made.name == "openai"
+    assert imagegen.image_key(cfg) == "sk-test" and imagegen.ready(cfg)
+    assert imagegen.image_model(cfg) == "gpt-image-2.5-flare"
+    for model in ("gpt-6-luna", "gpt-6.1-terra"):
+        assert providers.price_for(model) != providers.FALLBACK_PRICE
+    default = Settings(_env_file=None, bot_token="x")
+    assert default.llm_provider != "openai" and default.image_provider != "openai"
+
+
+async def test_the_image_provider_openai_goes_through_generate_openai():
+    """`images.generate` с IMAGE_PROVIDER=openai шлёт вертикаль черновым качеством."""
+    cfg = Settings(_env_file=None, bot_token="x", image_provider="openai",
+                   openai_api_key="sk-test")
+    png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"0" * 16).decode()
+    seen: list[httpx.Request] = []
+
+    def wire(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"data": [{"b64_json": png}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(wire)) as client:
+        got = await imagegen.generate(client, "кот на диване", cfg=cfg)
+    assert got and got.startswith(b"\x89PNG")
+    body = json.loads(seen[0].content)
+    assert seen[0].url.path.endswith("/images/generations")
+    assert body["size"] == "1024x1536" and body["quality"] == "low"
+    assert body["model"] == "gpt-image-2.5-flare" and body["background"] == "opaque"
 
 
 def test_import_and_construction_make_no_request(monkeypatch):

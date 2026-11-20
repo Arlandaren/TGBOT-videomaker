@@ -96,6 +96,15 @@ PROVIDER_MODELS: dict[str, dict[str, str]] = {
         "smart": "google/gemini-3.5-flash",
         "vision": "google/gemini-3.5-flash",
     },
+    # Решение владельца 20.11.2026: «fal не будем юзать, только GPT». Режиссёр и
+    # подбор картинок — terra (ближе всего к прежнему качеству на fal), простые
+    # шаги — luna. По токенам прошлых роликов: ~3-5 центов за ролик (на fal было
+    # 7-8). Цены — `providers.PRICES`.
+    "openai": {
+        "cheap": "gpt-6-luna",
+        "smart": "gpt-6.1-terra",
+        "vision": "gpt-6.1-terra",
+    },
 }
 
 # Провайдеры-шлюзы: модели они не хостят, а проксируют чужие, поэтому имя
@@ -211,7 +220,7 @@ class Settings(BaseSettings):
     # rsync выкладки (deploy/update.sh), то есть на сервер не попадает вовсе.
     # Провайдер, прописанный только в .env, меняет провайдера на машине
     # разработчика и ничего не меняет в проде (дефект №1).
-    llm_provider: Literal["anthropic", "deepseek", "gemini", "fal"] = "fal"
+    llm_provider: Literal["anthropic", "deepseek", "gemini", "fal", "openai"] = "fal"
 
     anthropic_api_key: str = ""
     deepseek_api_key: str = ""
@@ -435,7 +444,12 @@ class Settings(BaseSettings):
     #
     # `fal` — та же z-image/turbo без опроса: один синхронный запрос, ответ за
     # 1-3 с. Цена $0.005 за мегапиксель, кадр `fal_size` стоит ~$0.0066.
-    image_provider: Literal["gemini", "wavespeed", "fal"] = "wavespeed"
+    image_provider: Literal["gemini", "wavespeed", "fal", "openai"] = "wavespeed"
+    # OpenAI (`images_openai.py`): размер — вертикаль 2:3, вставка-карточка всё
+    # равно кадрируется под себя; качество черновое — вставка в кадре небольшая,
+    # а каждая ступень качества дороже предыдущей в разы (low ≈ 1 цент).
+    openai_image_size: str = "1024x1536"
+    openai_image_quality: str = "low"
     # Пусто → модель по умолчанию для провайдера (PROVIDER_IMAGE_MODELS).
     image_model: str = ""
     # Разрешение у Gemini: 1K хватает на вертикаль 1080×1920, 2K стоит дороже.
@@ -641,6 +655,7 @@ class Settings(BaseSettings):
             "deepseek": self.deepseek_api_key,
             "gemini": self.gemini_api_key,
             "fal": self.fal_api_key,
+            "openai": self.openai_api_key,
         }.get(self.llm_provider, "")
 
     @property
@@ -650,6 +665,7 @@ class Settings(BaseSettings):
             "deepseek": self.deepseek_base_url,
             "gemini": self.gemini_base_url,
             "fal": self.fal_llm_base_url,
+            "openai": self.openai_base_url,
         }[self.llm_provider]
 
     @property

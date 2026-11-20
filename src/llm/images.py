@@ -40,6 +40,7 @@ PROVIDER_IMAGE_MODELS: dict[str, str] = {
     "gemini": "gemini-3.1-flash-image",
     "wavespeed": "wavespeed-ai/z-image/turbo",
     "fal": "fal-ai/z-image/turbo",
+    "openai": "gpt-image-2.5-flare",
 }
 
 # Сколько ждём картинку. Gemini и fal отвечают одним запросом за единицы
@@ -57,6 +58,7 @@ def image_key(cfg: Settings) -> str:
     return {
         "gemini": cfg.gemini_api_key,
         "fal": cfg.fal_api_key,
+        "openai": cfg.openai_api_key,
     }.get(cfg.image_provider, cfg.wavespeed_api_key)
 
 
@@ -66,6 +68,7 @@ def size_tag(cfg: Settings) -> str:
         # У Gemini размер — это разрешение, а пропорция задаётся отдельно.
         "gemini": f"{cfg.image_size}@{cfg.image_aspect}",
         "fal": cfg.fal_size,
+        "openai": f"{cfg.openai_image_size}@{cfg.openai_image_quality}",
     }.get(cfg.image_provider, cfg.wavespeed_size)
 
 
@@ -269,6 +272,19 @@ async def generate(
     """Единый вход. Провайдер берётся из конфига; референсы понимает не каждый."""
     cfg = cfg or default_settings
     aspect = aspect or cfg.image_aspect
+    if cfg.image_provider == "openai":
+        # Референсы у OpenAI идут через `/images/edits` — эта ручка их не берёт.
+        from src.llm.images_openai import generate_openai
+
+        return await generate_openai(
+            client,
+            prompt,
+            api_key=cfg.openai_api_key,
+            model=image_model(cfg),
+            size=cfg.openai_image_size,
+            quality=cfg.openai_image_quality,
+            base_url=cfg.openai_base_url,
+        )
     if cfg.image_provider in ("wavespeed", "fal"):
         if refs:
             log.debug("%s не принимает референсы — генерирую по одному промпту", cfg.image_provider)

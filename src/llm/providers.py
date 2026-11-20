@@ -630,6 +630,15 @@ PROVIDERS: dict[str, type[Provider]] = {
 def make_provider(
     name: str, api_key: str, base_url: str, timeout: float = 180.0, *, thinking: bool = False
 ) -> Provider:
+    if name == "openai":
+        # Настоящий OpenAI — свой диалект (`openai_provider.py`), не DeepSeek-
+        # совместимый `OpenAICompatProvider` из PROVIDERS. Импорт ленивый: тот
+        # модуль сам импортирует этот, наверху выйдет круг.
+        from src.llm.openai_provider import OpenAIProvider
+
+        provider = OpenAIProvider(api_key, base_url, timeout, thinking=thinking)
+        provider.name = name
+        return provider
     try:
         cls = PROVIDERS[name]
     except KeyError:

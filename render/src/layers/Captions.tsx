@@ -601,6 +601,19 @@ const Word: React.FC<{ word: PlanWord; preset: Preset; neutral: string }> = ({
   // ширины строк посчитал Python и сверяет с Chromium с точностью 2 px.
   const rise = motionPx(a, "word_rise_px", 0) * (1 - revealed);
 
+  // Удар ударного слова: затухающая тряска по горизонтали сразу после того,
+  // как слово прозвучало (`shout_shake_px`). Только трансформ; после окна —
+  // ровно ноль, слово стоит на своём месте. Случайности нет: фаза — от кадра.
+  const shakeFrames = Math.max(MIN_ANIM_FRAMES, Math.round(0.36 * fps));
+  const shakeT = framesSinceStart / shakeFrames;
+  const shake =
+    word.emphasis === "shout" && state !== "ghost" && shakeT >= 0 && shakeT < 1
+      ? motionPx(a, "shout_shake_px", 0) *
+        (1 - shakeT) *
+        (1 - shakeT) *
+        Math.sin(Math.PI * 2 * 3 * shakeT)
+      : 0;
+
   return (
     <span
       style={{
@@ -609,7 +622,7 @@ const Word: React.FC<{ word: PlanWord; preset: Preset; neutral: string }> = ({
         ...accentFontStyle(word, preset),
         color,
         opacity,
-        transform: `translateY(${rise}px) scale(${scale}) rotate(${rotate}deg)`,
+        transform: `translate(${shake.toFixed(2)}px, ${rise}px) scale(${scale}) rotate(${rotate}deg)`,
         transformOrigin: "center bottom",
         willChange: "transform, opacity",
         textShadow: softShadow(preset),

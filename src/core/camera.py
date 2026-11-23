@@ -272,8 +272,10 @@ def filmed_plan(
     как есть, — поэтому и трек ему остаётся прежний.
     """
     from src.core.overlay_models import Visuals
+    from src.core.config import settings as default_settings
     from src.core.overlays import dressed_plan
     from src.core.render_plan import build_plan
+    from src.core.transitions import plan_cuts
 
     track = plan_args.pop("track", None)
     shots: list[PlanShot] = []
@@ -294,4 +296,19 @@ def filmed_plan(
     plan = dressed_plan(build_plan, edl, video_path, track=track, visuals=visuals, **plan_args)
     if shots and isinstance(getattr(plan, "meta", None), dict):
         plan.meta["camera"] = to_meta(shots)
+    if backend != "ass" and isinstance(getattr(plan, "meta", None), dict):
+        cfg = plan_args.get("cfg") or default_settings
+        # Переходы — движение видео, как и камера: галочка «Движение камеры»
+        # выключает и их.
+        if cfg.transitions_enabled and edl.camera:
+            cuts = plan_cuts(edl, plan, apply_cuts=plan_args.get("apply_cuts", True))
+            if cuts:
+                plan.meta["cuts"] = cuts
+        if cfg.progress_bar and edl.split_until is None:
+            # Полоса прогресса: тонкая линия сверху цветом акцента темы.
+            colors = (plan.preset or {}).get("colors") or {}
+            plan.meta["progress"] = {
+                "color": colors.get("accent") or "#FFFFFF",
+                "height": max(4, round(plan.height * 0.004)),
+            }
     return plan

@@ -59,6 +59,8 @@ from src.core.overlay_models import (
     SceneItemKind,
     SceneLayout,
     Slot,
+    Transition,
+    TransitionKind,
     Visuals,
 )
 from src.core.overlay_rules import (
@@ -123,6 +125,25 @@ def build_schema(stickers: Sequence[str]) -> dict[str, Any]:
         "additionalProperties": False,
         "required": ["overlays", "scenes"],
         "properties": {
+            "transitions": {
+                "type": "array",
+                "description": (
+                    "Переходы: короткое движение видео на склейке или на начале новой "
+                    "мысли. Пустой список — программа расставит сама."
+                ),
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["word_idx", "kind"],
+                    "properties": {
+                        "word_idx": {
+                            "type": "integer",
+                            "description": "Первое слово нового куска или новой мысли.",
+                        },
+                        "kind": {"type": "string", "enum": _values(TransitionKind)},
+                    },
+                },
+            },
             "overlays": {
                 "type": "array",
                 "description": (
@@ -696,8 +717,79 @@ def decor_marks(words: Sequence[Word]) -> list[Overlay]:
 # Не чаще одного стикера на столько секунд ролика. Стикер по словарю — догадка
 # по одному слову, без смысла фразы; редкий он читается как находка, частый —
 # как автозамена.
-FALLBACK_STICKER_EVERY = 8.0
+FALLBACK_STICKER_EVERY = 5.0
 _CHIP_STYLES: tuple[ChipStyle, ...] = ("pill", "tag")
+
+# --------------------------------------------------------------------------- переходы без LLM
+
+# Виды по кругу для склеек в одной крупности. `punch` стоит отдельно: он —
+# ответ на смену крупности и на начало мысли.
+_CUT_KINDS: tuple[TransitionKind, ...] = ("slide_left", "flash", "slide_right", "punch")
+# Реже этого переходов на склейках нет — добираем наездом на начале фразы.
+FALLBACK_PUNCH_EVERY = 5.0
+
+
+def cut_words(edl: EDL) -> list[tuple[int, bool]]:
+    """Склейки ролика: (первое слово после склейки, сменилась ли крупность).
+
+    Склейка — граница двух оставленных кусков (`edl.kept_cuts`). Слово берётся
+    первое, которое звучит в новом куске и осталось в ролике: к нему переход и
+    привязывается.
+    """
+    window_of = window_of_edl(edl)
+    kept = sorted(edl.kept_cuts, key=lambda c: c.src_in)
+    out: list[tuple[int, bool]] = []
+    for prev, cut in zip(kept, kept[1:]):
+        first = next(
+            (
+                w.idx
+                for w in edl.words
+                if cut.src_in - 1e-6 <= w.start < cut.src_out and window_of(w.idx) is not None
+            ),
+            None,
+        )
+        if first is not None:
+            out.append((first, prev.framing != cut.framing))
+    return out
+
+
+def fallback_transitions(edl: EDL) -> list[Transition]:
+    """Переходы без LLM: на каждой склейке, а где склеек мало — на начале фразы.
+
+    Смена крупности получает наезд (камера там и так прыгает — переход делает
+    прыжок движением), остальные склейки — виды по кругу. В ролике без нарезки
+    склеек нет вовсе; там начало фразы раз в `FALLBACK_PUNCH_EVERY` секунд
+    получает наезд — это и есть «джамп-кат». Частоту окончательно держит
+    `transitions.plan_cuts`.
+    """
+    if getattr(edl, "split_until", None) is not None:
+        return []
+    window_of = window_of_edl(edl)
+    out: list[Transition] = []
+    times: list[float] = []
+    turn = 0
+    for idx, reframed in cut_words(edl):
+        window = window_of(idx)
+        if window is None:
+            continue
+        if reframed:
+            kind: TransitionKind = "punch"
+        else:
+            kind = _CUT_KINDS[turn % len(_CUT_KINDS)]
+            turn += 1
+        out.append(Transition(word_idx=idx, kind=kind))
+        times.append(window[0])
+
+    kept = [w for w in edl.words if window_of(w.idx) is not None]
+    for first, _, _ in _sentences(kept)[1:]:
+        window = window_of(kept[first].idx)
+        if window is None:
+            continue
+        if any(abs(window[0] - t) < FALLBACK_PUNCH_EVERY for t in times):
+            continue
+        out.append(Transition(word_idx=kept[first].idx, kind="punch"))
+        times.append(window[0])
+    return sorted(out, key=lambda t: (window_of(t.word_idx) or (0.0, 0.0))[0])
 
 
 def _thin_stickers(
@@ -768,7 +860,13 @@ def fallback_visuals(edl: EDL) -> Visuals:
         return Visuals()
     chips = number_chips(kept)
     stickers = _thin_stickers(lexicon_stickers(kept), chips, edl)
-    sheet = sanitize_visuals(Visuals(overlays=[*chips, *stickers, *decor_marks(kept)]), edl)
+    sheet = sanitize_visuals(
+        Visuals(
+            overlays=[*chips, *stickers, *decor_marks(kept)],
+            transitions=fallback_transitions(edl),
+        ),
+        edl,
+    )
     # Две одинаковые плашки подряд читаются как таблица; чередование вида
     # считается по уцелевшим, иначе выпавшая плашка сбивала бы шаг.
     turn = 0
@@ -840,6 +938,7 @@ def prompt_variables(edl: EDL, cfg: Any = None) -> dict[str, str]:
         "max_overlays": str(overlay_cap(duration)),
         "max_scenes": str(scenes),
         "busy": _busy_text(edl),
+        "cut_words": ", ".join(str(idx) for idx, _ in cut_words(edl)) or "нет",
         "words_table": timed_words_table(edl),
         # Ниже — постоянные: они одинаковы между роликами и стоят в системной
         # части промпта, поэтому кеш системной части от них не страдает.
@@ -935,7 +1034,14 @@ def visuals_from_answer(data: Mapping[str, Any]) -> Visuals:
             )
         except ValidationError as err:
             log.info("графика: сцена ответа отброшена (%s): %r", err.errors()[0]["msg"], raw)
-    return Visuals(overlays=overlays, scenes=scenes)
+
+    transitions: list[Transition] = []
+    for raw in data.get("transitions") or []:
+        try:
+            transitions.append(Transition(word_idx=raw.get("word_idx"), kind=raw.get("kind")))
+        except (ValidationError, AttributeError) as err:
+            log.info("графика: переход ответа отброшен (%s): %r", type(err).__name__, raw)
+    return Visuals(overlays=overlays, scenes=scenes, transitions=transitions)
 
 
 def _hollow(scene: Scene) -> bool:
@@ -955,7 +1061,9 @@ def _settle(raw: Visuals, edl: EDL) -> Visuals:
         # Чистим заново от исходных элементов: те, что уступили место пустой
         # сцене, теперь вправе вернуться.
         full = [s for s in sheet.scenes if not _hollow(s)]
-        sheet = sanitize_visuals(Visuals(overlays=raw.overlays, scenes=full), edl)
+        sheet = sanitize_visuals(
+            Visuals(overlays=raw.overlays, scenes=full, transitions=raw.transitions), edl
+        )
     return _number_seeds(sheet)
 
 
@@ -1118,6 +1226,9 @@ async def plan_visuals(
             # (20.11.2026) модель после повтора сдалась пустым ответом, и ролик
             # ушёл без графики вовсе, хотя цены и стикеры в речи были.
             sheet = fallback_visuals(edl)
+        elif not sheet.transitions:
+            # Модель расставила графику, а переходы оставила программе.
+            sheet = sheet.model_copy(update={"transitions": fallback_transitions(edl)})
         # Последняя чистка — гарантия шага, а не недоверие к себе: что бы ни
         # случилось выше, наружу уходит лист, к которому у правил нет вопросов.
         return sanitize_visuals(sheet, edl)

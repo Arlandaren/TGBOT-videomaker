@@ -23,6 +23,7 @@ import type { RenderPlan } from "../types";
 import { Broll } from "../layers/Broll";
 import { cameraAt, cameraShots, cameraStyle } from "../layers/Camera";
 import { Captions } from "../layers/Captions";
+import { CutFlash, ProgressBar, cutStyle, useCut } from "../layers/Cuts";
 import { Overlays } from "../visuals/Overlays";
 import { Stage } from "../visuals/Stage";
 
@@ -32,10 +33,13 @@ export const Reel: React.FC<RenderPlan> = (plan) => {
   const { fps } = useVideoConfig();
   const shots = React.useMemo(() => cameraShots(plan), [plan.meta]);
   const camera = cameraAt(shots, frame, fps);
+  // Переход (`layers/Cuts.tsx`) двигает кадр, уже увеличенный камерой.
+  const cut = useCut(plan);
 
   return (
     <AbsoluteFill style={{ backgroundColor: preset.background }}>
       <Stage plan={plan}>
+      <AbsoluteFill style={cutStyle(cut)}>
       <AbsoluteFill style={cameraStyle(camera)}>
         {/*
           `<Video>` из `@remotion/media`, а не `OffthreadVideo`: кадр декодирует
@@ -59,13 +63,16 @@ export const Reel: React.FC<RenderPlan> = (plan) => {
           />
         ) : null}
       </AbsoluteFill>
+      </AbsoluteFill>
       </Stage>
+      <CutFlash cut={cut} />
 
       {plan.audio ? <Audio src={staticFile(plan.audio)} /> : null}
 
       <Broll items={plan.broll ?? []} preset={preset} />
       <Overlays plan={plan} />
       <Captions blocks={plan.blocks ?? []} preset={preset} camera={camera} />
+      <ProgressBar plan={plan} />
     </AbsoluteFill>
   );
 };

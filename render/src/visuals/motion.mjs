@@ -384,3 +384,72 @@ export const pinAt = (overlay, frame, fps) => {
   const opacity = smoothstep(t / 0.3);
   return { visible: opacity > 0, opacity, dy: -drop * lift, shadow };
 };
+
+// --------------------------------------------------------------------------- переходы
+
+/**
+ * Переход на склейке, начале мысли или ударном слове (`src/core/transitions.py`):
+ * видео на несколько кадров сдвинуто, увеличено или засвечено и возвращается
+ * ровно на место. Двигается ТОЛЬКО видео — субтитры и графика стоят.
+ *
+ * Требования те же, что у элемента: не короче восьми кадров, после последнего
+ * кадра — ровно покой, никакой случайности. И своё: кадр ни на одном кадре не
+ * показывает край видео. Сдвиг всегда идёт с запасом масштаба, который его
+ * покрывает: масштаб вокруг центра на `s` даёт с каждой стороны `(s - 1) / 2`
+ * ширины, поэтому `s - 1` не меньше удвоенного сдвига в долях кадра.
+ */
+/** Наезд: на сколько кадр крупнее в первый кадр перехода. */
+export const CUT_PUNCH = 0.12;
+/** Въезд сбоку: сдвиг в долях ширины кадра. */
+export const CUT_SLIDE_RATIO = 0.07;
+/** Тряска: амплитуда в долях ширины кадра и число колебаний за переход. */
+export const CUT_SHAKE_RATIO = 0.012;
+export const CUT_SHAKE_TURNS = 3;
+/** Вспышка: непрозрачность белого в первый кадр. */
+export const CUT_FLASH = 0.75;
+/** Запас масштаба сверх сдвига — от субпиксельной щели на краю. */
+export const CUT_COVER = 0.01;
+
+const CUT_REST = Object.freeze({ scale: 1, dx: 0, dy: 0, flash: 0 });
+
+/**
+ * Состояние перехода на кадре: масштаб и сдвиг видео (вокруг центра кадра) и
+ * непрозрачность белой вспышки. Вне переходов — покой, тот же объект.
+ */
+export const cutAt = (cuts, frame, fps, width, height) => {
+  if (!Array.isArray(cuts)) return CUT_REST;
+  for (const cut of cuts) {
+    if (!cut || typeof cut !== "object") continue;
+    const f0 = frameOf(cut.at, fps);
+    const frames = animFrames(cut.frames);
+    if (!(frame >= f0 && frame < f0 + frames)) continue;
+    const t = (frame - f0) / frames;
+    // Сила перехода: единица на первом кадре, быстро спадает к нулю.
+    const k = 1 - easeOut(t);
+    if (cut.kind === "punch") {
+      return { scale: 1 + CUT_PUNCH * k, dx: 0, dy: 0, flash: 0 };
+    }
+    if (cut.kind === "slide_left" || cut.kind === "slide_right") {
+      const side = cut.kind === "slide_left" ? 1 : -1;
+      return {
+        scale: 1 + (2 * CUT_SLIDE_RATIO + CUT_COVER) * k,
+        dx: side * CUT_SLIDE_RATIO * (Number(width) || 0) * k,
+        dy: 0,
+        flash: 0,
+      };
+    }
+    if (cut.kind === "shake") {
+      const reach = CUT_SHAKE_RATIO * (Number(width) || 0) * k;
+      return {
+        scale: 1 + (2 * CUT_SHAKE_RATIO + CUT_COVER) * k,
+        dx: reach * Math.sin(TAU * CUT_SHAKE_TURNS * t),
+        dy: 0.6 * reach * Math.sin(TAU * CUT_SHAKE_TURNS * 1.3 * t + 1.1),
+        flash: 0,
+      };
+    }
+    if (cut.kind === "flash") {
+      return { scale: 1, dx: 0, dy: 0, flash: CUT_FLASH * k };
+    }
+  }
+  return CUT_REST;
+};

@@ -56,9 +56,11 @@ from src.core.geometry import Rect
 # быть про говорящего. Числа держит валидатор (`overlays.validate_visuals`) и
 # знает расстановщик (`pipeline/visuals.py`).
 
-OVERLAY_MAX = 8  # элементов на ролик
-OVERLAY_WINDOW = 4.0  # не чаще одного элемента на столько секунд ролика
-OVERLAY_MIN_GAP = 1.5  # между ВХОДАМИ двух элементов, с
+# Плотность поднята по решению владельца 23.11.2026 («плотно, как в
+# Инстаграме»): было 8 элементов, один на 4 с, 1.5 с между входами.
+OVERLAY_MAX = 16  # элементов на ролик
+OVERLAY_WINDOW = 2.5  # не чаще одного элемента на столько секунд ролика
+OVERLAY_MIN_GAP = 1.0  # между ВХОДАМИ двух элементов, с
 OVERLAY_MAX_VISIBLE = 2  # одновременно в кадре
 # Сколько живёт элемент, с: (минимум, максимум) по виду.
 OVERLAY_LIFE = {
@@ -70,7 +72,7 @@ OVERLAY_LIFE = {
 OVERLAY_DEFAULT_LIFE = {"chip": 2.4, "sticker": 2.0, "decor": 2.4}
 CHIP_TEXT_MAX = 28  # знаков в плашке
 
-SCENE_MAX = 2  # сцен на ролик
+SCENE_MAX = 3  # сцен на ролик
 SCENE_WINDOW = 15.0  # не чаще одной сцены на столько секунд ролика
 SCENE_MIN = 2.5  # длина сцены, с
 SCENE_MAX_LEN = 6.0
@@ -91,6 +93,15 @@ Slot = Literal[
 ]
 SceneLayout = Literal["card_top", "paper", "phone"]
 SceneItemKind = Literal["photo", "map", "chip", "sticker"]
+# Переход — короткое движение ВИДЕО на склейке или на начале фразы
+# (`core/transitions.py`): наезд, въезд сбоку, вспышка, тряска.
+TransitionKind = Literal["punch", "slide_left", "slide_right", "flash", "shake"]
+
+TRANSITION_MIN_GAP = 2.0  # между двумя переходами, с
+TRANSITION_HEAD = 0.5  # в первые столько секунд ролика перехода нет
+TRANSITION_TAIL = 0.6  # и в последние столько — тоже
+SHOUT_PUNCH_MAX = 4  # ударных слов с наездом на ролик
+SHOUT_PUNCH_GAP = 3.0  # между ними, с
 
 
 # --------------------------------------------------------------------------- лист
@@ -167,6 +178,20 @@ class Scene(BaseModel):
     items: list[SceneItem] = Field(default_factory=list, max_length=SCENE_ITEMS_MAX)
 
 
+class Transition(BaseModel):
+    """Переход на слове: видео на несколько кадров двигается и встаёт на место.
+
+    `word_idx` — слово, с которого начинается новый кусок (первое после склейки)
+    или новая мысль. Момент — начало этого слова; если рядом есть склейка,
+    переход прилипает к ней (`transitions.plan_cuts`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    word_idx: int
+    kind: TransitionKind
+
+
 class Visuals(BaseModel):
     """Вся графика ролика. Пустые списки — ролик без графики, как раньше."""
 
@@ -175,9 +200,12 @@ class Visuals(BaseModel):
     version: Literal[1] = 1
     overlays: list[Overlay] = Field(default_factory=list)
     scenes: list[Scene] = Field(default_factory=list)
+    transitions: list[Transition] = Field(default_factory=list)
 
     @property
     def empty(self) -> bool:
+        """Нет ни элементов, ни сцен. Переходы — не графика поверх кадра, и лист
+        с одними переходами для раскладки (`overlays.dressed_plan`) пуст."""
         return not self.overlays and not self.scenes
 
 

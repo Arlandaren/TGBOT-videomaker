@@ -615,6 +615,20 @@
      }
     ]
    }
+  ],
+  "transitions": [
+   {
+    "word_idx": 20,
+    "kind": "shake"
+   },
+   {
+    "word_idx": 24,
+    "kind": "slide_left"
+   },
+   {
+    "word_idx": 29,
+    "kind": "flash"
+   }
   ]
  }
 }

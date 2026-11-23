@@ -483,6 +483,21 @@ def plan_sfx(
             )
             accepted.sort(key=lambda item: item[0])
 
+    # Въезд кадра сбоку (переход `slide_*` листа графики) — тот же `swish`:
+    # движение без звука читается как сбой. Наезд, вспышка и тряска молчат —
+    # звук на каждом переходе превратил бы ролик в стрекот, как щелчки субтитров.
+    from src.core.transitions import transition_swishes
+
+    for w_idx in transition_swishes(edl, ("slide_left", "slide_right")):
+        w = by_idx.get(w_idx)
+        win = tl.word_window(w) if w is not None else None
+        if win is None or any(abs(win[0] - t) < SFX_MIN_GAP_S for t, _ in accepted):
+            continue
+        accepted.append(
+            (win[0], Sfx(at_word_idx=w_idx, name=SFX_SWISH, gain_db=gain - SWISH_TRIM_DB))
+        )
+        accepted.sort(key=lambda item: item[0])
+
     # Щелчки — ПОСЛЕДНИМИ, и это не стиль, а приоритет: порядок добавления в
     # `accepted` решает, кто кому уступает. Блок, уже подчёркнутый картинкой или
     # резом, второго звука не получает.

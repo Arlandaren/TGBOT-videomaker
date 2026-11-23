@@ -103,3 +103,24 @@ export type PinState = {
 };
 
 export function pinAt(overlay: PlanOverlay, frame: number, fps: number): PinState;
+
+/** Переход рендера (`plan.meta.cuts`, `src/core/transitions.py`). */
+export type PlanCut = { at: number; frames: number; kind: string };
+
+/** Видео на кадре перехода: масштаб и сдвиг вокруг центра кадра, белая вспышка. */
+export type CutState = { scale: number; dx: number; dy: number; flash: number };
+
+export const CUT_PUNCH: number;
+export const CUT_SLIDE_RATIO: number;
+export const CUT_SHAKE_RATIO: number;
+export const CUT_SHAKE_TURNS: number;
+export const CUT_FLASH: number;
+export const CUT_COVER: number;
+
+export function cutAt(
+  cuts: unknown,
+  frame: number,
+  fps: number,
+  width: number,
+  height: number,
+): CutState;

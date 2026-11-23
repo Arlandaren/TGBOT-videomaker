@@ -58,6 +58,7 @@ from src.core.overlay_models import (
     Overlay,
     Scene,
     SceneItem,
+    Transition,
     Visuals,
     WordWindow,
     overlay_window,
@@ -941,6 +942,51 @@ def _rank(overlay: Overlay) -> int:
     return 2 if overlay.kind == "sticker" else 3
 
 
+def _trimmed(scene: Scene, ruler: _Ruler) -> Scene:
+    """Слишком длинная сцена, подрезанная с конца до `SCENE_MAX_LEN`.
+
+    Модель думает словами и длину в секундах держит плохо: на проде
+    (20.11.2026) она дважды из трёх просила сцену на 10-12 с, и раскладка
+    выпадала целиком. Начало — это начало мысли, его не трогаем; конец уходит
+    на последнее слово, которое ещё укладывается в срок. Короткую, раннюю и
+    позднюю сцену это не лечит — они выпадают, как раньше.
+    """
+    first = ruler.window_of(scene.word_from)
+    last = ruler.window_of(scene.word_to)
+    if first is None or last is None or last[1] - first[0] <= SCENE_MAX_LEN + EPS:
+        return scene
+    limit = first[0] + SCENE_MAX_LEN
+    fits = [
+        idx
+        for idx in range(scene.word_from, scene.word_to)
+        if (window := ruler.window_of(idx)) is not None and window[1] <= limit + EPS
+    ]
+    if not fits:
+        return scene
+    return scene.model_copy(update={"word_to": max(fits)})
+
+
+def _clean_transitions(raw: Any, ruler: _Ruler) -> list[Transition]:
+    """Переходы листа, годные по форме: слово есть и осталось в ролике.
+
+    Один переход на слово, порядок — по времени. Частоту и соседство со
+    сценами здесь не судим: это знает только готовый план
+    (`transitions.plan_cuts`), а лист обязан пережить повторную чистку без
+    изменений.
+    """
+    if ruler.split:
+        return []
+    seen: dict[int, tuple[float, Transition]] = {}
+    for item in _as_list(raw):
+        fixed = _coerce_model(Transition, item, ("word_idx", "kind"))
+        if fixed is None or fixed.word_idx in seen:
+            continue
+        window = ruler.window_of(fixed.word_idx)
+        if window is not None:
+            seen[fixed.word_idx] = (window[0], fixed)
+    return [t for _, t in sorted(seen.values(), key=lambda pair: pair[0])]
+
+
 def sanitize_visuals(visuals: Any, edl: "EDL") -> Visuals:
     """НОВЫЙ лист графики, в котором нет ни одного нарушения правил.
 
@@ -953,14 +999,20 @@ def sanitize_visuals(visuals: Any, edl: "EDL") -> Visuals:
     пуст, а повторная чистка результат не меняет.
     """
     overlays, scenes = _coerce(visuals)
-    if not overlays and not scenes:
-        return Visuals()
     ruler = _Ruler(edl)
+    try:
+        raw_transitions = _plain(visuals).get("transitions")
+    except Exception:  # noqa: BLE001 — нечитаемый лист уже дал пустые списки выше
+        raw_transitions = None
+    transitions = _clean_transitions(raw_transitions, ruler)
+    if not overlays and not scenes:
+        return Visuals(transitions=transitions)
 
     kept_scenes: list[tuple[Scene, Window]] = []
     if not ruler.split:
         candidates: list[tuple[float, int, Scene, Window]] = []
         for j, (scene, items) in enumerate(scenes):
+            scene = _trimmed(scene, ruler)
             fixed, window, _ = _examine_scene(j, scene, items, ruler)
             if fixed is not None and window is not None:
                 candidates.append((window[0], j, fixed, window))
@@ -1001,4 +1053,5 @@ def sanitize_visuals(visuals: Any, edl: "EDL") -> Visuals:
     return Visuals(
         overlays=[overlay for _, _, overlay, _ in kept],
         scenes=[scene for scene, _ in kept_scenes],
+        transitions=transitions,
     )

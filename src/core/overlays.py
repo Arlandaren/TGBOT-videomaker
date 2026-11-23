@@ -35,6 +35,7 @@ import hashlib
 import json
 import logging
 import math
+import re
 import os
 import random
 import shutil
@@ -180,6 +181,9 @@ CHIP_STYLES: dict[str, ChipStyle] = {
     "pill": ChipStyle(58, 0.62, 0.3, None),
     "tag": ChipStyle(56, 0.6, 0.32, 0.34),
     "label": ChipStyle(38, 0.62, 0.34, 0.3, upper=True),
+    # Маркер: прямоугольная полоса со слегка скруглёнными углами, текст крупнее
+    # подписи — это выделенная мысль, а не пояснение.
+    "marker": ChipStyle(54, 0.4, 0.2, 0.12),
     # Заголовок сцены: текст без коробки, поэтому полей нет, а ужимать его
     # можно сильнее — тридцать два знака кеглем 92 шире кадра.
     "heading": ChipStyle(92, 0.0, 0.0, 0.0, upper=True, floor=0.45),
@@ -636,6 +640,61 @@ def _sticker(key: str | None, emoji: str | None, asset: str | None = None) -> _S
 
 
 # --------------------------------------------------------------------------- плашка
+
+# Элемент, чей центр ближе этой доли ширины к краю кадра, въезжает сбоку; чей
+# центр выше этой доли высоты — падает сверху (`_Dresser.entrance`).
+ENTRANCE_SIDE = 0.36
+ENTRANCE_TOP = 0.3
+# Счётчик: сколько секунд число набегает и с какого значения он имеет смысл.
+COUNT_SECONDS = 0.7
+COUNT_MIN = 10
+_COUNT_HEAD = re.compile(r"^(\D*)(\d{1,3})$")
+_COUNT_MID = re.compile(r"^\d{3}$")
+_COUNT_TAIL = re.compile(r"^(\d{3})(\D*)$")
+_COUNT_ONE = re.compile(r"^(\D*)(\d+)(\D*)$")
+
+
+def count_of(words: Sequence[str], fps: int) -> dict[str, int] | None:
+    """Счётчик плашки: какие слова — число и до скольки оно набегает.
+
+    Число — либо одно слово («+21%», «2026»), либо тройки через пробел
+    («9 500 000»). Дробные («11,5») и плашки с двумя числами не считаются:
+    бегущая запятая читается как сбой. Число цифр на счёте не меняется
+    (рендерер начинает с 10…0), поэтому ширина текста стоит.
+    """
+    runs: list[tuple[int, int, int]] = []
+    i = 0
+    while i < len(words):
+        head = _COUNT_HEAD.match(words[i])
+        j = i
+        digits = head.group(2) if head else ""
+        if head:
+            while j + 1 < len(words) and _COUNT_MID.match(words[j + 1]):
+                j += 1
+                digits += words[j]
+            tail = _COUNT_TAIL.match(words[j + 1]) if j + 1 < len(words) else None
+            if tail:
+                j += 1
+                digits += tail.group(1)
+        if head and j > i:
+            runs.append((i, j, int(digits)))
+            i = j + 1
+            continue
+        one = _COUNT_ONE.match(words[i])
+        if one:
+            runs.append((i, i, int(one.group(2))))
+        elif any(ch.isdigit() for ch in words[i]):
+            return None  # дробь, диапазон, дата — не счётчик
+        i += 1
+    if len(runs) != 1 or runs[0][2] < COUNT_MIN:
+        return None
+    first, last, value = runs[0]
+    return {
+        "first": first,
+        "last": last,
+        "value": value,
+        "frames": max(MIN_ANIM_FRAMES, round(COUNT_SECONDS * fps)),
+    }
 
 
 @dataclass(slots=True)
@@ -1110,11 +1169,14 @@ class _Dresser:
         """Знаки декора мимо зон `zones`, вокруг `head`; `None` — меньше трёх."""
         top, bottom = max(self.sy, band[0]), min(self.floor, band[1])
         left, right = self.sx, self.width - self.sx
-        low, high = {"sparkle": (0.03, 0.06), "arrow": (0.045, 0.07)}.get(
-            overlay.glyph or "", (0.05, 0.085)
-        )
+        low, high = {
+            "sparkle": (0.03, 0.06),
+            "arrow": (0.045, 0.07),
+            "confetti": (0.02, 0.034),
+        }.get(overlay.glyph or "", (0.05, 0.085))
         rng = random.Random(seed)
-        count = 5 + seed % 3
+        # Конфетти — мелкие кусочки, и их много; знаков — пять-семь.
+        count = (10 if overlay.glyph == "confetti" else 5) + seed % 3
         cell = 0.07 * self.height
         cols, rows = int((right - left) // cell), int((bottom - top) // cell)
         if cols < 1 or rows < 1:
@@ -1185,6 +1247,27 @@ class _Dresser:
                     break
         return marks if len(marks) >= 3 else None
 
+    def entrance(self, overlay: Overlay, rect: Rect) -> str:
+        """Каким движением элемент входит в кадр — по тому, что он и где встал.
+
+        Один и тот же «pop» на каждом элементе читается как шаблон. Вид входа
+        выбирает место, а не случай: что стоит сбоку — въезжает со своей
+        стороны, что над головой — падает сверху, ценник ставится штампом,
+        маркер проводится. Остальное — прежний «pop».
+        """
+        if overlay.kind == "chip" and overlay.style == "marker":
+            return "wipe"
+        if overlay.kind == "chip" and overlay.style == "tag":
+            return "stamp"
+        middle = (rect.x + rect.width / 2) / self.width
+        if middle < ENTRANCE_SIDE:
+            return "from_left"
+        if middle > 1 - ENTRANCE_SIDE:
+            return "from_right"
+        if (rect.y + rect.height / 2) / self.height < ENTRANCE_TOP:
+            return "drop"
+        return "pop"
+
     def overlays(
         self, live: Sequence[tuple[int, Overlay, tuple[float, float]]]
     ) -> list[PlanOverlay]:
@@ -1229,7 +1312,13 @@ class _Dresser:
                     else None
                 )
                 if chip is not None:
-                    rotate = _tilt(seed, 3.0, 5.0) if overlay.style == "tag" else 0.0
+                    rotate = (
+                        _tilt(seed, 3.0, 5.0)
+                        if overlay.style == "tag"
+                        else _tilt(seed, 1.0, 2.0)
+                        if overlay.style == "marker"
+                        else 0.0
+                    )
                     found = self.place(
                         overlay, seed, [(chip.width, chip.height)], rotate, 0.0, (start, end), taken
                     )
@@ -1238,7 +1327,8 @@ class _Dresser:
                             kind="chip",
                             rect=found[0],
                             rotate=rotate,
-                            anim="pop",
+                            anim=self.entrance(overlay, found[0]),
+                            count=count_of(chip.look["words"], self.fps),
                             **base,
                             **chip.look,
                         )
@@ -1270,7 +1360,7 @@ class _Dresser:
                             kind="sticker",
                             rect=found[0],
                             rotate=rotate,
-                            anim="pop",
+                            anim=self.entrance(overlay, found[0]),
                             emoji=picture.emoji,
                             asset=picture.asset,
                             glyph_size=glyphs[found[1]],

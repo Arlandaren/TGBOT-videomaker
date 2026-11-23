@@ -455,7 +455,15 @@ def _examine_overlay(
             where, overlay.sticker, overlay.emoji, ruler.keys
         )
         issues += found
-        if overlay.sticker is None and overlay.emoji is None:
+        overlay.sticker_prompt = _clean_text(overlay.sticker_prompt)
+        # Готовый файл (`asset`) или описание для рисования (`sticker_prompt`)
+        # — тоже картинка: стикер без ключа и эмодзи с ними остаётся.
+        if (
+            overlay.sticker is None
+            and overlay.emoji is None
+            and not overlay.asset
+            and not overlay.sticker_prompt
+        ):
             issues.append(
                 Issue(
                     where,

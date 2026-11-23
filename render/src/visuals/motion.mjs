@@ -214,6 +214,72 @@ const slidePx = (overlay) => {
   return Math.min(SLIDE_MAX_PX, Math.max(SLIDE_MIN_PX, height * SLIDE_RATIO));
 };
 
+/** Въезд сбоку: ход от ширины элемента, в разумных границах. */
+export const SIDE_RATIO = 0.9;
+export const SIDE_MIN_PX = 60;
+export const SIDE_MAX_PX = 320;
+export const SIDE_FADE = 0.5;
+const sidePx = (overlay) => {
+  const width = Number(overlay.rect && overlay.rect.width) || 0;
+  return Math.min(SIDE_MAX_PX, Math.max(SIDE_MIN_PX, width * SIDE_RATIO));
+};
+
+/** Падение сверху: высота от высоты элемента, доля окна на падение и отскок. */
+export const DROP_RATIO = 1.2;
+export const DROP_MIN_PX = 80;
+export const DROP_MAX_PX = 260;
+export const DROP_FADE = 0.3;
+export const DROP_FALL = 0.7;
+export const DROP_HOP = 0.08;
+const dropPx = (overlay) => {
+  const height = Number(overlay.rect && overlay.rect.height) || 0;
+  return Math.min(DROP_MAX_PX, Math.max(DROP_MIN_PX, height * DROP_RATIO));
+};
+/** Высота над местом по ходу окна: 1 → 0 с разгоном, потом один отскок. */
+const dropLift = (t) => {
+  if (t >= 1) return 0;
+  if (t <= 0) return 1;
+  if (t < DROP_FALL) {
+    const u = t / DROP_FALL;
+    return 1 - u * u;
+  }
+  return DROP_HOP * Math.sin(Math.PI * ((t - DROP_FALL) / (1 - DROP_FALL)));
+};
+
+/** Штамп: с какого масштаба садится и за какую долю окна проявляется. */
+export const STAMP_FROM = 1.6;
+export const STAMP_FADE = 0.35;
+
+/** Маркер: за какую долю окна проявляется коробка. */
+export const WIPE_FADE = 0.2;
+
+/**
+ * Сколько полосы маркера уже проведено, 0..1: растёт слева направо за окно
+ * входа и стоит до конца. У элемента с другим входом полоса проведена сразу.
+ */
+export const wipeAt = (overlay, frame, fps) => {
+  if (overlay.anim !== "wipe") return 1;
+  const f0 = frameOf(overlay.start, fps);
+  return easeOut((frame - f0) / animFrames(overlay.in_frames));
+};
+
+/**
+ * Счётчик плашки (`overlay.count`): число на кадре или `null`, если счёта нет
+ * или он уже добежал. Число цифр не меняется — счёт идёт от 10…0, а не от
+ * нуля, — поэтому ширина текста стоит и коробка плана остаётся верной.
+ */
+export const countAt = (overlay, frame, fps) => {
+  const count = overlay.count;
+  if (!count || !(Number(count.value) > 0)) return null;
+  const f0 = frameOf(overlay.start, fps);
+  const frames = animFrames(count.frames);
+  if (frame >= f0 + frames) return null;
+  const value = Math.floor(Number(count.value));
+  const floor = Math.pow(10, String(value).length - 1);
+  const t = (frame - f0) / frames;
+  return Math.max(floor, Math.min(value, Math.round(floor + (value - floor) * easeOut(t))));
+};
+
 /**
  * В какую сторону и на сколько элемент довёрнут в начале входа.
  *
@@ -271,6 +337,25 @@ export const overlayAt = (overlay, frame, fps) => {
     const px = slidePx(overlay);
     opacity = Math.min(smoothstep(t / 0.6), smoothstep(q));
     dy = px * (1 - easeOut(t)) - px * 0.5 * gone * gone;
+  } else if (overlay.anim === "from_left" || overlay.anim === "from_right") {
+    // Въезд сбоку: элемент приезжает со своей стороны кадра и туда же уходит.
+    const side = overlay.anim === "from_left" ? -1 : 1;
+    const px = sidePx(overlay);
+    opacity = Math.min(smoothstep(t / SIDE_FADE), smoothstep(q));
+    dx = side * px * (1 - easeOut(t)) + side * px * 0.4 * gone * gone;
+    rotate += spinOf(overlay) * 0.5 * (1 - easeOut(t));
+  } else if (overlay.anim === "drop") {
+    // Падение сверху: разгон к месту и один короткий отскок, как у метки карты.
+    const px = dropPx(overlay);
+    opacity = Math.min(smoothstep(t / DROP_FADE), smoothstep(q));
+    dy = -px * dropLift(t) - px * 0.25 * gone * gone;
+  } else if (overlay.anim === "stamp") {
+    // Штамп: элемент крупнее своего размера и садится на место без перелёта.
+    opacity = Math.min(smoothstep(t / STAMP_FADE), smoothstep(q));
+    scale = (1 + (STAMP_FROM - 1) * (1 - easeOut(t))) * (1 - (1 - POP_OUT) * gone * gone);
+  } else if (overlay.anim === "wipe") {
+    // Маркер: коробка стоит, полосу проводит `wipeAt` — здесь только альфа.
+    opacity = Math.min(smoothstep(t / WIPE_FADE), smoothstep(q));
   }
 
   // Покачивание в покое. Огибающая входа — чтобы элемент приезжал на своё

@@ -71,6 +71,7 @@ OVERLAY_LIFE = {
 # Сколько живёт элемент, если конец не задан словом (`until_word_idx is None`).
 OVERLAY_DEFAULT_LIFE = {"chip": 2.4, "sticker": 2.0, "decor": 2.4}
 CHIP_TEXT_MAX = 28  # знаков в плашке
+STICKER_PROMPT_MAX = 80  # знаков в описании стикера, который дорисует модель
 
 SCENE_MAX = 3  # сцен на ролик
 SCENE_WINDOW = 15.0  # не чаще одной сцены на столько секунд ролика
@@ -86,8 +87,10 @@ SCENE_HEADING_MAX = 32  # знаков в заголовке сцены
 MIN_ANIM_FRAMES = 8
 
 OverlayKind = Literal["chip", "sticker", "decor"]
-ChipStyle = Literal["pill", "tag", "label"]
-DecorGlyph = Literal["question", "exclaim", "sparkle", "arrow"]
+# `marker` — текст на полосе маркера, которая проводится слева направо.
+ChipStyle = Literal["pill", "tag", "label", "marker"]
+# `confetti` — цветные кусочки вместо знаков: победа, результат, праздник.
+DecorGlyph = Literal["question", "exclaim", "sparkle", "arrow", "confetti"]
 Slot = Literal[
     "auto", "above_head", "beside_left", "beside_right", "top_left", "top_right", "chest"
 ]
@@ -136,6 +139,10 @@ class Overlay(BaseModel):
     sticker: str | None = None
     # Файл картинки. Заполняет Python (набор стикеров или генерация), не LLM.
     asset: str | None = None
+    # Что нарисовать, когда в наборе нет подходящего стикера: короткое описание
+    # предмета. По нему картинку рисует модель (`pipeline/visuals.draw_stickers`),
+    # и путь к ней ложится в `asset`.
+    sticker_prompt: str | None = Field(default=None, max_length=STICKER_PROMPT_MAX)
     glyph: DecorGlyph | None = None
     # Куда встать. `auto` — место выбирает Python по свободным зонам кадра.
     slot: Slot = "auto"
@@ -301,12 +308,15 @@ class PlanOverlay:
     # Место в покое, пиксели кадра. У декора — область россыпи.
     rect: Rect
     rotate: float = 0.0  # наклон в покое, градусы
-    anim: str = "pop"  # pop | slide | fade
+    # pop | slide | fade — и входы, которые выбирает `overlays.entrance`:
+    # from_left | from_right (въезд сбоку) | drop (падает сверху) | stamp
+    # (штамп: крупно → на место) | wipe (полоса маркера слева направо).
+    anim: str = "pop"
     layer: str = "front"  # front | behind (за говорящим, нужны маски `behind`)
     seed: int = 0
 
     # ---- плашка (`chip`): коробка та же, что у плашки пункта (`PlanPill`)
-    style: str | None = None  # pill | tag | label | heading
+    style: str | None = None  # pill | tag | label | marker | heading
     words: list[str] | None = None  # текст по словам, уже в нужном регистре
     font: str = "caption"  # caption | accent — какой из шрифтов темы
     font_size: float = 0.0
@@ -325,6 +335,9 @@ class PlanOverlay:
     emoji_box: float = 0.0
     emoji_size: float = 0.0
     emoji_gap: float = 0.0
+    # Счётчик: слова `words[first..last]` — одно число, и оно набегает до
+    # `value` за `frames` кадров от `start`. `None` — текст стоит как есть.
+    count: dict[str, int] | None = None
 
     # ---- стикер и фото
     asset: str | None = None  # путь относительно папки ассетов задачи
@@ -332,7 +345,7 @@ class PlanOverlay:
     float_px: float = 0.0  # амплитуда покачивания в покое; 0 — стоит
 
     # ---- декор
-    glyph: str | None = None  # question | exclaim | sparkle | arrow
+    glyph: str | None = None  # question | exclaim | sparkle | arrow | confetti
     marks: list[PlanMark] | None = None
 
     # ---- карта: метка внутри `rect`, пиксели от его левого верхнего угла

@@ -124,3 +124,22 @@ export function cutAt(
   width: number,
   height: number,
 ): CutState;
+export const SIDE_RATIO: number;
+export const SIDE_MIN_PX: number;
+export const SIDE_MAX_PX: number;
+export const SIDE_FADE: number;
+export const DROP_RATIO: number;
+export const DROP_MIN_PX: number;
+export const DROP_MAX_PX: number;
+export const DROP_FADE: number;
+export const DROP_FALL: number;
+export const DROP_HOP: number;
+export const STAMP_FROM: number;
+export const STAMP_FADE: number;
+export const WIPE_FADE: number;
+
+/** Сколько полосы маркера проведено на кадре, 0..1. */
+export function wipeAt(overlay: PlanOverlay, frame: number, fps: number): number;
+
+/** Число счётчика плашки на кадре; `null` — счёта нет или он добежал. */
+export function countAt(overlay: PlanOverlay, frame: number, fps: number): number | null;

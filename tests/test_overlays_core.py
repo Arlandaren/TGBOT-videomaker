@@ -1153,7 +1153,9 @@ def test_a_sticker_with_a_file_is_a_picture_of_that_shape(sticker_set):
     assert Path(made["asset"]).is_absolute() and made["glyph_size"] == 0
     spot = rect_of(made)
     assert spot.width / spot.height == pytest.approx(2.0, abs=0.01)
-    assert made["float_px"] > 0 and made["rotate"] != 0 and made["anim"] == "pop"
+    assert made["float_px"] > 0 and made["rotate"] != 0
+    # Вход — по месту, куда стикер встал: сбоку, сверху или «pop» по центру.
+    assert made["anim"] in ("pop", "from_left", "from_right", "drop")
     # Пропорция не записана в наборе — берётся из самого файла.
     spot = rect_of(sticker_plan("tower"))
     assert spot.width / spot.height == pytest.approx(0.5, abs=0.01)
@@ -1247,7 +1249,9 @@ def test_the_plan_speaks_the_contract_of_the_renderer():
         for key in item:
             assert f"  {key}:" in types, key
         assert item["kind"] in ("chip", "sticker", "decor", "photo", "map")
-        assert item["anim"] in ("pop", "slide", "fade") and item["layer"] == "front"
+        assert item["layer"] == "front" and item["anim"] in (
+            "pop", "slide", "fade", "from_left", "from_right", "drop", "stamp", "wipe"
+        )
     for staged in made["scenes"]:
         for key in staged:
             assert f"  {key}:" in types, key

@@ -29,12 +29,14 @@ import { cameraAt, cameraShots } from "../layers/Camera";
 import type { PlanBlock, Preset, RenderPlan } from "../types";
 import {
   activeScene,
+  countAt,
   frameOf,
   markAt,
   overlayAt,
   pinAt,
   prng,
   sceneProgress,
+  wipeAt,
 } from "./motion.mjs";
 import { visualsOf, type DecorGlyph, type PlanOverlay, type PlanScene } from "./types";
 
@@ -213,8 +215,33 @@ const chipShadow = (style: string | null, h: number): string => {
  * Python мерил ширину текста, и другая разметка (один текстовый узел с
  * кернингом через пробел) дала бы другую ширину при том же шрифте.
  */
+/**
+ * Слова плашки на кадре счётчика: цифры числа заменены текущим значением, всё
+ * остальное («+», «%», «₽») стоит как было. Число цифр то же, что в итоге.
+ */
+const countedWords = (words: string[], overlay: PlanOverlay, value: number): string[] => {
+  const count = overlay.count;
+  if (!count) return words;
+  let digits = String(value);
+  return words.map((word, i) => {
+    if (i < count.first || i > count.last) return word;
+    const parts = /^(\D*)(\d+)(\D*)$/.exec(word);
+    if (!parts) return word;
+    const taken = digits.slice(0, parts[2].length);
+    digits = digits.slice(parts[2].length);
+    return `${parts[1]}${taken.padStart(parts[2].length, "0")}${parts[3]}`;
+  });
+};
+
 const Chip: React.FC<{ overlay: PlanOverlay; preset: Preset }> = ({ overlay, preset }) => {
-  const words = overlay.words ?? [];
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const counted = countAt(overlay, frame, fps);
+  const words =
+    counted === null ? (overlay.words ?? []) : countedWords(overlay.words ?? [], overlay, counted);
+  // Маркер: коробка стоит прозрачной, а заливку проводит отдельный слой.
+  const marker = overlay.anim === "wipe";
+  const wiped = wipeAt(overlay, frame, fps);
   const filled = Boolean(overlay.fill) && overlay.fill_opacity > 0;
   const color = overlay.color || "#FFFFFF";
   const icon = overlay.emoji && overlay.emoji_box > 0 ? overlay.emoji : null;
@@ -231,12 +258,13 @@ const Chip: React.FC<{ overlay: PlanOverlay; preset: Preset }> = ({ overlay, pre
         alignItems: "center",
         justifyContent: "center",
         borderRadius: overlay.radius,
-        backgroundColor: filled ? tint(overlay.fill, overlay.fill_opacity) : "transparent",
+        backgroundColor:
+          filled && !marker ? tint(overlay.fill, overlay.fill_opacity) : "transparent",
         border:
           overlay.border_width > 0 && overlay.border_color
             ? `${overlay.border_width}px solid ${overlay.border_color}`
             : undefined,
-        boxShadow: filled ? chipShadow(overlay.style, h) : undefined,
+        boxShadow: filled && !marker ? chipShadow(overlay.style, h) : undefined,
         color,
         ...textFont(overlay, preset),
         fontSize: size,
@@ -252,9 +280,23 @@ const Chip: React.FC<{ overlay: PlanOverlay; preset: Preset }> = ({ overlay, pre
             : "none",
       }}
     >
+      {marker && filled ? (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: overlay.radius,
+            backgroundColor: tint(overlay.fill, overlay.fill_opacity),
+            boxShadow: chipShadow("label", h),
+            transform: `scaleX(${wiped.toFixed(4)})`,
+            transformOrigin: "0 50%",
+          }}
+        />
+      ) : null}
       {icon ? (
         <span
           style={{
+            position: "relative",
             flex: "none",
             width: overlay.emoji_box,
             marginRight: overlay.emoji_gap,
@@ -274,7 +316,15 @@ const Chip: React.FC<{ overlay: PlanOverlay; preset: Preset }> = ({ overlay, pre
           {icon}
         </span>
       ) : null}
-      <span style={{ display: "block", whiteSpace: "nowrap" }}>
+      <span
+        style={{
+          position: "relative",
+          display: "block",
+          whiteSpace: "nowrap",
+          // Текст маркера проступает вслед за полосой, а не раньше неё.
+          opacity: marker ? Math.min(1, Math.max(0, (wiped - 0.2) / 0.5)) : 1,
+        }}
+      >
         {words.map((word, i) => (
           <React.Fragment key={i}>
             {i > 0 ? <span>{" "}</span> : null}
@@ -389,6 +439,9 @@ const StickerGlyph: React.FC<{ overlay: PlanOverlay }> = ({ overlay }) => {
 
 type GlyphShape = { box: [number, number]; draw: (color: string) => React.ReactNode };
 
+/** Цвета конфетти по кругу: яркие и разные, чтобы читались на любом фоне. */
+const CONFETTI = ["#FFC83D", "#FF5A5F", "#2F6BFF", "#27C281", "#FF8FD1", "#FFFFFF"];
+
 /**
  * Знаки декора — контуры, а не буквы шрифта: в шрифте темы «?» может оказаться
  * тонким или рукописным, а знак обязан читаться с любой темой одинаково.
@@ -429,6 +482,11 @@ const GLYPHS: Record<DecorGlyph, GlyphShape> = {
       />
     ),
   },
+  // Конфетти: цветной кусочек. Цвет у каждого свой — его даёт `Decor`.
+  confetti: {
+    box: [100, 56],
+    draw: (color) => <rect x={4} y={4} width={92} height={48} rx={12} fill={color} />,
+  },
   arrow: {
     box: [100, 100],
     draw: (color) => (
@@ -452,13 +510,15 @@ const Decor: React.FC<{ overlay: PlanOverlay }> = ({ overlay }) => {
   const marks = overlay.marks ?? [];
   if (!shape || marks.length === 0) return null;
   if (frame <= frameOf(overlay.start, fps) || frame >= frameOf(overlay.end, fps)) return null;
-  const color = overlay.color || "#FFFFFF";
+  const base = overlay.color || "#FFFFFF";
   const [bw, bh] = shape.box;
   return (
     <>
       {marks.map((mark, i) => {
         const state = markAt(overlay, i, frame, fps);
         if (!state.visible) return null;
+        const color =
+          overlay.glyph === "confetti" ? CONFETTI[i % CONFETTI.length] : base;
         const height = mark.size;
         const width = (mark.size * bw) / bh;
         return (

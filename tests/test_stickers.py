@@ -193,6 +193,11 @@ def disk(size: int = 256, radius: int = 90, hole: int = 0) -> Image.Image:
 @pytest.fixture
 def small(monkeypatch):
     """Стикер 128 px вместо 512: геометрия задана долями, а считать в 16 раз меньше."""
+    # Размер живёт в `src/core/sticker_art.py` — там его читает сборка; имя в
+    # `make_stickers` меняем тоже: тесты сверяются с `ms.SIZE`.
+    from src.core import sticker_art
+
+    monkeypatch.setattr(sticker_art, "SIZE", 128)
     monkeypatch.setattr(ms, "SIZE", 128)
 
 

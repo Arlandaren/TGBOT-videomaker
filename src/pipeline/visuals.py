@@ -21,6 +21,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -58,6 +60,7 @@ from src.core.overlay_models import (
     SceneItem,
     SceneItemKind,
     SceneLayout,
+    STICKER_PROMPT_MAX,
     Slot,
     Transition,
     TransitionKind,
@@ -190,6 +193,14 @@ def build_schema(stickers: Sequence[str]) -> dict[str, Any]:
                         },
                         "emoji": emoji,
                         "sticker": sticker,
+                        "sticker_prompt": {
+                            "type": ["string", "null"],
+                            "description": (
+                                "Только когда в наборе нет подходящего стикера: предмет "
+                                "по-английски в 2-5 словах («red sports car»). Программа "
+                                "нарисует картинку. Иначе null."
+                            ),
+                        },
                         "glyph": {
                             "type": ["string", "null"],
                             "enum": [*_values(DecorGlyph), None],
@@ -998,7 +1009,14 @@ def visuals_from_answer(data: Mapping[str, Any]) -> Visuals:
                 # дала, остаётся: стикер нарисуется глифом.
                 log.info("графика: стикера %r нет в наборе — снят", key)
                 key = None
-            fields.update(sticker=key, emoji=single_emoji(raw.get("emoji")))
+            # Описание для дорисовки читается, только когда ключа набора нет:
+            # готовая картинка бесплатна и уже проверена глазами.
+            wish = _text(raw.get("sticker_prompt")) if key is None else None
+            fields.update(
+                sticker=key,
+                emoji=single_emoji(raw.get("emoji")),
+                sticker_prompt=wish[:STICKER_PROMPT_MAX] if wish else None,
+            )
         elif kind == "decor":
             fields.update(glyph=raw.get("glyph"), slot="auto")
         try:
@@ -1117,6 +1135,115 @@ def visuals_llm(cfg: Any = None) -> LLMClient | None:
     return LLMClient(api_key=key, cfg=local, provider=provider)
 
 
+# --------------------------------------------------------------------------- стикеры от модели
+
+# Как просим картинку. Стиль — под набор (объёмные глянцевые значки Fluent):
+# дорисованный стикер не должен выглядеть чужим рядом с готовыми.
+STICKER_IMAGE_PROMPT = (
+    "A single {subject}, glossy 3D emoji-style icon, soft studio lighting, vivid colors, "
+    "centered, whole object in frame, no text, no letters, no logo, no people, no hands, "
+    "no shadow on the ground, transparent background"
+)
+STICKER_IMAGE_SIZE = "1024x1024"
+
+
+def sticker_cache_path(subject: str, cfg: Any) -> Path:
+    """Файл стикера в кеше: одно и то же описание второй раз не оплачивается."""
+    from src.llm import images
+
+    key = hashlib.sha1(
+        "|".join(
+            (subject.strip().lower(), images.image_model(cfg), cfg.openai_image_quality,
+             STICKER_IMAGE_SIZE, STICKER_IMAGE_PROMPT)
+        ).encode("utf-8")
+    ).hexdigest()[:20]
+    return Path(cfg.work_dir) / "sticker-cache" / f"{key}.png"
+
+
+def _outlined(data: bytes) -> bytes | None:
+    """Картинка модели → стикер с белой обводкой, как у набора. `None` — не вышло."""
+    import io
+
+    from PIL import Image
+
+    from src.core.sticker_art import build_sticker, encode_png
+
+    try:
+        return encode_png(build_sticker(Image.open(io.BytesIO(data))))
+    except Exception as err:  # noqa: BLE001 — битая или пустая картинка это «стикера нет»
+        log.warning("графика: стикер модели не обведён (%s: %s)", type(err).__name__, err)
+        return None
+
+
+async def draw_stickers(sheet: Visuals, cfg: Any = None) -> Visuals:
+    """Дорисовывает стикеры, которых нет в наборе (`Overlay.sticker_prompt`).
+
+    Не больше `visuals_ai_stickers_max` на ролик — каждый стоит денег. Картинку
+    рисует OpenAI Images с прозрачным фоном, обводку кладёт тот же код, что у
+    набора (`core/sticker_art.py`), файл ложится в кеш и в `Overlay.asset`.
+
+    Чего нарисовать не удалось или не положено по лимиту: стикер с эмодзи
+    остаётся глифом, стикер без него снимается. Шаг никогда не бросает.
+    """
+    cfg = cfg or default_settings
+    wanted = [
+        o for o in sheet.overlays
+        if o.kind == "sticker" and o.sticker_prompt and not o.sticker and not o.asset
+    ]
+    if not wanted:
+        return sheet
+    budget = int(getattr(cfg, "visuals_ai_stickers_max", 0) or 0)
+    key = (getattr(cfg, "openai_api_key", "") or "").strip()
+    drawn: dict[int, str] = {}
+    if budget > 0 and key:
+        import httpx
+
+        from src.llm import images
+        from src.llm.images_openai import generate_openai
+
+        try:
+            async with httpx.AsyncClient() as client:
+                for overlay in wanted:
+                    if len(drawn) >= budget:
+                        break
+                    subject = overlay.sticker_prompt or ""
+                    cached = sticker_cache_path(subject, cfg)
+                    if not (cached.exists() and cached.stat().st_size > 1024):
+                        raw = await generate_openai(
+                            client,
+                            STICKER_IMAGE_PROMPT.format(subject=subject),
+                            api_key=key,
+                            model=images.image_model(cfg)
+                            if cfg.image_provider == "openai"
+                            else images.PROVIDER_IMAGE_MODELS["openai"],
+                            size=STICKER_IMAGE_SIZE,
+                            quality=cfg.openai_image_quality,
+                            transparent=True,
+                            base_url=cfg.openai_base_url,
+                        )
+                        ready = await asyncio.to_thread(_outlined, raw) if raw else None
+                        if ready is None:
+                            continue
+                        cached.parent.mkdir(parents=True, exist_ok=True)
+                        cached.write_bytes(ready)
+                        log.info("графика: стикер модели нарисован — %r", subject)
+                    drawn[id(overlay)] = str(cached)
+        except Exception as err:  # noqa: BLE001 — стикер необязателен, ролик важнее
+            log.warning("графика: стикеры модели не нарисованы (%s: %s)", type(err).__name__, err)
+
+    asked = {id(o) for o in wanted}
+    kept: list[Overlay] = []
+    for overlay in sheet.overlays:
+        if id(overlay) in asked:
+            path = drawn.get(id(overlay))
+            if path:
+                overlay = overlay.model_copy(update={"asset": path})
+            elif not overlay.emoji:
+                continue  # рисовать нечем: ни картинки, ни глифа
+        kept.append(overlay)
+    return sheet.model_copy(update={"overlays": kept})
+
+
 async def _ask(edl: EDL, llm: LLMClient, cfg: Any) -> Visuals | None:
     """Лист графики от модели или `None`, если от неё ничего годного не получено.
 
@@ -1231,7 +1358,10 @@ async def plan_visuals(
             sheet = sheet.model_copy(update={"transitions": fallback_transitions(edl)})
         # Последняя чистка — гарантия шага, а не недоверие к себе: что бы ни
         # случилось выше, наружу уходит лист, к которому у правил нет вопросов.
-        return sanitize_visuals(sheet, edl)
+        sheet = sanitize_visuals(sheet, edl)
+        # Рисуем ПОСЛЕ чистки: платить за картинку элемента, который правила
+        # всё равно снимут, незачем.
+        return await draw_stickers(sheet, cfg)
     except Exception:  # noqa: BLE001 — графика не имеет права уронить ролик
         log.exception("графика: расстановка упала — ролик выйдет без графики")
         return Visuals()

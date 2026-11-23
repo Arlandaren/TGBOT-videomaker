@@ -268,6 +268,10 @@ class Settings(BaseSettings):
     transitions_enabled: bool = True
     # Тонкая полоса прогресса сверху на весь ролик.
     progress_bar: bool = True
+    # Сколько стикеров на ролик модель вправе дорисовать, когда в наборе нет
+    # подходящего (`pipeline/visuals.draw_stickers`). Каждый — платный запрос
+    # к OpenAI Images (черновое качество, около цента). 0 — только набор.
+    visuals_ai_stickers_max: int = 2
 
     # ------------------------------------------------------------------ ASR (M1)
     # auto → whisperx, если установлен: границы слов считает wav2vec2 по звуку.

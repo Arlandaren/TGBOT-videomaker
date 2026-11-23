@@ -8,10 +8,18 @@
 import type { Rect, RenderPlan } from "../types";
 
 export type OverlayKind = "chip" | "sticker" | "decor" | "photo" | "map";
-export type OverlayAnim = "pop" | "slide" | "fade";
+export type OverlayAnim =
+  | "pop"
+  | "slide"
+  | "fade"
+  | "from_left"
+  | "from_right"
+  | "drop"
+  | "stamp"
+  | "wipe";
 export type OverlayLayer = "front" | "behind";
-export type ChipStyle = "pill" | "tag" | "label" | "heading";
-export type DecorGlyph = "question" | "exclaim" | "sparkle" | "arrow";
+export type ChipStyle = "pill" | "tag" | "label" | "marker" | "heading";
+export type DecorGlyph = "question" | "exclaim" | "sparkle" | "arrow" | "confetti";
 export type SceneLayout = "card_top" | "paper" | "phone";
 export type SceneBgKind = "paper" | "board" | "gradient" | "still";
 export type SceneChrome = "none" | "phone" | "polaroid";
@@ -62,6 +70,11 @@ export type PlanOverlay = {
   emoji_box: number;
   emoji_size: number;
   emoji_gap: number;
+  /**
+   * Счётчик: слова `words[first..last]` — одно число, оно набегает до `value`
+   * за `frames` кадров от `start` (`motion.mjs`, `countAt`). Нет — текст стоит.
+   */
+  count: { first: number; last: number; value: number; frames: number } | null;
 
   /** Стикер и фото: путь относительно папки ассетов задачи. */
   asset: string | null;

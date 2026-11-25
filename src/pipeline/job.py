@@ -28,6 +28,7 @@ from src.pipeline.visuals import plan_visuals, visuals_llm
 from src.pipeline.asr import ASRResult, transcribe
 from src.pipeline.audio_post import build_audio
 from src.pipeline.crop import autocrop, framing_spans
+from src.pipeline.fps import to_output_fps
 from src.pipeline.cut import apply_cuts
 from src.pipeline.director import clean_transcript, direct, make_metadata, voice_clip
 from src.pipeline.luma import measure_bg_luma
@@ -417,6 +418,15 @@ async def process_video(
             raise JobError("Кадрирование оборвалось — файл повреждён. Пришлите видео ещё раз.", "crop_broken")
         mark("crop", t)
 
+        # Частота готового ролика (`pipeline/fps.py`): дальше её берут замеры,
+        # план и рендер. Прогресс — та же стадия «кадрирование».
+        t = time.perf_counter()
+        staged = await asyncio.to_thread(
+            to_output_fps, staged, work / "smooth.mp4",
+            info=await asyncio.to_thread(probe, staged), work_dir=work, cfg=cfg,
+        )
+        mark("fps", t)
+
         t = time.perf_counter()
         await asyncio.to_thread(
             _measure_luma, edl, staged, preset=style, cut_pauses=cut_pauses, cfg=cfg
@@ -614,6 +624,12 @@ async def process_from_edl(
     if not is_playable(staged):
         raise JobError("Кадрирование оборвалось — файл повреждён.", "crop_broken")
     mark("crop", t)
+
+    t = time.perf_counter()
+    staged = to_output_fps(
+        staged, work / "smooth.mp4", info=probe(staged), work_dir=work, cfg=cfg
+    )
+    mark("fps", t)
 
     t = time.perf_counter()
     _measure_luma(edl, staged, preset=style, cut_pauses=cut_pauses, cfg=cfg)

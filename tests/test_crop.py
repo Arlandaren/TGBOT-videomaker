@@ -44,8 +44,12 @@ from src.pipeline.crop import (
     clamp_window,
     crop_size,
     fill_gaps,
+    find_cuts,
+    frame_path,
+    frame_times,
     framing_spans,
     grade_filter,
+    median_filter,
     moving_average,
     normalize_spans,
     pick_face,
@@ -1039,6 +1043,115 @@ def test_track_switching_faces_does_not_move_the_window():
     assert len(set(seg.xs)) == 1
 
 
+# ------------------------------------------------------------------ движение окна по кадрам
+
+
+def test_window_gets_a_position_on_every_frame():
+    """Окно едет на каждом кадре, а не раз в пробу трекера.
+
+    Трекер смотрит шесть кадров в секунду, а `sendcmd` между командами не
+    интерполирует: пока команда шла одна на пробу, окно стояло пять кадров и на
+    шестом прыгало на весь набежавший путь. Замер на боевом ролике (4K, двое в
+    кадре, окно переезжает между ними): скачки по 40-55 px за кадр шесть раз в
+    секунду, 455 кадров из 1555 с рывком больше 8 px — «видео лагает».
+    """
+    preset = load_preset("glass")
+    info = info_of(3840, 2160, duration=6.0)
+    faces = [face(y=1000.0, h=400.0, x=1000.0 + i * 40.0) for i in range(36)]
+    seg = plan_segments(
+        track_of(faces), [(0.0, 6.0, "wide")], info=info, out_w=1080, out_h=1920, preset=preset,
+    )[0]
+    assert len(seg.times) == len(seg.xs) == len(seg.ys) == 180  # 6 с при 30 fps
+    assert seg.times[1] == pytest.approx(1 / 30)
+    steps = [b - a for a, b in zip(seg.xs, seg.xs[1:])]
+    # Лицо идёт 40 px за пробу, то есть 8 px за кадр: шаг окна — тот же ход,
+    # разложенный по кадрам, а не 40 px раз в пять кадров.
+    assert max(steps) <= 9
+    assert seg.xs[-1] - seg.xs[0] > 800  # и при этом окно действительно доехало
+    moving = [s for s in steps[40:140]]
+    assert min(moving) >= 7  # в середине проезда нет ни одного стоящего кадра
+
+
+def test_frame_times_cover_the_segment_once():
+    assert frame_times(0.0, 0.1, 30.0) == pytest.approx([0.0, 1 / 30, 2 / 30])
+    # Кусок с середины кадра: первый кадр — первый не раньше начала.
+    assert frame_times(4.565, 4.64, 30.0) == pytest.approx([137 / 30, 138 / 30, 139 / 30])
+    # Дробная частота как есть — округлённая разошлась бы с кадрами.
+    assert len(frame_times(0.0, 60.0, 29.97)) == 1799
+    assert frame_times(1.0, 1.0, 30.0) == [1.0]  # пустой кусок — всё равно один кадр
+
+
+def test_frame_path_holds_still_and_has_no_speed_steps():
+    at = [i / 30 for i in range(46)]
+    assert frame_path([0.0, 0.5, 1.0], [7.0, 7.0, 7.0], at, blend=5) == [7.0] * 46
+    ramp = frame_path([0.0, 0.5, 1.0, 1.5], [0.0, 0.0, 300.0, 300.0], at, blend=5)
+    speed = [b - a for a, b in zip(ramp, ramp[1:])]
+    # Ломаная меняла бы скорость с 0 до 20 px за один кадр и обратно; среднее
+    # раскладывает разгон и остановку на пять кадров, по 4 px на кадр.
+    assert max(speed) == pytest.approx(20.0)
+    assert max(abs(b - a) for a, b in zip(speed, speed[1:])) < 5
+    assert ramp[0] == 0.0 and ramp[-1] == pytest.approx(300.0)
+
+
+def test_window_jumps_on_a_cut_inside_the_source():
+    """Склейка в самом файле: окно встаёт на новое место с первого кадра плана.
+
+    Раньше сглаживание шло сквозь склейку и окно ещё секунду ехало от прежнего
+    лица к новому — на ролике, смонтированном из нескольких планов, кадр
+    «доезжал» после каждого реза.
+    """
+    preset = load_preset("glass")
+    info = info_of(3840, 2160, duration=6.0)
+    faces = [face(y=1000.0, h=400.0, x=900.0 if i < 18 else 2900.0) for i in range(36)]
+    track = track_of(faces)
+    track.cuts = [3.0]
+    seg = plan_segments(
+        track, [(0.0, 6.0, "wide")], info=info, out_w=1080, out_h=1920, preset=preset,
+    )[0]
+    assert len(seg.xs) == 180
+    assert len(set(seg.xs[:90])) == 1 and len(set(seg.xs[90:])) == 1
+    assert seg.xs[90] - seg.xs[89] > 1500  # один скачок, ровно на кадре склейки
+
+    # Тот же трек без склейки: окно едет, как и прежде, — это и есть «доезжает».
+    track.cuts = []
+    smooth = plan_segments(
+        track, [(0.0, 6.0, "wide")], info=info, out_w=1080, out_h=1920, preset=preset,
+    )[0]
+    assert len(set(smooth.xs)) > 20
+
+
+def test_a_face_that_steals_the_track_for_two_samples_does_not_move_the_window():
+    """Чужое лицо на пару проб — выброс, а не повод везти окно туда и обратно."""
+    preset = load_preset("glass")
+    info = info_of(3840, 2160, duration=6.0)
+    faces = [face(y=1000.0, h=400.0, x=2200.0) for _ in range(36)]
+    faces[10] = faces[11] = face(y=1000.0, h=520.0, x=700.0)
+    seg = plan_segments(
+        track_of(faces), [(0.0, 6.0, "wide")], info=info, out_w=1080, out_h=1920, preset=preset,
+    )[0]
+    assert len(set(seg.xs)) == 1
+
+
+def test_median_filter_keeps_a_real_move():
+    assert median_filter([1, 1, 9, 1, 1], 5) == [1, 1, 1, 1, 1]
+    step = [0.0] * 6 + [100.0] * 6
+    assert median_filter(step, 5) == step  # ступенька остаётся ступенькой
+    assert median_filter([3.0, 5.0], 5) == [3.0, 5.0]
+
+
+def test_find_cuts_takes_a_lone_spike_and_skips_motion():
+    """Замер на боевом ролике: склейки 28-61 при соседях 1-4, проезд камеры —
+    14-22 двенадцать кадров подряд."""
+    calm = [0.0, 1.1, 1.2, 57.0, 1.6, 1.8, 3.8, 27.8, 2.1]
+    assert find_cuts(calm) == [3, 7]
+    whip = [0.0, 13.2, 13.6, 14.0, 14.5, 15.0, 21.6, 20.2, 18.5, 17.3]
+    assert find_cuts(whip) == []
+    flash = [0.0, 1.0, 60.0, 58.0, 1.0]  # вспышка: вверх и сразу вниз
+    assert find_cuts(flash) == []
+    assert find_cuts([0.0, 1.0, 9.0, 1.0]) == []  # ниже порога
+    assert find_cuts([]) == [] and find_cuts([0.0]) == []
+
+
 # ------------------------------------------------------------------ цветокор (Ф3)
 
 
@@ -1369,6 +1482,23 @@ def test_sendcmd_static_both_axes_is_empty():
     assert build_sendcmd([0.0, 1.0], [10, 10], [5, 5], static_x=True, static_y=True) == ""
 
 
+def test_sendcmd_never_starts_a_command_after_its_frame():
+    """Команда срабатывает на первом кадре не раньше её начала.
+
+    Команды покадровые, поэтому начало, округлённое ВВЕРХ (2/30 с → «0.067»),
+    пропускало бы свой кадр и доставалось следующему: окно на таких кадрах
+    отставало бы на шаг. Округление вниз держит начало между кадрами.
+    """
+    times = [i / 30 for i in range(90)]
+    script = build_sendcmd(times, list(range(90)), [0] * 90, static_y=True)
+    starts = [float(line.split("-")[0]) for line in script.strip().splitlines()]
+    assert len(starts) == 90
+    for i, start in enumerate(starts):
+        assert start <= times[i] + 1e-9
+        if i:
+            assert start > times[i - 1]  # и не раньше предыдущего кадра
+
+
 # ------------------------------------------------------------------ граф ffmpeg
 
 
@@ -1382,7 +1512,8 @@ def test_filter_single_segment_has_no_split():
         frame_w=1920, frame_h=1080, out_w=1080, out_h=1920, grade="eq=contrast=1.08",
     )
     assert "split=" not in vf and "concat" not in vf
-    assert "crop@c0=w=600:h=1066:x=100:y=5" in vf
+    # `exact=1`: иначе crop округляет положение до чётного и окно идёт по 2 px.
+    assert "crop@c0=w=600:h=1066:x=100:y=5:exact=1," in vf
     assert vf.endswith("eq=contrast=1.08,setsar=1[vout]")
 
 

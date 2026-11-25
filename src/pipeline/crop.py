@@ -1,8 +1,14 @@
 """M6: автокроп в 9:16 с трекингом центра внимания и лёгким цветокором.
 
 Схема: детекция по кадрам → заполнение пропусков → прямоугольник кропа по
-правилам пресета → сглаживание прямоугольника → динамический `crop` через
-`sendcmd` → `scale` → `grade`.
+правилам пресета → сглаживание прямоугольника → положение окна на КАЖДЫЙ кадр
+(`frame_path`) → динамический `crop` через `sendcmd` → `scale` → `grade`.
+
+Про шаг окна. Трекер смотрит шесть кадров в секунду, а окно обязано двигаться
+на каждом: `sendcmd` между командами не интерполирует, и пока команда шла одна
+на пробу, окно стояло пять кадров и на шестом прыгало. На ролике с двумя
+людьми, где окно переезжает с одного на другого, замер дал скачки по 40-55 px
+за один кадр шесть раз в секунду — на глаз это «видео лагает».
 
 Про крупность (Ф6). Масштаб окна выводится ИЗ ДОЛИ ЛИЦА по высоте кадра
 (`preset.crop.face_height_ratio`), а не из вписывания bbox. Зритель видит именно
@@ -64,6 +70,9 @@ samples/phase-0-source.mp4, добитому полями до нужной пр
 from __future__ import annotations
 
 import logging
+import math
+import subprocess
+from bisect import bisect_right
 from dataclasses import dataclass, field
 from pathlib import Path
 from statistics import median
@@ -83,7 +92,8 @@ from src.core.framing import (  # noqa: F401 — крупность считае
     normalize_spans,
 )
 from src.core.preset import Crop, Grade, Preset, load_preset
-from src.core.proc import ffmpeg
+from src.core.proc import deadline, ffmpeg
+from src.pipeline.fps import target_fps
 from src.core.track import (
     MISSING_CONF,
     REF_HEIGHT,
@@ -152,6 +162,25 @@ EYES_BELOW_BOX_TOP = 0.2  # медиана замеренного (глаза �
 # трек уже идёт. Без гистерезиса на кадре с двумя людьми окно скачет между ними,
 # потому что «самое крупное» меняется от пробы к пробе.
 FACE_SWITCH_RATIO = 1.5
+
+# Склейка в самом исходнике (ролик пришёл уже смонтированным из нескольких
+# планов). На ней окно обязано встать на новое место сразу: сглаживание,
+# идущее сквозь склейку, везёт окно от прежнего лица к новому ещё секунду, и
+# кадр после каждого реза «доезжает». Склейка — одиночный всплеск разницы
+# соседних кадров на миниатюре; быстрое движение даёт разницу того же порядка,
+# но держит её несколько кадров подряд. Замер на ролике с одиннадцатью
+# склейками: на них разница 28-61 при соседях 1-4, на самом быстром проезде
+# камеры — 14-22 двенадцать кадров подряд.
+CUT_THUMB_WIDTH = 32
+CUT_MIN_DIFF = 12.0
+CUT_SPIKE = 4.0
+CUT_SCAN_TIMEOUT = 1800
+
+# Сколько проб подряд смотрит медиана перед сглаживанием. Чужое лицо, на пару
+# проб перехватившее трек (прошёл человек, детектор на миг потерял своего),
+# утаскивало окно в сторону и обратно — на глаз это «кадр поплыл». Медиана по
+# пяти пробам такой выброс до двух проб выкидывает, а ход и остановку не трогает.
+BLIP_SAMPLES = 5
 
 # Потолок частоты смен крупности: чаще одной на столько секунд — это уже не
 # монтаж, а мельтешение, и такой EDL сводится к одному окну на весь ролик.
@@ -359,6 +388,8 @@ class Track:
     # Растр, на котором работал детектор. Не деталь реализации, а часть числа:
     # доля лица без него несравнима между прогонами (samples/README.md).
     analyzed: tuple[int, int] = (0, 0)
+    # Склейки в самом файле: время первого кадра каждого нового плана, секунды.
+    cuts: list[float] = field(default_factory=list)
 
     def __len__(self) -> int:
         return len(self.times)
@@ -452,22 +483,97 @@ def pick_face(dets: Sequence[Detection], prev: Detection | None) -> Detection | 
     return keep if keep.area * FACE_SWITCH_RATIO >= best.area else best
 
 
+def find_cuts(diffs: Sequence[float]) -> list[int]:
+    """Номера кадров, с которых начинается новый план.
+
+    `diffs[i]` — разница кадра `i` с предыдущим (`diffs[0]` = 0). Склейка —
+    всплеск выше порога, который в `CUT_SPIKE` раз выше обоих соседей: движение
+    и вспышка дают высокую разницу на соседних кадрах тоже и сюда не попадают.
+    Пропущенная склейка стоит прежнего поведения (окно доезжает), ложная —
+    скачка окна посреди плана, поэтому правило ошибается в сторону пропуска.
+    """
+    out: list[int] = []
+    n = len(diffs)
+    for i in range(1, n):
+        d = diffs[i]
+        if d <= CUT_MIN_DIFF:
+            continue
+        around = max(diffs[i - 1], diffs[i + 1] if i + 1 < n else 0.0)
+        if d > CUT_SPIKE * around:
+            out.append(i)
+    return out
+
+
+def scene_cuts(path: Path, info: MediaInfo, cfg: Settings | None = None) -> list[int]:
+    """Склейки в файле: номера первых кадров новых планов. Не вышло — пусто.
+
+    Отдельный проход ffmpeg, а не кадры из цикла трекера: тот достаёт из
+    декодера одну пробу из пяти, а склейку надо знать с точностью до кадра.
+    Достать все кадры через OpenCV втрое дороже (перевод 4K-кадра в BGR): замер
+    на 52 с 4K — 42 с против 10 с здесь.
+    """
+    cfg = cfg or default_settings
+    if info.width <= 0 or info.height <= 0:
+        return []
+    w = CUT_THUMB_WIDTH
+    h = _even(w * info.height / info.width)
+    cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-v", "error"]
+    if cfg.ffmpeg_threads > 0:
+        cmd += ["-threads", str(cfg.ffmpeg_threads)]
+    cmd += [
+        "-i", str(path), "-an",
+        "-vf", f"scale={w}:{h}:flags=area,format=gray",
+        # Кадр в кадр, как их отдаёт декодер: номера обязаны совпасть с теми,
+        # что считает цикл трекера.
+        "-fps_mode", "passthrough",
+        "-f", "rawvideo", "-",
+    ]
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except OSError as e:
+        log.warning("склейки не искали: ffmpeg не запустился (%s)", e)
+        return []
+    try:
+        with deadline(proc, CUT_SCAN_TIMEOUT):
+            assert proc.stdout is not None
+            raw = proc.stdout.read()
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        if proc.stdout is not None:
+            proc.stdout.close()
+        proc.wait()
+    frames = len(raw) // (w * h)
+    if proc.returncode != 0 or frames < 3:
+        log.warning("склейки не искали: ffmpeg отдал %d кадров, код %s", frames, proc.returncode)
+        return []
+    thumbs = np.frombuffer(raw[: frames * w * h], dtype=np.uint8).reshape(frames, h * w)
+    diffs = np.abs(np.diff(thumbs.astype(np.int16), axis=0)).mean(axis=1)
+    return find_cuts([0.0, *diffs.tolist()])
+
+
 def track_attention(
     path: str | Path,
     *,
     info: MediaInfo | None = None,
     sample_fps: float = 6.0,
     detector: Detector | None = None,
+    find_scene_cuts: bool = True,
 ) -> Track:
     """Кадры → трек лица в пикселях ИСХОДНИКА.
 
     Детекция идёт на кадре, приведённом к растру анализа (`analyze_scale`): у
     YuNet ограниченный диапазон размеров лиц, и на крупном селфи в нативном
     разрешении он цепляется за часть лица вместо целого.
+
+    На склейке внутри файла (`scene_cuts`) память о прошлой пробе сбрасывается:
+    в новом плане прежнего лица нет, и «держаться за ближайшее к нему» значило
+    бы выбрать случайное.
     """
     path = Path(path)
     info = info or probe(path)
     detector = detector or make_detector()
+    cut_frames = scene_cuts(path, info) if find_scene_cuts else []
 
     cap = cv2.VideoCapture(str(path))
     if not cap.isOpened():
@@ -477,11 +583,12 @@ def track_attention(
     step = max(1, int(round(src_fps / max(0.5, sample_fps))))
     scale = analyze_scale(info.width, info.height)
 
-    track = Track(detector=detector.name)
+    track = Track(detector=detector.name, cuts=[f / src_fps for f in cut_frames])
     prev_gray: np.ndarray | None = None
     prev_face: Detection | None = None
     idx = 0
     faces_found = 0
+    seen_cuts = 0
 
     while True:
         ok = cap.grab()
@@ -494,6 +601,12 @@ def track_attention(
         idx += 1
         if not ok or frame is None:
             continue
+
+        passed = bisect_right(cut_frames, idx - 1)
+        if passed != seen_cuts:
+            seen_cuts = passed
+            prev_face = None
+            prev_gray = None
 
         small = _resize(frame, scale)
         track.analyzed = (small.shape[1], small.shape[0])
@@ -515,9 +628,9 @@ def track_attention(
 
     cap.release()
     log.info(
-        "трекинг: %d проб, лицо найдено в %d (%.0f%%), детектор=%s на %dx%d",
+        "трекинг: %d проб, лицо найдено в %d (%.0f%%), детектор=%s на %dx%d, склеек в файле %d",
         len(track), faces_found, 100 * faces_found / max(1, len(track)), detector.name,
-        track.analyzed[0], track.analyzed[1],
+        track.analyzed[0], track.analyzed[1], len(track.cuts),
     )
     return track
 
@@ -573,6 +686,15 @@ def moving_average(values: Sequence[float], window: int) -> list[float]:
     return out
 
 
+def median_filter(values: Sequence[float], window: int) -> list[float]:
+    """Скользящая медиана с симметричным окном; у краёв окно короче."""
+    if window <= 1 or len(values) < 3:
+        return list(values)
+    half = window // 2
+    n = len(values)
+    return [float(median(values[max(0, i - half): min(n, i + half + 1)])) for i in range(n)]
+
+
 def apply_deadzone(values: Sequence[float], threshold: float) -> list[float]:
     """Камера стоит, пока объект не ушёл дальше порога, дальше идёт за ним с лагом.
 
@@ -600,6 +722,29 @@ def apply_deadzone(values: Sequence[float], threshold: float) -> list[float]:
         else:
             out.append(last)
     return out
+
+
+def frame_times(start: float, end: float, fps: float) -> list[float]:
+    """Времена кадров куска `[start, end)` на сетке `fps`. Хотя бы один кадр."""
+    first = math.ceil(start * fps - 1e-6)
+    stop = math.ceil(end * fps - 1e-6)
+    return [f / fps for f in range(first, max(stop, first + 1))]
+
+
+def frame_path(
+    times: Sequence[float], values: Sequence[float], at: Sequence[float], *, blend: int = 1
+) -> list[float]:
+    """Положение окна по пробам трекера → положение на каждом кадре.
+
+    Между пробами — линейно, до первой и после последней — удержание. Поверх
+    идёт короткое среднее шириной в шаг проб (`blend` кадров): ломаная из
+    отрезков меняет скорость рывком на каждой пробе, а после среднего скорость
+    непрерывна. Стоящее окно остаётся стоять — среднее от постоянного ряда.
+    """
+    if not times or not at:
+        return []
+    path = [float(v) for v in np.interp(at, times, values)]
+    return moving_average(path, blend)
 
 
 # --------------------------------------------------------------------------- геометрия
@@ -783,6 +928,9 @@ def plan_segments(
     Сглаживается ПРЯМОУГОЛЬНИК, а не позиция лица, и сглаживается внутри куска:
     на резе крупность обязана меняться мгновенно, размазанная по секунде смена
     читается как самопроизвольный зум, то есть ровно как дефект из AUDIT §8.2.
+
+    `seg.times`, `seg.xs`, `seg.ys` — по одному значению на КАДР куска, а не на
+    пробу трекера: см. «Про шаг окна» в шапке модуля.
     """
     crop = preset.crop
     lo, hi = window_bounds(info.width, info.height, out_w, out_h, crop.max_scale)
@@ -803,6 +951,11 @@ def plan_segments(
     all_face_h = track.face_height()
     all_eye_to_head = track.eye_to_head()
     window = max(3, int(round(smooth_seconds * sample_fps)) | 1)
+    # Сетка кадров — частота самого файла, дробная как есть (29.97): команды
+    # привязаны ко времени, и округлённая частота через полминуты разошлась бы
+    # с кадрами на целый кадр.
+    fps = info.fps if info.fps and info.fps > 0 else 30.0
+    blend = max(1, int(round(fps / max(0.5, sample_fps)))) | 1
 
     def place_at(i: int, seg: Segment) -> tuple[float, float]:
         """Окно для одной пробы: по лицу, а когда лиц нет — по центру кадра.
@@ -888,17 +1041,37 @@ def plan_segments(
             seg.ys = clamp_window([y], seg.win_h, info.height)
             continue
 
-        raw = [place_at(i, seg) for i in idx]
-        xs = apply_deadzone(
-            moving_average([p[0] for p in raw], window), seg.win_w * deadzone_ratio
-        )
-        ys = apply_deadzone(
-            moving_average([p[1] for p in raw], window), seg.win_h * deadzone_ratio
-        )
-        seg.times = [track.times[i] for i in idx]
+        # Кусок делится на планы по склейкам самого файла, и каждый план
+        # сглаживается сам по себе: на склейке окно встаёт на новое место с
+        # первого же кадра, а не едет к нему секунду (см. CUT_MIN_DIFF).
+        at = frame_times(seg.start, seg.end, fps)
+        half = 0.5 / fps
+        inner = [c for c in track.cuts if seg.start + half < c < seg.end - half]
+        # Края куска открыты: каждый его кадр обязан попасть ровно в один план.
+        bounds = [-math.inf, *inner, math.inf]
+        path_x: list[float] = []
+        path_y: list[float] = []
+        for lo_t, hi_t in zip(bounds, bounds[1:]):
+            shot_at = [t for t in at if lo_t - half <= t < hi_t - half]
+            if not shot_at:
+                continue
+            shot = [i for i in idx if lo_t - half <= track.times[i] < hi_t - half]
+            if not shot:
+                # План короче шага проб: ближайшая проба, пусть и соседнего плана.
+                mid = (shot_at[0] + shot_at[-1]) / 2
+                shot = [min(idx, key=lambda i: abs(track.times[i] - mid))]
+            raw = [place_at(i, seg) for i in shot]
+            sampled = [track.times[i] for i in shot]
+            for axis, size, path in ((0, seg.win_w, path_x), (1, seg.win_h, path_y)):
+                steady = apply_deadzone(
+                    moving_average(median_filter([p[axis] for p in raw], BLIP_SAMPLES), window),
+                    size * deadzone_ratio,
+                )
+                path += frame_path(sampled, steady, shot_at, blend=blend)
+        seg.xs = clamp_window(path_x, seg.win_w, info.width)
+        seg.ys = clamp_window(path_y, seg.win_h, info.height)
+        seg.times = at
         seg.times[0] = seg.start  # первая команда — ровно на резе, не позже него
-        seg.xs = clamp_window(xs, seg.win_w, info.width)
-        seg.ys = clamp_window(ys, seg.win_h, info.height)
     return segments
 
 
@@ -916,18 +1089,14 @@ def window_at(seg: Segment, t: float, *, frame_w: int, frame_h: int) -> tuple[in
        было бы неверно: там лежит зажатая клампом позиция, которой в графе нет.
     2. `sendcmd` — ступенька, а не интерполяция: значение держится от своей
        команды до следующей. Поэтому здесь поиск последней команды до `t`, а не
-       линейное смешивание соседних.
+       линейное смешивание соседних. Команды стоят на каждом кадре
+       (`plan_segments`), так что ступенька длиной в кадр — это и есть движение.
     """
     if seg.win_w >= frame_w and seg.win_h >= frame_h:
         return 0, 0, frame_w, frame_h
     if not seg.times:
         return seg.xs[0], seg.ys[0], seg.win_w, seg.win_h
-    i = 0
-    for j, cmd_t in enumerate(seg.times):
-        if cmd_t <= t + 1e-9:
-            i = j
-        else:
-            break
+    i = max(0, bisect_right(seg.times, t + 1e-9) - 1)
     return seg.xs[i], seg.ys[i], seg.win_w, seg.win_h
 
 
@@ -1045,7 +1214,16 @@ def build_sendcmd(
 
     Адрес команды — имя экземпляра фильтра (`crop@c0`), потому что кусков разной
     крупности несколько и каждый живёт в своей ветке графа.
+
+    Время команды округляется ВНИЗ до миллисекунды. Команда срабатывает на
+    первом кадре, чьё время не раньше её начала, а команды теперь покадровые:
+    округление к ближайшему ставило бы каждую третью позже её кадра (2/30 с →
+    «0.067»), и окно на этих кадрах отставало бы на шаг.
     """
+
+    def stamp(t: float) -> str:
+        return f"{math.floor(max(0.0, t) * 1000 + 1e-6) / 1000:.3f}"
+
     lines: list[str] = []
     prev: tuple[int, int] | None = None
     for i, t in enumerate(times):
@@ -1059,7 +1237,7 @@ def build_sendcmd(
         if not static_y:
             cmds.append(f"{target} y {ys[i]}")
         if cmds:
-            lines.append(f"{max(0.0, t):.3f}-{end:.3f} " + ", ".join(cmds) + ";")
+            lines.append(f"{stamp(t)}-{stamp(end)} " + ", ".join(cmds) + ";")
         prev = pair
     return "\n".join(lines) + ("\n" if lines else "")
 
@@ -1146,7 +1324,11 @@ def build_crop_filter(
     def crop_of(i: int, seg: Segment) -> str:
         if seg.win_w >= frame_w and seg.win_h >= frame_h:
             return ""  # окно во весь кадр — резать нечего
-        return f"crop@c{i}=w={seg.win_w}:h={seg.win_h}:x={seg.xs[0]}:y={seg.ys[0]},"
+        # `exact=1`: без него `crop` округляет x и y вниз до чётного (шаг цветности
+        # yuv420p), и медленный проезд шёл бы по два пикселя через кадр.
+        return (
+            f"crop@c{i}=w={seg.win_w}:h={seg.win_h}:x={seg.xs[0]}:y={seg.ys[0]}:exact=1,"
+        )
 
     scale = f"scale={out_w}:{out_h}:flags=lanczos,setsar=1"
     if len(segments) == 1:
@@ -1252,7 +1434,11 @@ def autocrop(
     # сузить (запрещено), ни подвинуть (некуда). Тогда трек нужен только чтобы
     # честно записать в лог, что получилось, — хватит одной пробы в секунду.
     frozen = hi - lo < 1.0 and base_w >= info.width and base_h >= info.height
-    track = track_attention(src, info=info, sample_fps=1.0 if frozen else sample_fps)
+    # Склейки нужны только окну, которое умеет двигаться: застывшему проход по
+    # всем кадрам файла ничего не даст.
+    track = track_attention(
+        src, info=info, sample_fps=1.0 if frozen else sample_fps, find_scene_cuts=not frozen,
+    )
 
     if frozen:
         segments = [Segment(0.0, info.duration, "wide", base_w, base_h, [0.0], [0], [0])]
@@ -1283,7 +1469,10 @@ def autocrop(
         out_w=out_w, out_h=out_h, grade=grade, cmd_file=cmd_file,
     )
     if track_out is not None:
-        out_fps = int(round(info.fps)) if info.fps and info.fps > 0 else cfg.render_fps
+        # Сетка трека — частота ГОТОВОГО ролика, а не этого файла: после кропа
+        # видео доводится до неё (`pipeline/fps.py`), и трек с другой частотой
+        # камера оставила бы без наездов (`camera.shoot`).
+        out_fps = target_fps(info.fps, cfg)
         face_track = project_track(
             track, segments, info=info, fps=out_fps,
             min_cutoff=preset.crop.track_min_cutoff, beta=preset.crop.track_beta,

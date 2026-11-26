@@ -87,8 +87,66 @@ def chunks(total_frames: int, fps: int, workers: int) -> list[Chunk]:
     return [Chunk(a, b - a) for a, b in zip(bounds, bounds[1:]) if b > a]
 
 
+# Память одного куска дорисовки на кадре 1080×1920 (замер на сервере
+# 2026-11-26: 887 МБ у процесса ffmpeg). Шесть кусков по числу ядер — это
+# 5.3 ГБ при лимите воркера 4 ГБ: систему убивал OOM, и ролик не доезжал.
+CHUNK_MEMORY = 900 * 1024 * 1024
+# Доля свободной памяти cgroup, которую можно отдать кускам: остальное — запас
+# на сам воркер, его модель распознавания и кодек.
+MEMORY_SHARE = 0.8
+
+
+def cgroup_budget(
+    proc_cgroup: Path = Path("/proc/self/cgroup"), root: Path = Path("/sys/fs/cgroup"),
+) -> tuple[float | None, int | None]:
+    """Сколько ядер и байт памяти разрешает процессу его cgroup (v2).
+
+    `os.cpu_count()` видит ядра машины, а не квоту службы: на сервере их шесть,
+    а воркеру отданы три (`CPUQuota=300%`) и 4 ГБ (`MemoryMax`). Лимит может
+    стоять на любом уровне выше, поэтому берётся самый тесный по пути к корню.
+    `None` — ограничения нет или cgroup не читается (Windows, macOS, cgroup v1).
+    """
+    try:
+        rel = next(
+            line[3:] for line in proc_cgroup.read_text().splitlines() if line.startswith("0::")
+        )
+    except (OSError, StopIteration):
+        return None, None
+    cpus: float | None = None
+    memory: int | None = None
+    node = root / rel.strip().lstrip("/")
+    while True:
+        try:
+            quota, period = (node / "cpu.max").read_text().split()[:2]
+            if quota != "max" and float(period) > 0:
+                share = float(quota) / float(period)
+                cpus = share if cpus is None else min(cpus, share)
+        except (OSError, ValueError):
+            pass
+        try:
+            limit = (node / "memory.max").read_text().strip()
+            if limit != "max":
+                free = int(limit) - int((node / "memory.current").read_text().strip())
+                memory = free if memory is None else min(memory, free)
+        except (OSError, ValueError):
+            pass
+        if node == root or root not in node.parents:
+            break
+        node = node.parent
+    return cpus, memory
+
+
 def _workers(cfg: Settings) -> int:
-    return cfg.fps_workers if cfg.fps_workers > 0 else max(1, os.cpu_count() or 1)
+    """Сколько кусков дорисовывать разом: не больше ядер и памяти, что нам отданы."""
+    if cfg.fps_workers > 0:
+        return cfg.fps_workers
+    n = max(1, os.cpu_count() or 1)
+    cpus, memory = cgroup_budget()
+    if cpus is not None:
+        n = min(n, max(1, int(cpus)))
+    if memory is not None:
+        n = min(n, max(1, int(memory * MEMORY_SHARE // CHUNK_MEMORY)))
+    return n
 
 
 def _plain(src: Path, dst: Path, info: MediaInfo, fps: int) -> Path:

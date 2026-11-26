@@ -63,7 +63,70 @@ def test_zero_keeps_the_source_rate():
 
 
 def test_sixty_is_the_default():
-    assert cfg().output_fps == 60 and cfg().fps_interpolation == "motion"
+    # Дорисовка по движению в лимиты воркера не помещается (см. config) —
+    # по умолчанию кадры повторяются.
+    assert cfg().output_fps == 60 and cfg().fps_interpolation == "repeat"
+
+
+# ------------------------------------------------------------------ бюджет
+
+
+def fake_cgroup(tmp_path: Path, levels: dict[str, dict[str, str]]) -> tuple[Path, Path]:
+    """Дерево cgroup v2 в папке: {"путь от корня": {"cpu.max": "...", ...}}."""
+    root = tmp_path / "cgroup"
+    deepest = ""
+    for rel, files in levels.items():
+        node = root / rel
+        node.mkdir(parents=True, exist_ok=True)
+        for name, text in files.items():
+            (node / name).write_text(text + "\n")
+        deepest = max(deepest, rel, key=len)
+    proc = tmp_path / "proc-cgroup"
+    proc.write_text(f"0::/{deepest}\n")
+    return proc, root
+
+
+def test_the_budget_is_the_quota_of_the_service_not_the_machine(tmp_path):
+    proc, root = fake_cgroup(tmp_path, {
+        "user/worker": {
+            "cpu.max": "300000 100000",
+            "memory.max": str(4 * 1024**3), "memory.current": str(1 * 1024**3),
+        },
+    })
+    assert fps_mod.cgroup_budget(proc, root) == (3.0, 3 * 1024**3)
+
+
+def test_the_tightest_limit_on_the_way_up_wins(tmp_path):
+    proc, root = fake_cgroup(tmp_path, {
+        "user": {"cpu.max": "200000 100000", "memory.max": "max", "memory.current": "5"},
+        "user/worker": {
+            "cpu.max": "max 100000",
+            "memory.max": str(2 * 1024**3), "memory.current": str(1024**3),
+        },
+    })
+    assert fps_mod.cgroup_budget(proc, root) == (2.0, 1024**3)
+
+
+def test_no_cgroup_means_no_limit(tmp_path):
+    assert fps_mod.cgroup_budget(tmp_path / "нет", tmp_path) == (None, None)
+
+
+@pytest.mark.parametrize("cpus, memory_gb, expected", [
+    (3.0, 3.0, 2),     # сервер: 3 ядра и 3 ГБ свободно — два куска по 0.9 ГБ
+    (3.0, 16.0, 3),    # память есть — упираемся в квоту ядер
+    (None, None, 6),   # ограничений нет — по числу ядер машины
+    (0.5, 0.2, 1),     # меньше одного — всё равно один кусок
+])
+def test_chunks_fit_the_cores_and_memory_given_to_the_worker(monkeypatch, cpus, memory_gb, expected):
+    monkeypatch.setattr(fps_mod.os, "cpu_count", lambda: 6)
+    memory = None if memory_gb is None else int(memory_gb * 1024**3)
+    monkeypatch.setattr(fps_mod, "cgroup_budget", lambda: (cpus, memory))
+    assert fps_mod._workers(cfg()) == expected
+
+
+def test_an_explicit_worker_count_is_taken_as_is(monkeypatch):
+    monkeypatch.setattr(fps_mod, "cgroup_budget", lambda: (1.0, 1))
+    assert fps_mod._workers(cfg(fps_workers=5)) == 5
 
 
 # ------------------------------------------------------------------ куски

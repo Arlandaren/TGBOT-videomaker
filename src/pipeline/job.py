@@ -214,6 +214,7 @@ async def process_video(
     timings: dict[str, float] = {}
     # Рабочую папку удаляет вызывающий (воркер) — здесь только помечаем режим.
     keep = cfg.debug if keep_work is None else keep_work
+    dressing: asyncio.Task[tuple[dict[str, Any] | None, int]] | None = None
 
     def mark(stage: str, t0: float) -> None:
         timings[stage] = round(time.perf_counter() - t0, 2)
@@ -308,39 +309,50 @@ async def process_video(
         #
         # Шаг необязательный, как и раньше: модель недоступна — заголовка нет,
         # титра нет, ролик собирается.
-        t = time.perf_counter()
-        metadata = await make_metadata(
-            asr.text, edl.out_duration, llm=llm, language=asr.language, cfg=cfg
-        )
-        title = (metadata or {}).get("title")
-        if isinstance(title, str) and title.strip():
-            edl.title = title.strip()
-        mark("metadata", t)
-
-        # ---------------------------------------------------------- b-roll
-        broll_used = 0
-        # В «Двух видео» картинок нет вовсе: верхнюю половину пользователь
-        # показал сам, и ИИ ничего в кадр не добавляет (решение владельца).
-        if cfg.broll_enabled and options.broll and top_seconds is None and llm is not None and llm.ready:
-            await _notify(progress, "broll")
+        #
+        # Заголовок, картинки и графика идут В ФОНЕ, пока режутся паузы и
+        # кадрируется видео: это минута-полторы ожидания GPT и генерации
+        # картинок, а нарезке и кропу из них не нужно ничего — они читают
+        # только `edl.cuts`. Ждут их звук (эффекты на вставках, `edl.broll`),
+        # замер яркости и маска (титр, вставки) и план. Порядок внутри цепочки
+        # прежний: графика обходит вставки (`overlay_rules`), значит после них.
+        # Прогресс цепочка не сообщает: полоса шла бы назад от «кадрирую».
+        async def dress() -> tuple[dict[str, Any] | None, int]:
             t = time.perf_counter()
-            try:
-                broll_used = await broll_mod.plan_and_fetch(
-                    edl, src, work / "broll", llm=llm, info=info, cfg=cfg
-                )
-            except Exception as e:  # noqa: BLE001 — b-roll необязателен, ролик важнее
-                log.warning("b-roll пропущен: %s", e)
-            mark("broll", t)
+            metadata = await make_metadata(
+                asr.text, edl.out_duration, llm=llm, language=asr.language, cfg=cfg
+            )
+            title = (metadata or {}).get("title")
+            if isinstance(title, str) and title.strip():
+                edl.title = title.strip()
+            mark("metadata", t)
 
-        # ---------------------------------------------------------- графика
-        # Плашки, стикеры, декор и сцены по субтитрам (`pipeline/visuals.py`).
-        # Модель — своя (GPT, `visuals_llm`), с потолком цены на ролик; нет
-        # ключа или флага — бесплатный расстановщик. Шаг никогда не бросает.
-        # В «Двух видео» графики нет по той же причине, что и картинок.
-        if cfg.visuals_enabled and top_seconds is None:
-            t = time.perf_counter()
-            edl.visuals = await plan_visuals(edl, llm=visuals_llm(cfg), cfg=cfg)
-            mark("visuals", t)
+            # ------------------------------------------------------ b-roll
+            broll_used = 0
+            # В «Двух видео» картинок нет вовсе: верхнюю половину пользователь
+            # показал сам, и ИИ ничего в кадр не добавляет (решение владельца).
+            if cfg.broll_enabled and options.broll and top_seconds is None and llm is not None and llm.ready:
+                t = time.perf_counter()
+                try:
+                    broll_used = await broll_mod.plan_and_fetch(
+                        edl, src, work / "broll", llm=llm, info=info, cfg=cfg
+                    )
+                except Exception as e:  # noqa: BLE001 — b-roll необязателен, ролик важнее
+                    log.warning("b-roll пропущен: %s", e)
+                mark("broll", t)
+
+            # ------------------------------------------------------ графика
+            # Плашки, стикеры, декор и сцены по субтитрам (`pipeline/visuals.py`).
+            # Модель — своя (GPT, `visuals_llm`), с потолком цены на ролик; нет
+            # ключа или флага — бесплатный расстановщик. Шаг никогда не бросает.
+            # В «Двух видео» графики нет по той же причине, что и картинок.
+            if cfg.visuals_enabled and top_seconds is None:
+                t = time.perf_counter()
+                edl.visuals = await plan_visuals(edl, llm=visuals_llm(cfg), cfg=cfg)
+                mark("visuals", t)
+            return metadata, broll_used
+
+        dressing = asyncio.create_task(dress())
 
         # ---------------------------------------------------------- монтаж
         await _notify(progress, "cut")
@@ -357,38 +369,15 @@ async def process_video(
             raise JobError("Нарезка оборвалась — файл повреждён. Пришлите видео ещё раз.", "cut_broken")
         mark("cut", t)
 
-        # ---------------------------------------------------------- звук (Ф2)
-        # Между нарезкой и рендером, на cut.mp4: дорожка обязана лежать на том же
-        # выходном таймлайне, что и план. Кроп длительность не меняет.
-        audio_path: str | None = None
-        audio_report: dict[str, Any] | None = None
-        if cfg.audio_post_enabled:
-            await _notify(progress, "audio")
-            t = time.perf_counter()
-            try:
-                track = await asyncio.to_thread(
-                    build_audio,
-                    edl, cut_path, work / "audio.wav", preset=style,
-                    apply_cuts=cut_pauses, sfx=options.sfx, cfg=cfg,
-                    music_file=Path(music_file) if music_file is not None else None,
-                )
-                if track is not None:
-                    audio_path = str(track.path)
-                    audio_report = {
-                        "music": track.music,
-                        "sfx": track.sfx,
-                        "lufs_in": track.lufs_in,
-                        "target_lufs": track.target_lufs,
-                    }
-            except Exception as e:  # noqa: BLE001 — без звукового поста ролик всё равно едет
-                log.warning("звуковой пост пропущен: %s", e)
-            mark("audio", t)
-
         await _notify(progress, "crop")
         t = time.perf_counter()
         staged = cut_path
         out_duration = edl.out_duration if cut_pauses else info.duration
         if top_seconds is not None:
+            # «Два видео»: картинок и графики тут нет, в фоне только заголовок
+            # (секунды). Дождаться его, чтобы окна блоков считались по
+            # окончательному листу.
+            await dressing
             # Момент раскрытия — по тем же окнам блоков, что поставит план, и
             # в лист: перерендер соберёт ровно эту склейку.
             edl.split_until = choose_split_until(
@@ -426,6 +415,39 @@ async def process_video(
             info=await asyncio.to_thread(probe, staged), work_dir=work, cfg=cfg,
         )
         mark("fps", t)
+
+        # Дальше всё читает лист целиком: заголовок, вставки, графику.
+        t = time.perf_counter()
+        metadata, broll_used = await dressing
+        mark("dress_wait", t)
+
+        # ---------------------------------------------------------- звук (Ф2)
+        # После кропа, но на cut.mp4: дорожка обязана лежать на том же выходном
+        # таймлайне, что и план, а кроп длительность не меняет. Ждёт вставок —
+        # на них ложатся звуковые эффекты. Стадию прогресса не сообщает: после
+        # «кадрирую» полоса пошла бы назад.
+        audio_path: str | None = None
+        audio_report: dict[str, Any] | None = None
+        if cfg.audio_post_enabled:
+            t = time.perf_counter()
+            try:
+                track = await asyncio.to_thread(
+                    build_audio,
+                    edl, cut_path, work / "audio.wav", preset=style,
+                    apply_cuts=cut_pauses, sfx=options.sfx, cfg=cfg,
+                    music_file=Path(music_file) if music_file is not None else None,
+                )
+                if track is not None:
+                    audio_path = str(track.path)
+                    audio_report = {
+                        "music": track.music,
+                        "sfx": track.sfx,
+                        "lufs_in": track.lufs_in,
+                        "target_lufs": track.target_lufs,
+                    }
+            except Exception as e:  # noqa: BLE001 — без звукового поста ролик всё равно едет
+                log.warning("звуковой пост пропущен: %s", e)
+            mark("audio", t)
 
         t = time.perf_counter()
         await asyncio.to_thread(
@@ -516,6 +538,11 @@ async def process_video(
         if keep:
             log.info("DEBUG: рабочая папка оставлена для разбора — %s", work)
         raise
+    finally:
+        # Нарезка или кроп упали (или задачу отменили), а фоновая цепочка ещё
+        # ждёт GPT: зря тратить деньги и держать соединения незачем.
+        if dressing is not None and not dressing.done():
+            dressing.cancel()
 
 
 async def process_from_edl(

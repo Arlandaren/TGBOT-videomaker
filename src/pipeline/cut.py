@@ -13,7 +13,7 @@ from pathlib import Path
 
 from src.core.config import Settings, settings as default_settings
 from src.core.edl import EDL, Cut
-from src.core.proc import ffmpeg
+from src.core.proc import INTERMEDIATE_PRESET, ffmpeg
 from src.pipeline.audio import loudnorm_filter, measure_loudness
 from src.pipeline.probe import MediaInfo, probe
 
@@ -72,7 +72,7 @@ def apply_cuts(
     info: MediaInfo | None = None,
     normalize_audio: bool = True,
     crf: int = 18,
-    preset_speed: str = "medium",
+    preset_speed: str = INTERMEDIATE_PRESET,
     cfg: Settings | None = None,
 ) -> Path:
     """Исходник + EDL → видео без пауз. Возвращает путь к результату."""

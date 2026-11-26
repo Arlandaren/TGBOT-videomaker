@@ -114,6 +114,14 @@ def _ffmpeg_cmd(args: list[str]) -> list[str]:
     return [*base, *args]
 
 
+# Пресет x264 для ПРОМЕЖУТОЧНЫХ файлов (нарезка, кроп, «Два видео», 60 к/с):
+# рендер их всё равно пережимает, поэтому сжатие тут не нужно, а время — да.
+# Замер на сервере (ролик 52 с, 4K → 1080×1920): кодирование кропа на medium
+# шло 3.5 мин из 20 на весь монтаж. При том же crf картинка та же, файл
+# крупнее — он живёт в рабочей папке до конца задачи.
+INTERMEDIATE_PRESET = "veryfast"
+
+
 def ffmpeg(args: list[str], *, timeout: float | None = None) -> str:
     return run(_ffmpeg_cmd(args), timeout=timeout)
 

@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Callable, Sequence
 
 from src.core.config import Settings, settings as default_settings
-from src.core.proc import ffmpeg, run
+from src.core.proc import INTERMEDIATE_PRESET, ffmpeg, run
 from src.pipeline.crop import autocrop
 from src.pipeline.probe import PROBE_TIMEOUT, probe
 
@@ -105,7 +105,7 @@ def top_window(
     )
     ffmpeg(
         ["-i", str(src), "-an", "-vf", vf, "-t", f"{duration:.3f}",
-         "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
+         "-c:v", "libx264", "-preset", INTERMEDIATE_PRESET, "-crf", "18", "-pix_fmt", "yuv420p",
          "-movflags", "+faststart", str(dst)],
         timeout=3600,
     )
@@ -174,7 +174,7 @@ def stage_split(
     ffmpeg(
         [*inputs, "-filter_complex", fc, "-map", "[v]", "-map", f"{audio_input}:a?",
          "-t", f"{out_duration:.3f}", "-r", str(fps),
-         "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
+         "-c:v", "libx264", "-preset", INTERMEDIATE_PRESET, "-crf", "18", "-pix_fmt", "yuv420p",
          "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
          "-movflags", "+faststart", str(dst)],
         timeout=7200,

@@ -92,7 +92,7 @@ from src.core.framing import (  # noqa: F401 — крупность считае
     normalize_spans,
 )
 from src.core.preset import Crop, Grade, Preset, load_preset
-from src.core.proc import deadline, ffmpeg
+from src.core.proc import INTERMEDIATE_PRESET, deadline, ffmpeg
 from src.pipeline.fps import target_fps
 from src.core.track import (
     MISSING_CONF,
@@ -1500,7 +1500,7 @@ def autocrop(
     args = ["-i", str(src), "-filter_complex", vf, "-map", "[vout]"]
     if info.has_audio:
         args += ["-map", "0:a?", "-c:a", "copy"]
-    args += ["-c:v", "libx264", "-preset", "medium", "-crf", str(crf),
+    args += ["-c:v", "libx264", "-preset", INTERMEDIATE_PRESET, "-crf", str(crf),
              "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(dst)]
     ffmpeg(args, timeout=7200)
     return dst

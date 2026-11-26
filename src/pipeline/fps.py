@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.core.config import Settings, settings as default_settings
-from src.core.proc import ffmpeg
+from src.core.proc import INTERMEDIATE_PRESET, ffmpeg
 from src.pipeline import probe as probe_mod
 from src.pipeline.probe import MediaInfo
 
@@ -48,7 +48,7 @@ CHUNK_TAIL = 0.2
 # Промежуточный файл: рендер его всё равно пережмёт, поэтому кодек быстрый, а
 # качество как у нарезки (`cut.py`). Ниже crf не берётся: на сервере тесно с
 # диском, а файл вдвое длиннее по кадрам.
-X264 = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p"]
+X264 = ["-c:v", "libx264", "-preset", INTERMEDIATE_PRESET, "-crf", "18", "-pix_fmt", "yuv420p"]
 # Блоки 16 px, двунаправленный поиск, перекрытие блоков с адаптацией: так у
 # движущейся руки нет «сетки» на краях. Склейку ловит scd.
 MOTION = "mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=fdiff"

@@ -320,6 +320,74 @@ async def test_split_job_skips_broll_and_stages_two_videos(harness, monkeypatch)
     assert seen["top_video_seconds"] is False, "замер верхнего видео занимает event loop"
 
 
+async def test_pictures_are_fetched_while_the_video_is_cut_and_cropped(harness, monkeypatch):
+    """GPT и генерация картинок (минута-полторы) идут одновременно с нарезкой
+    и кропом, а не перед ними. Подбор картинок здесь ждёт, пока кроп
+    начнётся: при прежнем порядке «картинки, потом нарезка» задача повисла бы."""
+    import threading
+
+    from src.pipeline.job import process_video
+
+    src, work, seen = harness
+    cropping = threading.Event()
+    order: list[str] = []
+
+    async def slow_broll(edl, *a, **k):
+        order.append("broll:start")
+        assert await asyncio.to_thread(cropping.wait, 5), "кроп не начался, пока подбирались картинки"
+        order.append("broll:end")
+        return 0
+
+    def fake_autocrop(s, d, **k):
+        order.append("autocrop")
+        cropping.set()
+        shutil.copy2(s, d)
+        return d
+
+    def fake_audio(edl, *a, **k):
+        order.append("audio")
+
+    monkeypatch.setattr("src.pipeline.job.broll_mod.plan_and_fetch", slow_broll)
+    monkeypatch.setattr("src.pipeline.job.autocrop", fake_autocrop)
+    monkeypatch.setattr("src.pipeline.job.build_audio", fake_audio)
+    cfg = Settings(_env_file=None, audio_post_enabled=True, asr_fix_by_audio=False, broll_enabled=True)
+
+    await process_video(src, work, preset="pulse", cfg=cfg, llm=ReadyLLM())
+
+    assert order.index("autocrop") < order.index("broll:end")
+    # Звук ставит эффекты на вставки — он обязан увидеть их готовыми.
+    assert order.index("broll:end") < order.index("audio")
+
+
+async def test_a_failed_cut_stops_the_background_gpt_chain(harness, monkeypatch):
+    from src.pipeline.job import JobError, process_video
+
+    src, work, seen = harness
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def endless_broll(edl, *a, **k):
+        started.set()
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        return 0
+
+    def broken_cut(e, s, d, **k):
+        raise RuntimeError("ffmpeg упал")
+
+    monkeypatch.setattr("src.pipeline.job.broll_mod.plan_and_fetch", endless_broll)
+    monkeypatch.setattr("src.pipeline.job.apply_cuts", broken_cut)
+    cfg = Settings(_env_file=None, audio_post_enabled=False, asr_fix_by_audio=False, broll_enabled=True)
+
+    with pytest.raises((RuntimeError, JobError)):
+        await process_video(src, work, preset="pulse", cfg=cfg, llm=ReadyLLM())
+    await asyncio.wait_for(cancelled.wait(), 2)
+    assert started.is_set()
+
+
 async def test_a_job_without_top_is_built_as_before(harness, monkeypatch):
     from src.pipeline.job import process_video
 

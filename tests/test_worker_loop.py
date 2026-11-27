@@ -958,3 +958,48 @@ async def test_the_rerender_repeats_the_switches_of_the_job(tmp_path, monkeypatc
     assert got["crop"]["cfg"].crop_follow is False and got["crop"]["cfg"].output_fps == 0
     assert got["crop"]["preset"].grade.enabled is False
     assert tasks.settings.voice_studio and tasks.settings.crop_follow, "настройки сервера не тронуты"
+
+async def test_background_music_is_picked_only_when_asked_and_only_without_own_track(
+    harness, monkeypatch, tmp_path
+):
+    """Галочка «Фоновая музыка»: трек библиотеки ложится в лист — оттуда его берут
+    сведение и перерендер. Без галочки подбор не зовётся, а свой трек человека
+    («Музыка по ссылке») главнее подобранного."""
+    from src.core.edl import Music
+    from src.core.options import JobOptions
+    from src.pipeline.job import process_video
+    from src.pipeline.music import Track
+
+    src, work, seen = harness
+    calls: list[str] = []
+    mixes: list[dict] = []
+
+    async def fake_pick(text, duration, **k):
+        calls.append(text)
+        return Track(key="calm-01", file="calm-01.m4a", mood="спокойный", license="cc0")
+
+    def fake_audio(edl, *a, **k):
+        mixes.append({"music": edl.music, "music_file": k.get("music_file")})
+
+    monkeypatch.setattr("src.pipeline.job.pick_music", fake_pick)
+    monkeypatch.setattr("src.pipeline.job.build_audio", fake_audio)
+    monkeypatch.setattr("src.pipeline.job._measure_behind", lambda *a, **k: None)
+    cfg = Settings(_env_file=None, asr_fix_by_audio=False, visuals_enabled=False)
+
+    await process_video(src, work, preset="pulse", cfg=cfg, options=JobOptions())
+    assert calls == [] and mixes[-1]["music"] is None, "без галочки музыки нет"
+
+    await process_video(src, tmp_path / "w2", preset="pulse", cfg=cfg, options=JobOptions(music=True))
+    assert len(calls) == 1
+    spec = mixes[-1]["music"]
+    assert isinstance(spec, Music) and (spec.source, spec.track) == ("asset", "calm-01.m4a")
+    assert spec.gain_db == -14.0, "на 14 LU под голосом темы (цель −16)"
+
+    own = tmp_path / "own.m4a"
+    own.write_bytes(b"\0")
+    await process_video(
+        src, tmp_path / "w3", preset="pulse", cfg=cfg, options=JobOptions(music=True),
+        music_file=own,
+    )
+    assert len(calls) == 1, "свой трек главнее — подбор не зовётся"
+    assert mixes[-1]["music_file"] == own

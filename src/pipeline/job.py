@@ -32,6 +32,7 @@ from src.pipeline.fps import to_output_fps
 from src.pipeline.cut import apply_cuts
 from src.pipeline.director import clean_transcript, direct, make_metadata, voice_clip
 from src.pipeline.luma import measure_bg_luma
+from src.pipeline.music import music_spec, pick_music
 from src.pipeline.probe import MediaInfo, is_playable, probe
 from src.pipeline.render import arender_remotion, render_ass
 from src.pipeline.split import choose_split_until, stage_split, top_video_seconds
@@ -336,6 +337,20 @@ async def process_video(
             if options.title and isinstance(title, str) and title.strip():
                 edl.title = title.strip()
             mark("metadata", t)
+
+            # ------------------------------------------------------ музыка
+            # Галочка «Фоновая музыка»: модель выбирает трек библиотеки под
+            # смысл речи (`pipeline/music.py`), выбор ложится в лист — сведение
+            # и перерендер берут его оттуда. Свой трек человека («Музыка по
+            # ссылке») главнее: с ним подбор не запускается вовсе.
+            if options.music and music_file is None and cfg.audio_post_enabled:
+                t = time.perf_counter()
+                track = await pick_music(
+                    asr.text, edl.out_duration, llm=llm, language=asr.language, cfg=cfg
+                )
+                if track is not None:
+                    edl.music = music_spec(track, target_lufs=style.audio.target_lufs)
+                mark("music", t)
 
             # ------------------------------------------------------ b-roll
             broll_used = 0

@@ -316,12 +316,38 @@ IMAGE_CHECK_SCHEMA: dict[str, Any] = {
     },
 }
 
+# ------------------------------------------------------------------ pick_music
+
+# Выбор фоновой музыки (`pipeline/music.py`). Модель называет треки ТОЛЬКО
+# ключами из показанной ей таблицы библиотеки — до трёх, лучший первым. Имён
+# файлов и ссылок она не видит и не пишет: найти трек «в интернете» она не
+# может, а выдуманное имя программа всё равно отбросит. Пустой список — ответ
+# «этому ролику музыка не нужна» (соболезнование, инструкция с замерами на слух).
+MUSIC_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["mood", "tracks"],
+    "properties": {
+        "mood": {
+            "type": "string",
+            "maxLength": 60,
+            "description": "Настроение ролика двумя-тремя словами — для журнала.",
+        },
+        "tracks": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {"type": "string", "maxLength": 40},
+        },
+    },
+}
+
 SCHEMAS: dict[str, dict[str, Any]] = {
     "direct": DIRECT_SCHEMA,
     "clean_transcript": CLEAN_SCHEMA,
     "plan_broll": BROLL_SCHEMA,
     "check_image": IMAGE_CHECK_SCHEMA,
     "metadata": METADATA_SCHEMA,
+    "pick_music": MUSIC_SCHEMA,
 }
 
 # Тир на вызов (§4). Меняется здесь, а не в вызывающем коде.
@@ -331,4 +357,5 @@ TIERS: dict[str, str] = {
     "plan_broll": "vision",
     "check_image": "vision",
     "metadata": "cheap",
+    "pick_music": "cheap",
 }

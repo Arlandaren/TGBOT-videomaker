@@ -35,6 +35,15 @@ def test_the_new_switches_are_on_for_a_job_that_never_heard_of_them():
     assert all(getattr(JobOptions.for_new_job({}), name) is True for name in NEW_SWITCHES)
 
 
+def test_background_music_is_the_only_switch_that_starts_off():
+    """Музыка меняет ролик сильнее остальных переключателей и без спроса в нём не
+    появляется: ни в новом ролике, ни в задаче, сохранённой до её появления."""
+    assert JobOptions.from_stored(None).music is False
+    assert JobOptions.for_new_job({}).music is False
+    assert JobOptions.for_new_job({"music": True}).music is True
+    assert "music" in REMEMBERED
+
+
 def test_default_options_leave_the_server_settings_alone():
     """Ничего не выключено — настройки тот же объект, а не копия: этапы обязаны
     видеть ровно то, что задано на сервере."""
@@ -77,11 +86,22 @@ def test_a_switch_never_turns_on_what_the_server_turned_off():
     assert not (got.voice_studio or got.crop_follow) and got.output_fps == 0
 
 
-def test_the_app_is_offered_only_the_switches_that_change_something():
+def test_the_app_is_offered_only_the_switches_that_change_something(tmp_path):
     """Сервер, где приём выключен, не показывает его галочку: включить его
     роликом нельзя, и галочка не меняла бы ничего. Так на проде с 60 кадрами:
     там `OUTPUT_FPS=0`."""
-    base = {"_env_file": None, "openai_api_key": "k", "llm_provider": "openai", "output_fps": 60}
+    # Библиотека музыки — своя, из одного трека: галочка «Фоновая музыка» видна,
+    # только когда подбирать есть из чего, а что лежит в репозитории, тесту не важно.
+    import json
+
+    music = tmp_path / "music"
+    music.mkdir()
+    (music / "calm-01.m4a").write_bytes(b"\0")
+    (music / "catalog.json").write_text(json.dumps([{
+        "key": "calm-01", "file": "calm-01.m4a", "mood": "спокойный", "license": "cc0",
+    }]), encoding="utf-8")
+    base = {"_env_file": None, "openai_api_key": "k", "llm_provider": "openai", "output_fps": 60,
+            "music_dir": music}
     assert available_switches(Settings(**base)) == list(REMEMBERED)
 
     def missing(**kw) -> set[str]:
@@ -94,7 +114,8 @@ def test_the_app_is_offered_only_the_switches_that_change_something():
     assert missing(progress_bar=False) == {"progress"}
     assert missing(crop_follow=False) == {"tracking"}
     assert missing(broll_enabled=False) == {"broll"}
-    assert missing(audio_post_enabled=False) == {"sfx", "studio"}
+    assert missing(audio_post_enabled=False) == {"sfx", "studio", "music"}
+    assert missing(music_dir=tmp_path / "пусто") == {"music"}, "библиотека пуста — подбирать нечего"
     assert missing(voice_studio=False) == set(), "без студийных звеньев галочка ещё снимает чистку"
     assert missing(voice_studio=False, voice_denoise_db=0, voice_highpass_hz=0) == {"studio"}
     assert missing(render_backend="ass") == {"transitions", "visuals", "progress"}

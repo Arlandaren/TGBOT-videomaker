@@ -208,6 +208,11 @@ class JobOptions(BaseModel):
     progress: bool = Field(default=True, description="полоса прогресса сверху")
     grade: bool = Field(default=True, description="цветокоррекция темы")
     smooth: bool = Field(default=True, description="ролик в 60 кадров в секунду")
+    # Фоновая музыка по смыслу ролика (`pipeline/music.py`). Единственный
+    # переключатель с умолчанием «выключено»: музыка меняет ролик сильнее всех
+    # остальных, и появляться в нём без спроса не должна. Свой трек по ссылке
+    # главнее подобранного.
+    music: bool = Field(default=False, description="фоновая музыка, подобранная под смысл ролика")
 
     @field_validator("accent")
     @classmethod
@@ -255,7 +260,15 @@ class JobOptions(BaseModel):
 REMEMBERED: tuple[str, ...] = (
     "sfx", "broll", "camera",
     "studio", "tracking", "transitions", "visuals", "title", "progress", "grade", "smooth",
+    "music",
 )
+
+
+def _has_music(cfg: Any) -> bool:
+    """Есть ли что ставить фоном. Импорт здесь: каталог читает этап пайплайна."""
+    from src.pipeline.music import load_catalog
+
+    return bool(load_catalog(cfg))
 
 
 def available_switches(cfg: Any) -> list[str]:
@@ -281,6 +294,8 @@ def available_switches(cfg: Any) -> list[str]:
         "progress": cfg.progress_bar and drawn,
         "grade": True,
         "smooth": cfg.output_fps > 0,
+        # Подбирать не из чего, пока в библиотеке нет ни одного разрешённого трека.
+        "music": cfg.audio_post_enabled and _has_music(cfg),
     }
     return [name for name in REMEMBERED if works[name]]
 

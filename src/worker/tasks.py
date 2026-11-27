@@ -122,6 +122,77 @@ async def heartbeat(redis: Any, job_id: str) -> AsyncIterator[None]:
                 await redis.delete(key)
 
 
+async def source_job(job: Any) -> Any:
+    """Задача, у которой лежат файлы исходника.
+
+    У версии из редактора сцен и у обложки своих файлов нет: они собираются из
+    исходника ТОЙ задачи, от которой сделаны (`Job.root_id`). У обычного ролика
+    это он сам.
+    """
+    root_id = getattr(job, "root_id", None)
+    if not root_id:
+        return job
+    origin = await repo.get_job(root_id)
+    if origin is None or origin.files_purged_at is not None:
+        raise JobError("Исходный файл потерялся. Пришлите видео ещё раз.", "source_lost")
+    return origin
+
+
+async def build_version(
+    job: Any, src_path: Path, work: Path, options: JobOptions,
+    top_path: Path | None, music_path: Path | None, publish: Any,
+) -> Any:
+    """Версия ролика из редактора сцен: правленый лист задачи → ролик."""
+    from src.core.edl import EDL
+    from src.pipeline.reedit import render_edit, stage_pictures
+
+    if not job.edl:
+        raise JobError("Монтажный лист не сохранился — пересобрать нечем.", "edl_missing")
+    edl = EDL(**job.edl)
+    edl.preset = job.preset
+    await stage_pictures(edl, work, storage.download)
+    return await render_edit(
+        edl, src_path, work,
+        options=options, cut_pauses=options.cut, cfg=settings,
+        top_path=top_path, music_file=music_path, progress=publish,
+    )
+
+
+async def build_cover(job: Any, work: Path, publish: Any) -> str:
+    """Обложка для ролика: кадр исходника (или фото человека) + надпись в стиле.
+
+    Задача обложки (`Job.kind == "cover"`) несёт заказ в `options["cover"]`:
+    стиль, текст и, если человек прислал своё фото, ключ файла. Возвращает ключ
+    готовой картинки в хранилище.
+    """
+    from src.pipeline.cover import CoverError, make_cover
+
+    spec = (job.options or {}).get("cover") or {}
+    await publish("Скачиваю файл", 0.05, "download")
+    if spec.get("photo_key"):
+        src = work / "photo.jpg"
+        await storage.download(spec["photo_key"], src)
+    else:
+        origin = await source_job(job)
+        src = await fetch_source(origin, work / "source.mp4")
+        if getattr(origin, "source_parts", None):
+            src = await join_source_parts(origin, src, work)
+    await publish("Рисую обложку", 0.4, "cover")
+    out = work / "cover.jpg"
+    try:
+        await asyncio.to_thread(
+            make_cover, src, out,
+            text=str(spec.get("text") or ""), style=str(spec.get("style") or ""),
+            from_video=not spec.get("photo_key"),
+        )
+    except CoverError as e:
+        raise JobError(str(e), "cover_failed")
+    await publish("Загружаю результат", 0.95, "upload")
+    key = storage.key_for(RESULTS, str(job.id), "cover.jpg")
+    await storage.upload(out, key, content_type="image/jpeg")
+    return key
+
+
 async def fetch_source(job: Any, dst: Path) -> Path:
     """Кладёт исходник джоба в `dst`, откуда бы он ни был доступен.
 
@@ -259,27 +330,48 @@ async def process_job(ctx: dict[str, Any], job_id: str) -> dict[str, Any]:
         # Пульс — вокруг всей работы: пока он есть, сторож зависших задач знает,
         # что воркер жив, и не трогает задачу, сколько бы она ни шла.
         async with heartbeat(redis, str(job.id)):
+            if getattr(job, "kind", "video") == "cover":
+                # Обложка — та же задача по жизненному циклу (полоса, возврат
+                # токенов, доставка в чат), но без монтажа.
+                result_key = await build_cover(job, work, publish)
+                await repo.mark_done(job.id, result_key=result_key, stage="done")
+                await redis.set(
+                    progress_key(str(job.id)),
+                    json.dumps({"stage": "done", "progress": 1.0, "result_key": result_key}),
+                    ex=PROGRESS_TTL,
+                )
+                return {"job_id": str(job.id), "result_key": result_key, "kind": "cover"}
+
+            # Файлы исходника — у самой задачи, а у версии из редактора — у
+            # той, от которой она сделана.
+            edited = bool(getattr(job, "root_id", None))
+            origin = await source_job(job)
             await publish("Скачиваю файл", 0.01, "download")
-            src_path = await fetch_source(job, work / "source.mp4")
-            if getattr(job, "source_parts", None):
+            src_path = await fetch_source(origin, work / "source.mp4")
+            if getattr(origin, "source_parts", None):
                 await publish("Склеиваю видео", 0.02, "join")
-                src_path = await join_source_parts(job, src_path, work)
-            top_path = await fetch_top_source(job, work / "top.mp4")
-            music_path = await fetch_music(job, work)
+                src_path = await join_source_parts(origin, src_path, work)
+            top_path = await fetch_top_source(origin, work / "top.mp4")
+            music_path = await fetch_music(origin, work)
 
             options = JobOptions.from_stored(job.options)
-            result = await process_video(
-                src_path,
-                work,
-                preset=job.preset,
-                llm=llm,
-                progress=publish,
-                cut_pauses=options.cut,
-                cfg=settings,
-                options=options,
-                top_src=top_path,
-                music_file=music_path,
-            )
+            if edited:
+                result = await build_version(
+                    job, src_path, work, options, top_path, music_path, publish
+                )
+            else:
+                result = await process_video(
+                    src_path,
+                    work,
+                    preset=job.preset,
+                    llm=llm,
+                    progress=publish,
+                    cut_pauses=options.cut,
+                    cfg=settings,
+                    options=options,
+                    top_src=top_path,
+                    music_file=music_path,
+                )
 
             await publish("Загружаю результат", 0.99, "upload")
             result_key = storage.key_for(RESULTS, str(job.id), "result.mp4")
@@ -300,7 +392,9 @@ async def process_job(ctx: dict[str, Any], job_id: str) -> dict[str, Any]:
                 cost_usd=llm.total_cost(),
                 stage="done",
             )
-            await repo.bump_videos_done(job.user_id)
+            if not edited:
+                # Версия — тот же ролик с правками, а не ещё один смонтированный.
+                await repo.bump_videos_done(job.user_id)
             await redis.set(
                 progress_key(str(job.id)),
                 json.dumps({"stage": "done", "progress": 1.0, "result_key": result_key}),
@@ -379,6 +473,7 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
     from src.pipeline.cut import apply_cuts
     from src.pipeline.job import _measure_behind, _measure_luma
     from src.pipeline.probe import probe
+    from src.pipeline.reedit import stage_pictures
     from src.pipeline.render import arender_remotion, render_ass
     from src.pipeline.split import stage_split
 
@@ -394,9 +489,14 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
         if not job.edl:
             raise JobError("Монтажный лист не сохранился — пересобрать нечем.", "edl_missing")
         work.mkdir(parents=True, exist_ok=True)
-        src_path = await fetch_source(job, work / "source.mp4")
+        # У версии из редактора сцен исходник лежит у исходной задачи.
+        origin = await source_job(job)
+        src_path = await fetch_source(origin, work / "source.mp4")
         edl = EDL(**job.edl)
         edl.preset = preset
+        # Свои картинки версии скачиваются заново, а вставка, файла которой в
+        # кеше уже нет, выпадает — иначе рендер падал бы на пустом пути.
+        await stage_pictures(edl, work, storage.download)
 
         # Тяжёлое — в рабочий поток, по той же причине, что и в `process_video`:
         # loop обязан дышать, иначе воркер не слышит SIGTERM от выкладки.
@@ -438,7 +538,7 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
                     build_audio,
                     edl, cut_path, work / "audio.wav", preset=style,
                     apply_cuts=options.cut, sfx=options.sfx, cfg=cfg,
-                    music_file=await fetch_music(job, work),
+                    music_file=await fetch_music(origin, work),
                 )
                 if track is not None:
                     audio_path = str(track.path)
@@ -452,7 +552,7 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
         if edl.split_until is not None:
             # «Два видео»: момент раскрытия — из листа, не заново. Пересчёт по
             # окнам новой темы дал бы другую склейку из того же листа.
-            top_path = await fetch_top_source(job, work / "top.mp4")
+            top_path = await fetch_top_source(origin, work / "top.mp4")
             vertical = await asyncio.to_thread(
                 stage_split,
                 cut_path, top_path, work / "vertical.mp4",

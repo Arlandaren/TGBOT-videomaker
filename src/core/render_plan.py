@@ -335,6 +335,10 @@ class RenderPlan:
         }
 
 
+# Во сколько раз кегль сцены отличается от кегля темы (`CaptionBlock.size`).
+BLOCK_SIZE_SCALE = {"s": 0.8, "m": 1.0, "l": 1.22}
+
+
 def _rect_from(data: dict[str, Any] | None) -> Rect | None:
     """План без прямоугольников (старый или от чужого инструмента) читается как есть."""
     return Rect.from_dict(data) if data else None
@@ -1035,6 +1039,13 @@ def build_plan(
                         pr.geometry.max_line_width_ratio,
                         max(0.2, (caption_text_width(pr, width) - icon_room) / width),
                     )
+                # Размер текста сцены из редактора (`CaptionBlock.size`): тот же
+                # регистр с другим кеглем. Перенос, ужатие и коробка блока дальше
+                # считаются от него, как от кегля темы.
+                grow = BLOCK_SIZE_SCALE.get(getattr(block, "size", "m"), 1.0)
+                if grow != 1.0:
+                    pr = pr.model_copy(deep=True)
+                    pr.font.size = max(12, round(pr.font.size * grow))
                 # Свои слова на каждый регистр, а не общие. Два повода: кегль
                 # `wrap_block` проставляет словам НА МЕСТЕ (он же им мерил
                 # строку), и у тихого блока выделения нет вовсе — ни золота, ни

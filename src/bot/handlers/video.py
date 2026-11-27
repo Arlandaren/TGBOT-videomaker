@@ -210,8 +210,31 @@ def watch_job(bot: Bot, chat_id: int, message_id: int, job_id: str, preset: str)
     asyncio.create_task(_watch(bot, chat_id, message_id, job_id, preset))
 
 
+async def _send_cover(bot: Bot, chat_id: int, job, lang: str | None, *, tag: str) -> None:
+    """Обложка уходит ФАЙЛОМ: фото Telegram пережал бы до 1280 px, а обложке
+    нужны её 1080×1920. Предпросмотр у файла-картинки в чате всё равно есть."""
+    dst = Path(settings.work_dir) / f"{tag}-{job.id}.jpg"
+    try:
+        await storage.download(job.result_key, dst)
+        await bot.send_document(
+            chat_id=chat_id,
+            document=FSInputFile(dst, filename="cover.jpg"),
+            caption=t("cover.caption", lang),
+        )
+    finally:
+        dst.unlink(missing_ok=True)
+
+
+def _is_cover(job) -> bool:
+    return getattr(job, "kind", "video") == "cover"
+
+
 async def send_result(bot: Bot, chat_id: int, job) -> None:
     """Прислать готовый ролик в чат ещё раз — по кнопке в приложении."""
+    if _is_cover(job):
+        await _send_cover(bot, chat_id, job, await _lang_for_job(str(job.id)), tag="resend")
+        await repo.mark_delivered(job.id)
+        return
     dst = Path(settings.work_dir) / f"resend-{job.id}.mp4"
     try:
         await storage.download(job.result_key, dst)
@@ -455,6 +478,16 @@ async def _deliver(bot: Bot, chat_id: int, message_id: int, job_id: str, preset:
         await _safe_edit(bot, chat_id, message_id, t("video.result_lost", lang))
         return
 
+    if _is_cover(job):
+        try:
+            await _send_cover(bot, chat_id, job, lang, tag="deliver")
+            await repo.mark_delivered(job_id)
+            await _safe_edit(bot, chat_id, message_id, t("video.done", lang))
+        except Exception:  # noqa: BLE001
+            log.exception("не отдал обложку")
+            await _safe_edit(bot, chat_id, message_id, t("video.not_sent", lang))
+        return
+
     dst = Path(settings.work_dir) / f"deliver-{job_id}.mp4"
     try:
         await storage.download(job.result_key, dst)
@@ -486,6 +519,10 @@ def _caption(job, lang: str | None = None) -> str:
             parts.append(t("video.caption_saved", lang, n=f"{saved:.0f}"))
     parts.append(t("video.caption_style", lang, preset=theme_label(job.preset, lang, job.preset)))
     text = " · ".join(parts)
+    # Версия из редактора сцен называет себя первой строкой.
+    version = int(getattr(job, "version", None) or 1)
+    if version > 1:
+        text = t("video.version_ready", lang, n=version) + "\n" + text
     if music_lost(job):
         text += "\n" + t("video.caption_music_lost", lang)
     return text + "\n" + t("video.caption_rebuild", lang)

@@ -56,11 +56,19 @@ def result_keyboard(job_id: str, current: str, lang: str | None = None) -> Inlin
     (`video.caption_rebuild`), и говорит один раз.
     """
     kb = InlineKeyboardBuilder()
+    # «Редактировать» — первой строкой, во всю ширину: открывает ролик в
+    # редакторе сцен приложения. Без адреса приложения кнопки нет.
+    edit = f"{_webapp_url}/?screen=editor&job={job_id}" if _webapp_url else None
+    if edit:
+        kb.button(text=t("btn.edit", lang), web_app=WebAppInfo(url=edit))
     for name, title in _titles(lang):
         if name == current:
             continue
         kb.button(text=title, callback_data=f"rerender:{job_id}:{name}")
-    kb.adjust(3)
+    if edit:
+        kb.adjust(1, 3)
+    else:
+        kb.adjust(3)
     return kb.as_markup()
 
 

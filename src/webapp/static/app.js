@@ -46,7 +46,7 @@ const I18N = {
     "opt.studio": "Студийный звук", "opt.tracking": "Слежение за головой", "opt.transitions": "Переходы",
     "opt.grade": "Цветокоррекция", "opt.smooth": "Плавность 60 к/с", "opt.visuals": "Графика и стикеры",
     "opt.title": "Заголовок в начале", "opt.progress": "Полоса прогресса", "opt.music": "Фоновая музыка",
-    "help.music": ["Фоновая музыка", "ИИ подбирает спокойный трек под смысл ролика и тихо кладёт его под голос. Если вы вставили свою музыку по ссылке, играет она."],
+    "help.music": ["Фоновая музыка", "ИИ подбирает подходящий трек под смысл ролика и тихо кладёт его под голос. Если вы вставили свою музыку по ссылке, играет она."],
     "help.cut": ["Нарезка", "Вырезаем затяжные паузы дольше 1.2 секунды и долгие «эээ». Обычные вдохи и слова-паразиты остаются — так речь звучит естественно."],
     "help.sfx": ["Звуковые эффекты", "«Whoosh» на появлении медиа-карточки, при смене крупности и на въезде кадра сбоку. Громкость голоса выравнивается в любом случае."],
     "help.studio": ["Студийный звук", "Убираем гул и шипение, приглушаем свистящие, добавляем голосу разборчивости и плотности. Выключите, если хотите оставить звук как записан, — тогда выровняем только громкость."],
@@ -85,13 +85,40 @@ const I18N = {
     "balance.note": "Один ролик — {c}. Если монтаж не получится, токены вернутся на баланс.",
     "balance.note_admin": "Вы владелец бота: монтаж бесплатный, баланс не списывается.",
     "status.queued": "в очереди", "status.running": "монтируется", "status.done": "готов", "status.failed": "не получилось", "status.cancelled": "отменён",
-    "jobs.all": "Все", "jobs.done": "Готовые", "jobs.active": "В работе",
+    "jobs.all": "Все",
     "jobs.empty": "Роликов пока нет", "jobs.empty_hint": "Загрузите видео — готовый ролик придёт в чат и появится здесь.",
     "jobs.empty_filter": "Здесь пока пусто",
     "jobs.to_edit": "К монтажу", "jobs.reel": "Монтаж", "jobs.refunded": "Токены вернулись на баланс.",
     "jobs.keep": "хранится до {d}", "jobs.purged_short": "удалён с сервера",
     "jobs.purged": "Удалён с сервера по сроку хранения. В чате ролик остался.",
     "jobs.send": "Прислать в чат", "jobs.sent": "Отправил в чат.", "jobs.not_sent": "Не отправилось",
+    "nav.editor": "Редактирование", "ed.build": "Собрать", "ed.scene_of": "Сцена {n} из {m}", "ed.general": "Общие",
+    "ed.text_scene": "Текст сцены", "ed.picture": "Картинка", "ed.on_picture": "На картинке: «{w}»", "ed.own_picture": "Своё фото",
+    "ed.cut_words": "Вырезать слова", "ed.cut_n": "вырезано: {n}", "ed.media": "Фото",
+    "ed.media_pic": "картинка", "ed.media_own": "своё фото",
+    "ed.position": "Расположение текста", "ed.size": "Размер текста",
+    "ed.pos.auto": "Как в ролике", "ed.pos.top": "Сверху", "ed.pos.center": "По центру", "ed.pos.bottom": "Снизу",
+    "ed.size.s": "Маленький", "ed.size.m": "Средний", "ed.size.l": "Крупный",
+    "ed.save": "Сохранить", "ed.done": "Готово", "ed.no_text": "Без текста", "ed.no_scenes": "В этом ролике нет сцен с текстом",
+    "ed.cut_hint": "Нажмите на слова, которые нужно убрать из ролика — и из кадра, и из звука.",
+    "ed.upload": "Загрузить фото", "ed.uploading": "Загружаю фото…", "ed.remove_pic": "Убрать картинку",
+    "ed.media_hint": "Фото появится карточкой поверх видео, пока звучит эта сцена.",
+    "ed.title": "Заголовок в начале", "ed.sound": "Звук", "ed.undo": "Отменить", "ed.redo": "Вернуть",
+    "ed.confirm": "Собрать новую версию ролика? Спишется {c}.", "ed.confirm_free": "Собрать новую версию ролика?",
+    "ed.started": "Собираю версию {n}. Готовый ролик придёт в чат.", "ed.nothing": "Сначала что-нибудь поменяйте",
+    "ed.leave": "Выйти из редактора? Правки не сохранятся.",
+    "jobs.edit": "Редактировать", "jobs.version": "{t} · версия {n}",
+    "studio.more": "Ещё в студии", "cover.title": "Обложка", "cover.sub": "Для Reels из ролика", "cover.reel": "Ролик",
+    "cover.random": "Случайные", "cover.all": "Все стили", "cover.less": "Свернуть", "cover.caption": "Надпись",
+    "cover.who": "Кто на обложке", "cover.from_video": "Из ролика", "cover.from_photo": "Своё фото",
+    "cover.video_hint": "Возьмём кадр, где вас хорошо видно анфас.",
+    "cover.photo_hint": "Загрузите фото, где вас хорошо видно — надпись встанет под лицом.",
+    "cover.photo_pick": "Выбрать фото", "cover.photo_done": "Фото загружено · заменить",
+    "cover.go": "Создать обложку", "cover.charge": "спишется {c} из {n}", "cover.free": "готовая обложка придёт в чат",
+    "cover.need_reel": "Сначала смонтируйте ролик", "cover.need_reel_sub": "Обложка делается из готового ролика.",
+    "cover.need_photo": "сначала выберите фото",
+    "cover.started": "Рисую обложку. Она придёт в чат и появится в «Результатах».", "cover.ready": "Обложка готова",
+    "jobs.reels": "Ролики", "jobs.covers": "Обложки",
     "tariffs.balance": "Баланс", "tariffs.history": "История", "tariffs.package": "Пакет", "tariffs.method": "Способ оплаты",
     "pkg.per": "до {n} {w}", "pkg.rub": "≈ {n} ₽", "pkg.popular": "популярный", "pkg.save": "выгода −{n}%",
     "pay.button": "Оплатить {n} ⭐", "pay.button_rub": "Оплатить {n} ₽", "pay.sub": "{n} {w} на баланс",
@@ -171,7 +198,7 @@ const I18N = {
     "opt.studio": "Studio sound", "opt.tracking": "Head tracking", "opt.transitions": "Transitions",
     "opt.grade": "Colour correction", "opt.smooth": "Smooth 60 fps", "opt.visuals": "Graphics and stickers",
     "opt.title": "Opening title", "opt.progress": "Progress bar", "opt.music": "Background music",
-    "help.music": ["Background music", "AI picks a calm track that fits the reel and plays it quietly under your voice. If you added your own music by link, that one plays instead."],
+    "help.music": ["Background music", "AI picks a track that fits the reel and plays it quietly under your voice. If you added your own music by link, that one plays instead."],
     "help.cut": ["Cutting", "We remove pauses longer than 1.2 seconds and long “umm”s. Normal breaths and filler words stay, so the speech sounds natural."],
     "help.sfx": ["Sound effects", "A “whoosh” when a media card appears, when the shot size changes and when the frame slides in. Voice loudness is levelled either way."],
     "help.studio": ["Studio sound", "We remove hum and hiss, soften harsh “s” sounds and make the voice clearer and fuller. Turn it off to keep the sound as recorded — then we only level the loudness."],
@@ -210,13 +237,40 @@ const I18N = {
     "balance.note": "One reel is {c}. If editing fails, the tokens go back to your balance.",
     "balance.note_admin": "You own this bot: editing is free and your balance isn't used.",
     "status.queued": "queued", "status.running": "editing", "status.done": "ready", "status.failed": "failed", "status.cancelled": "cancelled",
-    "jobs.all": "All", "jobs.done": "Ready", "jobs.active": "In progress",
+    "jobs.all": "All",
     "jobs.empty": "No videos yet", "jobs.empty_hint": "Upload a video — the finished reel will arrive in the chat and show up here.",
     "jobs.empty_filter": "Nothing here yet",
     "jobs.to_edit": "Go to editor", "jobs.reel": "Edit", "jobs.refunded": "The tokens went back to your balance.",
     "jobs.keep": "kept until {d}", "jobs.purged_short": "removed from the server",
     "jobs.purged": "Removed from the server after the storage period. It's still in your chat.",
     "jobs.send": "Send to chat", "jobs.sent": "Sent to the chat.", "jobs.not_sent": "Couldn't send",
+    "nav.editor": "Editing", "ed.build": "Build", "ed.scene_of": "Scene {n} of {m}", "ed.general": "General",
+    "ed.text_scene": "Scene text", "ed.picture": "Picture", "ed.on_picture": "On the picture: “{w}”", "ed.own_picture": "Your photo",
+    "ed.cut_words": "Cut words", "ed.cut_n": "cut: {n}", "ed.media": "Photo",
+    "ed.media_pic": "picture", "ed.media_own": "your photo",
+    "ed.position": "Text position", "ed.size": "Text size",
+    "ed.pos.auto": "As in the reel", "ed.pos.top": "Top", "ed.pos.center": "Centre", "ed.pos.bottom": "Bottom",
+    "ed.size.s": "Small", "ed.size.m": "Medium", "ed.size.l": "Large",
+    "ed.save": "Save", "ed.done": "Done", "ed.no_text": "No text", "ed.no_scenes": "This reel has no scenes with text",
+    "ed.cut_hint": "Tap the words to remove from the reel — both from the frame and from the sound.",
+    "ed.upload": "Upload a photo", "ed.uploading": "Uploading the photo…", "ed.remove_pic": "Remove the picture",
+    "ed.media_hint": "The photo appears as a card over the video while this scene is spoken.",
+    "ed.title": "Opening title", "ed.sound": "Sound", "ed.undo": "Undo", "ed.redo": "Redo",
+    "ed.confirm": "Build a new version of the reel? It costs {c}.", "ed.confirm_free": "Build a new version of the reel?",
+    "ed.started": "Building version {n}. The finished reel will arrive in the chat.", "ed.nothing": "Change something first",
+    "ed.leave": "Leave the editor? Your edits won't be saved.",
+    "jobs.edit": "Edit", "jobs.version": "{t} · version {n}",
+    "studio.more": "More in the studio", "cover.title": "Cover", "cover.sub": "For Reels, from your reel", "cover.reel": "Reel",
+    "cover.random": "Shuffle", "cover.all": "All styles", "cover.less": "Show fewer", "cover.caption": "Caption",
+    "cover.who": "Who's on the cover", "cover.from_video": "From the reel", "cover.from_photo": "My photo",
+    "cover.video_hint": "We'll take a frame where your face is clearly visible.",
+    "cover.photo_hint": "Upload a photo where you're clearly visible — the caption goes below your face.",
+    "cover.photo_pick": "Choose a photo", "cover.photo_done": "Photo uploaded · replace",
+    "cover.go": "Create cover", "cover.charge": "uses {c} of your {n}", "cover.free": "the finished cover arrives in the chat",
+    "cover.need_reel": "Edit a reel first", "cover.need_reel_sub": "A cover is made from a finished reel.",
+    "cover.need_photo": "choose a photo first",
+    "cover.started": "Making the cover. It will arrive in the chat and show up in “Results”.", "cover.ready": "Your cover is ready",
+    "jobs.reels": "Reels", "jobs.covers": "Covers",
     "tariffs.balance": "Balance", "tariffs.history": "History", "tariffs.package": "Package", "tariffs.method": "Payment method",
     "pkg.per": "up to {n} {w}", "pkg.rub": "≈ {n} ₽", "pkg.popular": "popular", "pkg.save": "save {n}%",
     "pay.button": "Pay {n} ⭐", "pay.button_rub": "Pay {n} ₽", "pay.sub": "{n} {w} to your balance",
@@ -259,12 +313,12 @@ const I18N = {
   },
 };
 
-const SCREENS = ["home", "invite", "studio", "edit", "videos", "tariffs", "profile"];
+const SCREENS = ["home", "invite", "studio", "edit", "editor", "cover", "videos", "tariffs", "profile"];
 // Вкладки нижней панели. У них в шапке логотип, тема, уведомления и баланс;
 // у вложенных экранов (монтаж, тарифы) — «назад» и название.
 const ROOT_SCREENS = ["home", "invite", "studio", "videos", "profile"];
 // Какая вкладка подсвечена на вложенном экране: монтаж открывают из «Студии».
-const NAV_OF = { edit: "studio" };
+const NAV_OF = { edit: "studio", cover: "studio" };
 // Старые имена вкладок: бот присылает кнопки с `?screen=balance`.
 const SCREEN_ALIASES = { balance: "tariffs" };
 
@@ -1587,8 +1641,11 @@ async function uploadAndStart() {
 
 // ------------------------------------------------------------------ «Главная»
 
-function jobTitle() {
-  return tr("jobs.reel");
+function jobTitle(j) {
+  if (j && j.kind === "cover") return tr("cover.title");
+  const title = tr("jobs.reel");
+  // Версия из редактора сцен называет себя: «Монтаж · версия 3».
+  return j && j.version > 1 ? tr("jobs.version", { t: title, n: j.version }) : title;
 }
 
 const isActive = (j) => j.status === "queued" || j.status === "running";
@@ -1633,7 +1690,8 @@ function jobThumb(j) {
   return box;
 }
 
-const playable = (j) => j.status === "done" && !!j.video_url && !j.purged;
+const isCover = (j) => j.kind === "cover";
+const playable = (j) => j.status === "done" && !!(isCover(j) ? j.image_url : j.video_url) && !j.purged;
 
 // Нажатие на ролик: готовый открывается в плеере, остальные ведут в «Результаты».
 function openJob(j) {
@@ -1658,8 +1716,10 @@ async function sendToChat(j, btn) {
 function openPlayer(j) {
   haptic();
   openSheet(jobTitle(j), [
-    // `#t=0.1` — пока ролик не запущен, плеер показывает кадр, а не чёрный прямоугольник.
-    el("video", { class: "player", src: `${j.video_url}#t=0.1`, controls: true, playsinline: true, preload: "metadata" }),
+    isCover(j)
+      ? el("img", { class: "player", src: j.image_url, alt: (j.cover && j.cover.text) || tr("cover.title") })
+      // `#t=0.1` — пока ролик не запущен, плеер показывает кадр, а не чёрный прямоугольник.
+      : el("video", { class: "player", src: `${j.video_url}#t=0.1`, controls: true, playsinline: true, preload: "metadata" }),
     el("p", { class: "muted small player__meta", text: jobSub(j) }),
     el("button", { class: "cta cta--slim", type: "button", onclick: (ev) => sendToChat(j, ev.currentTarget) }, [
       el("span", { class: "cta__title", text: tr("jobs.send") }),
@@ -1696,8 +1756,14 @@ function renderHome() {
 // после загрузки картинки — до неё (и если кадра нет) виден нарисованный.
 function renderStudio() {
   const phone = $("#studio-phone");
-  const last = state.jobs.find((j) => j.thumb_url);
+  const last = state.jobs.find((j) => j.thumb_url && !isCover(j));
   const url = last ? thumbOf(last) : "";
+  // Стопка у строки «Обложка» — превью первых трёх стилей.
+  const stack = $("#cover-stack");
+  const styles = (state.boot.cover && state.boot.cover.styles) || [];
+  if (!stack.childElementCount && styles.length) {
+    stack.replaceChildren(...styles.slice(0, 3).map((s) => el("img", { src: s.preview, alt: "", loading: "lazy" })));
+  }
   if (phone.dataset.url === url) return;
   phone.dataset.url = url;
   phone.classList.remove("has-image");
@@ -1716,19 +1782,17 @@ function renderStudio() {
 
 const JOB_FILTERS = {
   all: () => true,
-  done: (j) => j.status === "done",
-  active: (j) => isActive(j),
+  reels: (j) => !isCover(j),
+  covers: (j) => isCover(j),
 };
 
 function renderJobFilter() {
-  $("#jobs-filter").replaceChildren(...Object.keys(JOB_FILTERS).map((key) => {
-    const n = state.jobs.filter(JOB_FILTERS[key]).length;
-    return el("button", {
+  $("#jobs-filter").replaceChildren(...Object.keys(JOB_FILTERS).map((key) =>
+    el("button", {
       type: "button", role: "radio", class: key === state.jobsFilter ? "is-active" : "",
-      "aria-checked": key === state.jobsFilter ? "true" : "false",
+      "aria-checked": key === state.jobsFilter ? "true" : "false", text: tr(`jobs.${key}`),
       onclick: () => { state.jobsFilter = key; haptic(); renderJobs(); },
-    }, [tr(`jobs.${key}`), state.jobsLoaded && n ? el("b", { text: String(n) }) : null]);
-  }));
+    })));
 }
 
 function renderJobs() {
@@ -1774,6 +1838,12 @@ function jobRow(j) {
     ? el("button", { class: "job-row__main", type: "button", onclick: () => openPlayer(j) }, [jobThumb(j), text])
     : el("div", { class: "job-row__main" }, [jobThumb(j), text]);
   const row = el("div", { class: `card job-row job-row--${j.status}` }, [main]);
+  if (j.editable) {
+    row.append(el("button", {
+      class: "round-act", type: "button", "aria-label": tr("jobs.edit"), title: tr("jobs.edit"),
+      onclick: () => { haptic(); openEditor(j.id); },
+    }, [icon("pencil", 18)]));
+  }
   if (ready) {
     row.append(el("button", {
       class: "round-act", type: "button", "aria-label": tr("jobs.send"), title: tr("jobs.send"),
@@ -1837,7 +1907,7 @@ function openNotifications() {
     }, [
       jobThumb(j),
       el("span", { class: "list-row__text" }, [
-        el("b", { text: tr(failed ? "notif.failed" : "notif.done") }),
+        el("b", { text: tr(failed ? "notif.failed" : (isCover(j) ? "cover.ready" : "notif.done")) }),
         el("span", { class: "muted", text: when }),
       ]),
       icon("chevron", 18, "chev"),
@@ -1861,6 +1931,7 @@ async function loadJobs() {
       if (state.screen === "videos") renderJobs();
       if (state.screen === "home") renderHome();
       if (state.screen === "studio") renderStudio();
+      if (state.screen === "cover") renderCover();
     }
   } catch (e) {
     if (state.screen === "videos") toast(e.message);
@@ -2025,6 +2096,690 @@ async function buy(tokens) {
     }
     toast(tr("pay.later"));
   });
+}
+
+// ------------------------------------------------------------------ редактор сцен
+
+// Ролик открыт в редакторе: сцены с сервера (`/api/jobs/<id>/scenes`) и правки
+// поверх них. Сервер получает только правки — новый монтажный лист собирает он
+// сам (`core/edit.py`), здесь лишь показ и ввод.
+const editor = {
+  jobId: null,
+  data: null,
+  edits: { scenes: {} },
+  preset: null,
+  accent: null,
+  past: [],
+  future: [],
+  current: 0,
+  busy: false,
+  // До этого момента прокрутка ленты карточек — наша собственная, а не палец:
+  // на неё текущую сцену не переключаем, иначе лента и плеер гоняют друг друга.
+  quietUntil: 0,
+};
+
+function openEditor(jobId) {
+  editor.jobId = jobId;
+  editor.data = null;
+  go("editor");
+}
+
+function edSnapshot() {
+  return JSON.stringify({ edits: editor.edits, preset: editor.preset, accent: editor.accent });
+}
+function edRestore(raw) {
+  const saved = JSON.parse(raw);
+  editor.edits = saved.edits;
+  editor.preset = saved.preset;
+  editor.accent = saved.accent;
+}
+// Любая правка идёт через это место: так у неё есть «отменить».
+function edCommit(change) {
+  const before = edSnapshot();
+  change();
+  if (edSnapshot() === before) return;
+  editor.past.push(before);
+  editor.future = [];
+  haptic();
+  renderEditor();
+}
+function edUndo() {
+  if (!editor.past.length) return;
+  editor.future.push(edSnapshot());
+  edRestore(editor.past.pop());
+  haptic();
+  renderEditor();
+}
+function edRedo() {
+  if (!editor.future.length) return;
+  editor.past.push(edSnapshot());
+  edRestore(editor.future.pop());
+  haptic();
+  renderEditor();
+}
+
+function edDirty() {
+  const d = editor.data;
+  if (!d) return false;
+  return Object.keys(editor.edits.scenes).length > 0 || editor.edits.title !== undefined
+    || editor.preset !== d.preset || editor.accent !== d.accent;
+}
+
+// Сцена, какой она станет после правок.
+function edScene(n) {
+  const s = editor.data.scenes[n];
+  const e = editor.edits.scenes[s.i] || {};
+  const cut = new Set(e.cut || []);
+  const words = s.words.filter((w) => !cut.has(w.idx));
+  const base = words.map((w) => w.text).join(" ");
+  let media = s.media;
+  if (e.media) media = e.media.op === "set" ? { custom: true, word: words[0] ? words[0].text : "" } : null;
+  return {
+    s, e, cut, words, base,
+    text: e.text !== undefined ? e.text : base,
+    position: e.position || s.position,
+    size: e.size || s.size,
+    media,
+  };
+}
+
+// Записать правку сцены; правка, вернувшая сцену к исходному виду, стирается.
+function edPatch(n, patch) {
+  edCommit(() => {
+    const s = editor.data.scenes[n];
+    const e = { ...(editor.edits.scenes[s.i] || {}), ...patch };
+    for (const k of Object.keys(e)) if (e[k] === undefined) delete e[k];
+    if (e.cut && !e.cut.length) delete e.cut;
+    if (e.position === s.position) delete e.position;
+    if (e.size === s.size) delete e.size;
+    const cut = new Set(e.cut || []);
+    const base = s.words.filter((w) => !cut.has(w.idx)).map((w) => w.text).join(" ");
+    if (e.text !== undefined && e.text.trim().replace(/\s+/g, " ") === base) delete e.text;
+    if (Object.keys(e).length) editor.edits.scenes[s.i] = e;
+    else delete editor.edits.scenes[s.i];
+  });
+}
+
+async function loadEditor() {
+  const box = $("#ed-cards");
+  editor.edits = { scenes: {} };
+  editor.past = [];
+  editor.future = [];
+  editor.current = 0;
+  $("#ed-count").textContent = "";
+  $("#ed-line").replaceChildren();
+  box.replaceChildren(el("div", { class: "skeleton ed-card" }));
+  renderEdBuild();
+  const id = editor.jobId;
+  let data;
+  try {
+    data = await api(`/api/jobs/${id}/scenes`);
+  } catch (e) {
+    if (state.screen !== "editor" || editor.jobId !== id) return;
+    popup(tr("err.title"), e.message);
+    goBack();
+    return;
+  }
+  if (state.screen !== "editor" || editor.jobId !== id) return;
+  editor.data = data;
+  editor.preset = data.preset;
+  editor.accent = data.accent;
+  edAttachVideo();
+  renderEditor();
+}
+
+function edAttachVideo() {
+  const url = editor.data && editor.data.job.video_url;
+  $("#ed-player").classList.add("is-loading");
+  // `#t=0.1` — плеер показывает кадр, а не чёрный прямоугольник, ещё до запуска.
+  $("#ed-video").src = url ? `${url}#t=0.1` : "";
+}
+
+function edStop() {
+  const video = $("#ed-video");
+  if (!video) return;
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+}
+
+function edTime(sec) {
+  const s = Math.max(0, Math.floor(sec || 0));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function renderEdBuild() {
+  const btn = $("#ed-build");
+  btn.classList.toggle("is-on", edDirty() && !editor.busy);
+  btn.disabled = editor.busy;
+  $("#ed-undo").disabled = !editor.past.length;
+  $("#ed-redo").disabled = !editor.future.length;
+}
+
+function renderEditor() {
+  renderEdBuild();
+  const d = editor.data;
+  if (!d) return;
+  if (!d.scenes.length) {
+    $("#ed-cards").replaceChildren(el("div", { class: "card ed-card empty" }, [el("b", { text: tr("ed.no_scenes") })]));
+    return;
+  }
+  editor.current = Math.min(editor.current, d.scenes.length - 1);
+  const box = $("#ed-cards");
+  const left = box.scrollLeft;
+  box.replaceChildren(...d.scenes.map((_, n) => edCard(n)));
+  jumpTo(box, left);
+  renderEdLine();
+  renderEdCount();
+}
+
+function renderEdCount() {
+  const d = editor.data;
+  $("#ed-count").textContent = d && d.scenes.length ? tr("ed.scene_of", { n: editor.current + 1, m: d.scenes.length }) : "";
+  for (const [n, seg] of [...$("#ed-line").querySelectorAll(".ed-seg")].entries()) {
+    seg.classList.toggle("is-active", n === editor.current);
+  }
+  for (const [n, card] of [...$("#ed-cards").children].entries()) card.classList.toggle("is-active", n === editor.current);
+}
+
+// Шкала: отрезок на сцену, бегунок — время плеера.
+function renderEdLine() {
+  const d = editor.data;
+  const total = d.duration || 1;
+  const line = $("#ed-line");
+  line.replaceChildren(
+    ...d.scenes.map((s, n) => {
+      const view = edScene(n);
+      return el("i", {
+        class: `ed-seg${view.words.length ? "" : " is-gone"}`,
+        style: `left:${(s.start / total) * 100}%;width:${Math.max(0.6, ((s.end - s.start) / total) * 100)}%`,
+      });
+    }),
+    el("i", { class: "ed-knob", id: "ed-knob" }),
+  );
+  syncEdClock();
+}
+
+function syncEdClock() {
+  const d = editor.data;
+  const video = $("#ed-video");
+  if (!d) return;
+  const total = d.duration || video.duration || 0;
+  const now = Math.min(video.currentTime || 0, total);
+  $("#ed-time").textContent = `${edTime(now)} / ${edTime(total)}`;
+  const knob = $("#ed-knob");
+  if (knob && total) knob.style.left = `${(now / total) * 100}%`;
+}
+
+function edSceneAt(time) {
+  const scenes = editor.data.scenes;
+  let found = 0;
+  for (let n = 0; n < scenes.length; n += 1) if (scenes[n].start <= time + 0.05) found = n;
+  return found;
+}
+
+function edSetCurrent(n, { seek = false, scroll = false } = {}) {
+  const d = editor.data;
+  if (!d || !d.scenes[n]) return;
+  editor.current = n;
+  renderEdCount();
+  if (seek) {
+    const video = $("#ed-video");
+    try { video.currentTime = Math.min(d.scenes[n].start + 0.02, Math.max(0, (video.duration || d.duration) - 0.05)); } catch (_) { /* видео ещё не готово */ }
+    syncEdClock();
+  }
+  if (scroll) {
+    const box = $("#ed-cards");
+    const card = box.children[n];
+    if (card) {
+      editor.quietUntil = Date.now() + 700;
+      const to = card.offsetLeft - (box.clientWidth - card.offsetWidth) / 2;
+      try { box.scrollTo({ left: to, behavior: "smooth" }); } catch (_) { box.scrollLeft = to; }
+    }
+  }
+}
+
+function edRow(label, value, onclick, disabled) {
+  return el("button", { class: "ed-row", type: "button", disabled: !!disabled, onclick }, [
+    el("span", { class: "ed-row__label", text: label }),
+    value ? el("span", { class: "ed-row__value muted", text: value }) : null,
+    icon("chevron", 18, "chev"),
+  ]);
+}
+
+function edCard(n) {
+  const v = edScene(n);
+  const textBox = el("button", { class: "ed-text", type: "button", onclick: () => edTextSheet(n) }, [
+    el("span", { class: `ed-text__value${v.text ? "" : " is-empty"}` },
+      // Выделенное слово — цветом, как в ролике; у переписанного текста выделение расставит сервер.
+      v.e.text === undefined && v.words.length
+        ? v.words.flatMap((w, k) => [k ? " " : null, el("span", { class: w.em ? "ed-accent" : "", text: w.text })])
+        : [v.text || tr("ed.no_text")]),
+    icon("pencil", 17, "ed-text__pen"),
+  ]);
+  const mediaValue = v.media ? tr(v.media.custom ? "ed.media_own" : "ed.media_pic") : "";
+  const rows = [
+    edRow(tr("ed.cut_words"), v.cut.size ? tr("ed.cut_n", { n: v.cut.size }) : "", () => edCutSheet(n)),
+    edRow(tr("ed.media"), mediaValue, () => edMediaSheet(n)),
+  ];
+  if (v.s.movable) rows.push(edRow(tr("ed.position"), tr(`ed.pos.${v.position}`), () => edChoiceSheet(n, "position", ["auto", "top", "center", "bottom"], "ed.pos.")));
+  rows.push(edRow(tr("ed.size"), tr(`ed.size.${v.size}`), () => edChoiceSheet(n, "size", ["s", "m", "l"], "ed.size.")));
+  return el("div", {
+    class: `card ed-card${n === editor.current ? " is-active" : ""}`,
+    onclick: () => { if (n !== editor.current) edSetCurrent(n, { seek: true, scroll: true }); },
+  }, [
+    el("div", { class: "ed-card__label", text: tr(v.media ? "ed.picture" : "ed.text_scene") }),
+    textBox,
+    v.media
+      ? el("div", { class: "ed-card__note muted", text: v.media.custom ? tr("ed.own_picture") : tr("ed.on_picture", { w: v.media.word }) })
+      : null,
+    el("div", { class: "ed-rows" }, rows),
+  ]);
+}
+
+function edTextSheet(n) {
+  const v = edScene(n);
+  const limit = (editor.data.limits && editor.data.limits.text) || 160;
+  const area = el("textarea", { class: "ed-area", rows: "3", maxlength: String(limit), enterkeyhint: "done" });
+  area.value = v.text;
+  const count = el("span", { class: "muted small" });
+  const sync = () => { count.textContent = `${area.value.length} / ${limit}`; };
+  area.addEventListener("input", sync);
+  sync();
+  openSheet(tr("ed.text_scene"), [
+    area,
+    el("div", { class: "ed-sheet__foot" }, [count]),
+    el("button", { class: "cta cta--slim", type: "button", onclick: () => { const text = area.value.trim().replace(/\s+/g, " "); closeSheet(); edPatch(n, { text }); } },
+      [el("span", { class: "cta__title", text: tr("ed.save") })]),
+  ]);
+  area.focus();
+}
+
+function edCutSheet(n) {
+  const v = edScene(n);
+  const cut = new Set(v.cut);
+  const chips = el("div", { class: "ed-words" }, v.s.words.map((w) => {
+    const chip = el("button", { class: `ed-word${cut.has(w.idx) ? " is-cut" : ""}`, type: "button", text: w.text, "aria-pressed": cut.has(w.idx) ? "true" : "false" });
+    chip.addEventListener("click", () => {
+      if (cut.has(w.idx)) cut.delete(w.idx); else cut.add(w.idx);
+      chip.classList.toggle("is-cut", cut.has(w.idx));
+      chip.setAttribute("aria-pressed", cut.has(w.idx) ? "true" : "false");
+      haptic();
+    });
+    return chip;
+  }));
+  openSheet(tr("ed.cut_words"), [
+    el("p", { class: "muted small", text: tr("ed.cut_hint") }),
+    chips,
+    el("button", {
+      class: "cta cta--slim", type: "button",
+      // Слова сцены меняются — переписанный текст к ним уже не приложить, он сбрасывается.
+      onclick: () => { closeSheet(); edPatch(n, { cut: [...cut].sort((a, b) => a - b), text: undefined }); },
+    }, [el("span", { class: "cta__title", text: tr("ed.done") })]),
+  ]);
+}
+
+function edChoiceSheet(n, field, values, prefix) {
+  const v = edScene(n);
+  openSheet(tr(`ed.${field}`), values.map((value) =>
+    el("button", {
+      class: `option-row${v[field] === value ? " is-active" : ""}`, type: "button",
+      onclick: () => { closeSheet(); edPatch(n, { [field]: value }); },
+    }, [el("span", { text: tr(`${prefix}${value}`) }), v[field] === value ? icon("check", 18) : null])));
+}
+
+// Фото с телефона — десятки мегапикселей; серверу и ролику столько не нужно.
+async function shrinkImage(file) {
+  try {
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const k = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+    const canvas = el("canvas");
+    canvas.width = Math.round(bitmap.width * k);
+    canvas.height = Math.round(bitmap.height * k);
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((done) => canvas.toBlob(done, "image/jpeg", 0.88));
+    return blob || file;
+  } catch (_) {
+    return file; // браузер не разобрал — пусть попробует сервер
+  }
+}
+
+async function uploadPicture(file) {
+  const body = await shrinkImage(file);
+  return api("/api/edit-media", { method: "POST", body, raw: true });
+}
+
+function edMediaSheet(n) {
+  const v = edScene(n);
+  const input = el("input", { type: "file", accept: "image/*", hidden: true });
+  const pick = el("button", { class: "cta cta--slim", type: "button", onclick: () => input.click() }, [
+    el("span", { class: "cta__title", text: tr("ed.upload") }),
+  ]);
+  input.addEventListener("change", async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    pick.disabled = true;
+    pick.firstChild.textContent = tr("ed.uploading");
+    try {
+      const got = await uploadPicture(file);
+      closeSheet();
+      edPatch(n, { media: { op: "set", key: got.key } });
+    } catch (e) {
+      pick.disabled = false;
+      pick.firstChild.textContent = tr("ed.upload");
+      popup(tr("err.title"), e.message);
+    }
+  });
+  openSheet(tr("ed.media"), [
+    el("p", { class: "muted small", text: tr("ed.media_hint") }),
+    input,
+    pick,
+    v.media
+      ? el("button", { class: "btn-soft ed-remove", type: "button", text: tr("ed.remove_pic"), onclick: () => { closeSheet(); edPatch(n, { media: { op: "remove" } }); } })
+      : null,
+  ]);
+}
+
+function edGeneralSheet() {
+  const d = editor.data;
+  if (!d) return;
+  const parts = [];
+  if (d.title !== null && d.title !== undefined) {
+    const limit = (d.limits && d.limits.title) || 80;
+    const input = el("input", { class: "ed-input", type: "text", maxlength: String(limit), enterkeyhint: "done" });
+    input.value = editor.edits.title !== undefined ? editor.edits.title : d.title;
+    input.addEventListener("change", () => {
+      const text = input.value.trim().replace(/\s+/g, " ");
+      edCommit(() => { if (text === d.title) delete editor.edits.title; else editor.edits.title = text; });
+    });
+    parts.push(el("div", { class: "label", text: tr("ed.title") }), input);
+  }
+  parts.push(el("div", { class: "label", text: tr("edit.color") }));
+  parts.push(el("div", { class: "ed-words" }, state.boot.accents.map((a) =>
+    el("button", {
+      class: `swatch${a.key === editor.accent ? " is-active" : ""}`, type: "button",
+      onclick: () => { closeSheet(); edCommit(() => { editor.accent = a.key; }); },
+    }, [el("i", { class: "swatch__dot", style: `background:${a.color || "#F3D28F"}` }), el("span", { text: a.title })]))));
+  parts.push(el("div", { class: "label", text: tr("edit.style") }));
+  parts.push(...state.boot.presets.map((p) =>
+    el("button", {
+      class: `option-row${p.name === editor.preset ? " is-active" : ""}`, type: "button",
+      onclick: () => { closeSheet(); edCommit(() => { editor.preset = p.name; }); },
+    }, [el("span", { text: p.label || p.title }), p.name === editor.preset ? icon("check", 18) : null])));
+  openSheet(tr("ed.general"), parts);
+}
+
+function askConfirm(message) {
+  return new Promise((done) => {
+    if (tg && tg.showConfirm) {
+      try { tg.showConfirm(message, (ok) => done(!!ok)); return; } catch (_) { /* ниже */ }
+    }
+    done(window.confirm(message));
+  });
+}
+
+async function edBuild() {
+  const d = editor.data;
+  if (!d || editor.busy) return;
+  if (!edDirty()) { haptic("warning"); toast(tr("ed.nothing")); return; }
+  const cost = d.cost || 0;
+  // Не хватает токенов — в тарифы; правки остаются и ждут возвращения.
+  if (cost > 0 && state.boot.user.balance < cost) { haptic("warning"); go("tariffs"); return; }
+  if (!(await askConfirm(cost ? tr("ed.confirm", { c: tokensText(cost) }) : tr("ed.confirm_free")))) return;
+  editor.busy = true;
+  renderEdBuild();
+  try {
+    const res = await api(`/api/jobs/${editor.jobId}/edit`, {
+      method: "POST", body: { edits: editor.edits, preset: editor.preset, accent: editor.accent },
+    });
+    haptic("success");
+    editor.data = null; // правки ушли в сборку — выходим без вопроса «правки пропадут»
+    await refreshBoot();
+    state.jobs = [res.job, ...state.jobs.filter((j) => j.id !== res.job.id)];
+    state.jobsLoaded = true;
+    toast(tr("ed.started", { n: res.job.version }));
+    go("videos", { replace: true });
+  } catch (e) {
+    haptic("error");
+    if (e.status === 402) { await refreshBoot(); go("tariffs"); }
+    popup(tr("err.title"), e.message);
+  } finally {
+    editor.busy = false;
+    renderEdBuild();
+  }
+}
+
+function initEditor() {
+  const video = $("#ed-video");
+  const player = $("#ed-player");
+  const cards = $("#ed-cards");
+  // На iPhone до нажатия «играть» приходят только метаданные: ждать первого
+  // кадра значило бы крутить загрузку вечно.
+  for (const ready of ["loadedmetadata", "loadeddata", "canplay", "error"]) {
+    video.addEventListener(ready, () => player.classList.remove("is-loading"));
+  }
+  video.addEventListener("waiting", () => player.classList.add("is-loading"));
+  video.addEventListener("playing", () => { player.classList.remove("is-loading"); player.classList.add("is-playing"); });
+  video.addEventListener("pause", () => player.classList.remove("is-playing"));
+  video.addEventListener("ended", () => player.classList.remove("is-playing"));
+  video.addEventListener("timeupdate", () => {
+    if (!editor.data) return;
+    syncEdClock();
+    if (video.paused) return;
+    const n = edSceneAt(video.currentTime);
+    if (n !== editor.current) edSetCurrent(n, { scroll: true });
+  });
+  $("#ed-play").addEventListener("click", () => {
+    haptic();
+    if (video.paused) video.play().catch(() => { /* автозапуск запрещён — нажмут ещё раз */ });
+    else video.pause();
+  });
+  $("#ed-mute").addEventListener("click", () => {
+    video.muted = !video.muted;
+    player.classList.toggle("is-muted", video.muted);
+    haptic();
+  });
+  $("#ed-line").addEventListener("click", (ev) => {
+    if (!editor.data) return;
+    const box = $("#ed-line").getBoundingClientRect();
+    const share = Math.min(1, Math.max(0, (ev.clientX - box.left) / box.width));
+    const time = share * (editor.data.duration || video.duration || 0);
+    try { video.currentTime = time; } catch (_) { /* видео ещё не готово */ }
+    edSetCurrent(edSceneAt(time), { scroll: true });
+    syncEdClock();
+  });
+  // Палец остановил ленту — текущей становится карточка по центру.
+  let settle = null;
+  cards.addEventListener("scroll", () => {
+    clearTimeout(settle);
+    settle = setTimeout(() => {
+      if (!editor.data || Date.now() < editor.quietUntil) return;
+      const mid = cards.scrollLeft + cards.clientWidth / 2;
+      let best = 0;
+      let gap = Infinity;
+      for (const [n, card] of [...cards.children].entries()) {
+        const d = Math.abs(card.offsetLeft + card.offsetWidth / 2 - mid);
+        if (d < gap) { gap = d; best = n; }
+      }
+      if (best !== editor.current) { $("#ed-video").pause(); edSetCurrent(best, { seek: true }); }
+    }, 140);
+  }, { passive: true });
+  $("#ed-undo").addEventListener("click", edUndo);
+  $("#ed-redo").addEventListener("click", edRedo);
+  $("#ed-general").addEventListener("click", () => { haptic(); edGeneralSheet(); });
+  $("#ed-build").addEventListener("click", edBuild);
+}
+
+// ------------------------------------------------------------------ «Обложка»
+
+// Заказ обложки: ролик, стиль, надпись и кто на обложке. Рисует её сервер
+// (`pipeline/cover.py`), сюда приходит только готовая картинка в «Результаты».
+const cover = { jobId: null, style: null, text: "", typed: false, who: "video", photoKey: null, all: false, order: null, busy: false };
+
+function coverReels() {
+  return state.jobs.filter((j) => !isCover(j) && j.status === "done");
+}
+function coverStyles() {
+  const styles = (state.boot.cover && state.boot.cover.styles) || [];
+  if (!cover.order) return styles;
+  return cover.order.map((key) => styles.find((s) => s.key === key)).filter(Boolean);
+}
+function coverLimit() {
+  return (state.boot.cover && state.boot.cover.max_text) || 80;
+}
+
+function coverPickReel(job) {
+  cover.jobId = job.id;
+  // Надпись по умолчанию — заголовок ролика; набранную человеком не трогаем.
+  if (!cover.typed) cover.text = (job.title || "").slice(0, coverLimit());
+}
+
+function renderCover() {
+  const reels = coverReels();
+  const box = $("#cover-reels");
+  if (!state.jobsLoaded) {
+    box.replaceChildren(el("div", { class: "skeleton skeleton--flat" }));
+  } else if (!reels.length) {
+    cover.jobId = null;
+    box.replaceChildren(el("div", { class: "empty-line" }, [
+      el("b", { text: tr("cover.need_reel") }), el("span", { class: "muted small", text: tr("cover.need_reel_sub") }),
+    ]));
+  } else {
+    if (!reels.some((r) => r.id === cover.jobId)) coverPickReel(reels[0]);
+    box.replaceChildren(...reels.map((r) =>
+      el("button", {
+        class: `cover-reel${r.id === cover.jobId ? " is-active" : ""}`, type: "button", role: "radio",
+        "aria-checked": r.id === cover.jobId ? "true" : "false", "aria-label": `${jobTitle(r)} · ${jobSub(r)}`,
+        onclick: () => { if (cover.jobId !== r.id) { coverPickReel(r); haptic(); renderCover(); } },
+      }, [jobThumb(r)])));
+  }
+
+  const styles = coverStyles();
+  if (!styles.some((s) => s.key === cover.style)) cover.style = styles.length ? styles[0].key : null;
+  const shown = cover.all ? styles : styles.slice(0, 6);
+  // Выбранный стиль виден всегда: в свёрнутой сетке он занимает последнее место.
+  const chosen = styles.find((s) => s.key === cover.style);
+  if (chosen && !shown.includes(chosen)) shown[shown.length - 1] = chosen;
+  $("#cover-grid").replaceChildren(...shown.map((s) =>
+    el("button", {
+      class: `cover-style${s.key === cover.style ? " is-active" : ""}`, type: "button", role: "radio",
+      "aria-checked": s.key === cover.style ? "true" : "false", "aria-label": s.title, title: s.title,
+      onclick: () => { cover.style = s.key; haptic(); renderCover(); },
+    }, [el("img", { src: s.preview, alt: "", loading: "lazy" }), el("i", { class: "cover-style__check" }, [icon("check", 14)])])));
+  const more = $("#cover-all");
+  more.hidden = styles.length <= 6;
+  more.replaceChildren(tr(cover.all ? "cover.less" : "cover.all"), icon(cover.all ? "down" : "chevron", 16));
+
+  const input = $("#cover-text");
+  input.maxLength = coverLimit();
+  if (input.value !== cover.text) input.value = cover.text;
+  $("#cover-count").textContent = `${cover.text.length} / ${coverLimit()}`;
+  $("#cover-clear").hidden = !cover.text;
+
+  $("#cover-who").replaceChildren(...[["video", "cover.from_video"], ["photo", "cover.from_photo"]].map(([value, key]) =>
+    el("button", {
+      type: "button", role: "radio", class: value === cover.who ? "is-active" : "",
+      "aria-checked": value === cover.who ? "true" : "false", text: tr(key),
+      onclick: () => { if (cover.who !== value) { cover.who = value; haptic(); renderCover(); } },
+    })));
+  $("#cover-who-hint").textContent = tr(cover.who === "video" ? "cover.video_hint" : "cover.photo_hint");
+  const photo = $("#cover-photo");
+  photo.hidden = cover.who !== "photo";
+  if (!photo.disabled) photo.textContent = tr(cover.photoKey ? "cover.photo_done" : "cover.photo_pick");
+  renderCoverCta();
+}
+
+function coverCost() {
+  return (state.boot.cover && state.boot.cover.cost) || 0;
+}
+
+function renderCoverCta() {
+  const u = state.boot.user;
+  const btn = $("#cover-go");
+  const cost = coverCost();
+  const short = cost > 0 && u.balance < cost;
+  const ready = !!cover.jobId && (cover.who === "video" || !!cover.photoKey);
+  btn.disabled = cover.busy;
+  btn.classList.toggle("is-idle", !ready && !short);
+  $("#cover-go-title").textContent = tr(short ? "cta.topup" : "cover.go");
+  $("#cover-go-sub").textContent = short
+    ? tr("cta.missing", { n: tokensText(cost - u.balance) })
+    : (!cover.jobId ? tr("cover.need_reel")
+      : (!ready ? tr("cover.need_photo")
+        : (cost ? tr("cover.charge", { c: tokensText(cost), n: u.balance }) : tr("cover.free"))));
+}
+
+async function coverSubmit() {
+  if (cover.busy) return;
+  const cost = coverCost();
+  if (cost > 0 && state.boot.user.balance < cost) { go("tariffs"); return; }
+  if (!cover.jobId) { haptic("warning"); go("studio"); return; }
+  if (cover.who === "photo" && !cover.photoKey) { haptic("warning"); $("#cover-photo-input").click(); return; }
+  cover.busy = true;
+  renderCoverCta();
+  try {
+    const res = await api("/api/covers", {
+      method: "POST",
+      body: { job_id: cover.jobId, style: cover.style, text: cover.text, photo_key: cover.who === "photo" ? cover.photoKey : null },
+    });
+    haptic("success");
+    await refreshBoot();
+    state.jobs = [res.job, ...state.jobs.filter((j) => j.id !== res.job.id)];
+    state.jobsLoaded = true;
+    state.jobsFilter = "covers";
+    toast(tr("cover.started"));
+    go("videos", { replace: true });
+  } catch (e) {
+    haptic("error");
+    if (e.status === 402) { await refreshBoot(); go("tariffs"); }
+    popup(tr("err.title"), e.message);
+  } finally {
+    cover.busy = false;
+    renderCoverCta();
+  }
+}
+
+function initCover() {
+  const input = $("#cover-text");
+  input.addEventListener("input", () => {
+    cover.text = input.value.slice(0, coverLimit());
+    cover.typed = true;
+    $("#cover-count").textContent = `${cover.text.length} / ${coverLimit()}`;
+    $("#cover-clear").hidden = !cover.text;
+  });
+  input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") input.blur(); });
+  $("#cover-clear").addEventListener("click", () => { cover.text = ""; cover.typed = true; haptic(); renderCover(); input.focus(); });
+  $("#cover-shuffle").addEventListener("click", () => {
+    const keys = ((state.boot.cover && state.boot.cover.styles) || []).map((s) => s.key);
+    for (let i = keys.length - 1; i > 0; i -= 1) {
+      const k = Math.floor(Math.random() * (i + 1));
+      [keys[i], keys[k]] = [keys[k], keys[i]];
+    }
+    cover.order = keys;
+    haptic();
+    renderCover();
+  });
+  $("#cover-all").addEventListener("click", () => { cover.all = !cover.all; haptic(); renderCover(); });
+  const photo = $("#cover-photo");
+  const file = $("#cover-photo-input");
+  photo.addEventListener("click", () => { if (!photo.disabled) file.click(); });
+  file.addEventListener("change", async () => {
+    const picked = file.files && file.files[0];
+    file.value = "";
+    if (!picked) return;
+    photo.disabled = true;
+    photo.textContent = tr("ed.uploading");
+    try {
+      cover.photoKey = (await uploadPicture(picked)).key;
+      haptic("success");
+    } catch (e) {
+      popup(tr("err.title"), e.message);
+    } finally {
+      photo.disabled = false;
+      renderCover();
+    }
+  });
+  $("#cover-go").addEventListener("click", coverSubmit);
 }
 
 // ------------------------------------------------------------------ лист снизу
@@ -2253,6 +3008,7 @@ function renderBalance() {
     { c: tokensText(videoCost()) },
   );
   renderCta();
+  if (state.screen === "cover") renderCoverCta();
 }
 
 function renderLanguages() {
@@ -2310,7 +3066,7 @@ function rerenderAll() {
 
 // ------------------------------------------------------------------ навигация
 
-const TITLES = { home: "nav.home", invite: "title.invite", studio: "nav.studio", edit: "nav.edit", videos: "nav.videos", tariffs: "nav.tariffs", profile: "nav.profile" };
+const TITLES = { home: "nav.home", invite: "title.invite", studio: "nav.studio", edit: "nav.edit", editor: "nav.editor", cover: "cover.title", videos: "nav.videos", tariffs: "nav.tariffs", profile: "nav.profile" };
 
 const isRoot = () => ROOT_SCREENS.includes(state.screen);
 
@@ -2319,6 +3075,11 @@ function renderHeader() {
   // название (у монтажа ещё шаг) и баланс.
   const root = isRoot();
   document.documentElement.classList.toggle("is-sub", !root);
+  // Редактор сцен занимает весь экран: вместо баланса «Собрать», нижней панели нет.
+  const editing = state.screen === "editor";
+  document.documentElement.classList.toggle("is-editor", editing);
+  $(".balance-pill").hidden = editing;
+  $("#ed-build").hidden = !editing;
   $("#topbar-title").hidden = root;
   for (const n of $$("[data-root-only]")) n.hidden = !root;
   $("#page-title").textContent = tr(TITLES[state.screen] || "nav.home");
@@ -2335,10 +3096,16 @@ function canGoBack() {
 function goBack() {
   if (closeSheet()) return;
   if (state.screen === "edit" && state.step === 2) { setStep(1); return; }
+  if (state.screen === "editor" && edDirty()) {
+    // Правки живут только здесь: уйти — значит их потерять, спрашиваем.
+    askConfirm(tr("ed.leave")).then((ok) => { if (ok) { editor.data = null; goBack(); } });
+    return;
+  }
   const prev = state.history.pop();
   // Вложенный экран открыли сразу (кнопкой из чата) — возвращаемся туда,
-  // откуда в него попадают: монтаж из «Студии», тарифы с главной.
-  go(prev || (state.screen === "edit" ? "studio" : "home"), { push: false });
+  // откуда в него попадают: монтаж из «Студии», редактор из «Результатов».
+  const home = { edit: "studio", editor: "videos" }[state.screen] || "home";
+  go(prev || home, { push: false });
 }
 
 // Две кнопки «назад» — Telegram и своя в шапке — живут от одного условия:
@@ -2355,6 +3122,8 @@ function renderScreen(screen) {
   if (screen === "home") renderHome();
   if (screen === "studio") renderStudio();
   if (screen === "videos") renderJobs();
+  if (screen === "editor") renderEditor();
+  if (screen === "cover") renderCover();
   if (screen === "tariffs") renderTariffs();
   if (screen === "profile") renderProfile();
   if (screen === "invite") { renderInviteStatic(); renderReferrals(); }
@@ -2364,7 +3133,11 @@ function go(screen, { push = true, replace = false } = {}) {
   screen = SCREEN_ALIASES[screen] || screen;
   if (!SCREENS.includes(screen)) screen = "home";
   if (screen === "invite" && !state.boot.referral) { shareInvite(); return; }
+  // Редактор открывают на конкретном ролике; без него показывать нечего.
+  if (screen === "editor" && !editor.jobId) screen = "videos";
   closeSheet();
+  const entered = screen !== state.screen;
+  if (entered && state.screen === "editor") edStop();
   if (screen !== state.screen) {
     // Главная — корень: дойдя до неё, историю дальше не копим, иначе «назад»
     // водил бы кругами по всем когда-то открытым вкладкам.
@@ -2380,8 +3153,13 @@ function go(screen, { push = true, replace = false } = {}) {
   syncBackButton();
   syncPreview();
   renderScreen(screen);
-  if (screen === "videos" || screen === "home" || screen === "studio") loadJobs();
+  if (["videos", "home", "studio", "cover"].includes(screen)) loadJobs();
   if (screen === "invite") loadReferrals();
+  if (screen === "editor") {
+    // Тот же ролик (вернулись из тарифов) — правки на месте; другой — грузим заново.
+    if (!editor.data || editor.data.job.id !== editor.jobId) loadEditor();
+    else if (entered) { edAttachVideo(); renderEditor(); }
+  }
   if (screen === "edit" && state.step === 2) setStep(2);
 }
 
@@ -2466,6 +3244,8 @@ async function main() {
   renderNext();
   renderBalance();
   initEdit();
+  initEditor();
+  initCover();
   initStrips();
   initSidebar();
   // Ширина строки и подписи плиток меряются шрифтами тем — до их загрузки
@@ -2522,8 +3302,11 @@ async function main() {
 
   // Вкладка приходит параметром `?screen=`, а не фрагментом: фрагмент занят
   // Telegram — в нём едут параметры запуска (`#tgWebAppData=…`).
-  go(new URLSearchParams(location.search).get("screen") || "home", { push: false });
-  if (!["home", "videos", "studio"].includes(state.screen)) loadJobs();
+  // Кнопка «Редактировать» под роликом в чате открывает `?screen=editor&job=<id>`.
+  const query = new URLSearchParams(location.search);
+  if (query.get("screen") === "editor") editor.jobId = query.get("job");
+  go(query.get("screen") || "home", { push: false });
+  if (!["home", "videos", "studio", "cover"].includes(state.screen)) loadJobs();
 }
 
 main();

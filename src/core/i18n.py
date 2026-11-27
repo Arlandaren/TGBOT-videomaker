@@ -83,6 +83,7 @@ def tokens_text(n: int, lang: str | None) -> str:
 ERROR_CODES = (
     "source_lost", "edl_missing", "too_short", "too_long", "no_audio",
     "no_speech", "edl_invalid", "cut_broken", "crop_broken", "worker_lost", "failed",
+    "cover_failed",
 )
 
 STAGE_KEYS = ("probe", "asr", "clean", "direct", "broll", "cut", "audio", "crop", "render", "done")
@@ -409,6 +410,29 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "Couldn't download the file from Telegram. Please try sending it again.",
     },
     "video.done": {"ru": "Готово.", "en": "Done."},
+    # Версия ролика из редактора сцен (как у Brandly: «Готова версия 3! ✨»).
+    "video.accepted_edit": {"ru": "Собираю версию {n}…", "en": "Building version {n}…"},
+    "video.version_ready": {"ru": "Готова версия {n}! ✨", "en": "Version {n} is ready! ✨"},
+    "btn.edit": {"ru": "Редактировать", "en": "Edit"},
+    # Обложка для ролика.
+    "cover.accepted": {"ru": "Рисую обложку…", "en": "Making the cover…"},
+    "cover.caption": {
+        "ru": "Обложка готова ✨\nФайл в полном размере 1080×1920 — сохраните и поставьте обложкой Reels.",
+        "en": "Your cover is ready ✨\nFull-size 1080×1920 file — save it and set it as the Reels cover.",
+    },
+    "err.cover_failed": {
+        "ru": "Не получилось сделать обложку. Токены вернулись на баланс.",
+        "en": "Couldn't make the cover. The tokens went back to your balance.",
+    },
+    "stage.cover": {"ru": "Рисую обложку", "en": "Making the cover"},
+    "api.cover_unavailable": {
+        "ru": "Для этого ролика обложку сделать нельзя: исходное видео уже удалено с сервера. Загрузите своё фото.",
+        "en": "A cover can't be made for this reel: the source video is gone from the server. Upload your own photo.",
+    },
+    "api.cover_bad": {"ru": "Не получилось принять заказ обложки. Попробуйте ещё раз.",
+                      "en": "Couldn't take the cover order. Please try again."},
+    "api.no_balance_cover": {"ru": "На балансе не хватает токенов на обложку.",
+                             "en": "Not enough tokens for a cover."},
     "video.result_lost": {"ru": "Ролик готов, но файл потерялся. Напишите нам.", "en": "The reel is ready, but the file got lost. Please contact us."},
     "video.not_sent": {
         "ru": "Ролик готов, но в чат не отправился. Он есть в приложении — «Мои ролики».",
@@ -529,6 +553,29 @@ TEXTS: dict[str, dict[str, str]] = {
     "api.no_balance": {"ru": "На балансе не хватает токенов на ролик.", "en": "Not enough tokens for a reel."},
     "api.enqueue_failed": {"ru": "Не получилось поставить ролик в очередь. Баланс не списан.", "en": "Couldn't queue the video. Your balance was not charged."},
     "api.video_not_found": {"ru": "Ролик не найден.", "en": "Video not found."},
+    # Редактор сцен.
+    "api.edit_unavailable": {
+        "ru": "Этот ролик нельзя открыть в редакторе.",
+        "en": "This reel can't be opened in the editor.",
+    },
+    "api.edit_source_gone": {
+        "ru": "Исходное видео удалено с сервера по сроку хранения — собрать новую версию не из чего.",
+        "en": "The source video was removed after the storage period, so a new version can't be built.",
+    },
+    "api.edit_bad": {"ru": "Правки не применились. Обновите редактор и попробуйте ещё раз.",
+                     "en": "The edits couldn't be applied. Reopen the editor and try again."},
+    "api.edit_text_long": {"ru": "Текст сцены слишком длинный.", "en": "The scene text is too long."},
+    "api.edit_empty": {"ru": "Так в ролике ничего не останется — оставьте хотя бы одно слово.",
+                       "en": "That would leave nothing in the reel — keep at least one word."},
+    "api.edit_media_close": {
+        "ru": "Картинки стоят слишком близко друг к другу — уберите одну из соседних.",
+        "en": "The pictures are too close together — remove one of the neighbours.",
+    },
+    "api.edit_nothing": {"ru": "Вы ничего не поменяли.", "en": "Nothing was changed."},
+    "api.media_bad": {"ru": "Не получилось прочитать картинку. Подойдут JPG и PNG до 8 МБ.",
+                      "en": "Couldn't read the picture. JPG and PNG up to 8 MB work."},
+    "api.no_balance_edit": {"ru": "На балансе не хватает токенов на новую версию.",
+                            "en": "Not enough tokens for a new version."},
     "api.not_ready": {"ru": "Ролик ещё не готов.", "en": "The video isn't ready yet."},
     "api.purged": {
         "ru": "Ролик удалён с сервера по сроку хранения. В чате он остался.",

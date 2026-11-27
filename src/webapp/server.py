@@ -395,6 +395,11 @@ def _job_view(job: Job, *, live: dict[str, Any] | None, secret: str, lang: str, 
         "result_duration": job.result_duration,
         "error": error,
         "delivered": job.delivered,
+        # `video` — ролик, `cover` — обложка; у ролика — номер версии
+        # («Монтаж · версия 3») и можно ли открыть его в редакторе сцен.
+        "kind": getattr(job, "kind", None) or "video",
+        "version": int(getattr(job, "version", None) or 1),
+        "editable": _editable(job),
         "video_url": None,
         # Кадр ролика для строки списка: приложение показывает его миниатюрой.
         "thumb_url": None,
@@ -403,9 +408,21 @@ def _job_view(job: Job, *, live: dict[str, Any] | None, secret: str, lang: str, 
         "expires_at": None,
         "purged": job.files_purged_at is not None,
     }
+    if view["kind"] == "cover":
+        spec = (job.options or {}).get("cover") if isinstance(job.options, dict) else None
+        view["cover"] = {"style": (spec or {}).get("style"), "text": (spec or {}).get("text") or ""}
+        view["image_url"] = None
+    else:
+        # Заголовок ролика — готовая надпись для его обложки.
+        edl = getattr(job, "edl", None)
+        view["title"] = (edl.get("title") or "") if isinstance(edl, dict) else ""
     if status == JobStatus.DONE.value and job.result_key:
         token = media_token(str(job.id), secret)
-        view["video_url"] = f"/media/{job.id}.mp4?t={token}"
+        if view["kind"] == "cover":
+            if job.files_purged_at is None:
+                view["image_url"] = f"/cover/{job.id}.jpg?t={token}"
+        else:
+            view["video_url"] = f"/media/{job.id}.mp4?t={token}"
         if job.files_purged_at is None:
             view["thumb_url"] = f"/media/{job.id}.jpg?t={token}"
             born = getattr(job, "finished_at", None) or job.created_at
@@ -597,6 +614,10 @@ async def bootstrap(request: web.Request) -> web.Response:
             # сервере что-то меняют (`options.available_switches`).
             "switches": available_switches(cfg),
             "retention_days": cfg.storage_retention_days,
+            # Экран «Обложка»: стили, цена, предел длины надписи.
+            "cover": _cover_view(cfg, is_admin=user.is_admin, lang=lang),
+            # Цена версии ролика из редактора сцен (ноль — бесплатно).
+            "edit_cost": cfg.tokens_per_edit if cfg.charges(is_admin=user.is_admin) else 0,
             # Куда ведут строки профиля: канал, поддержка, оферта. Пустая
             # ссылка — строки нет: кнопка в никуда хуже отсутствующей.
             "links": await _links(cfg),
@@ -1140,6 +1161,130 @@ async def job_send(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+# ------------------------------------------------------------------ обложки
+
+
+def _cover_view(cfg: Settings, *, is_admin: bool, lang: str) -> dict[str, Any]:
+    """Что приложению нужно для экрана «Обложка»: стили, цена, предел надписи."""
+    from src.pipeline.cover import MAX_TEXT, STYLES
+
+    return {
+        "styles": [
+            {"key": s.key, "title": s.title.get(lang) or s.title["ru"], "preview": f"/static/covers/{s.key}.jpg"}
+            for s in STYLES
+        ],
+        "cost": cfg.tokens_per_cover if cfg.charges(is_admin=is_admin) else 0,
+        "max_text": MAX_TEXT,
+    }
+
+
+async def cover_create(request: web.Request) -> web.Response:
+    """Заказ обложки: ролик, стиль, надпись и — по желанию — своё фото.
+
+    Обложка — задача вида `cover`: своя строка в «Результатах», возврат токенов
+    при сбое и доставка в чат идут тем же путём, что у ролика.
+    """
+    from src.bot.handlers.video import watch_job
+    from src.pipeline.cover import MAX_TEXT, style_keys
+    from src.worker.tasks import QUEUE_CPU, get_queue
+
+    cfg = request.app[CFG_KEY]
+    bot = request.app[BOT_KEY]
+    user = await _db_user(request)
+    lang = lang_of(user)
+    try:
+        body = await request.json()
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        return await _fail(request, 400, "api.cover_bad")
+    try:
+        job = await repo.get_job(str(body.get("job_id") or ""))
+    except ValueError:
+        job = None
+    status = None if job is None else (job.status.value if isinstance(job.status, JobStatus) else str(job.status))
+    if job is None or job.user_id != user.id or getattr(job, "kind", "video") != "video" \
+            or status != JobStatus.DONE.value:
+        return await _fail(request, 404, "api.video_not_found")
+
+    style = body.get("style") if body.get("style") in style_keys() else style_keys()[0]
+    text = " ".join(str(body.get("text") or "").split())[:MAX_TEXT]
+    photo_key = body.get("photo_key") or None
+    if photo_key is not None and not _own_media_key(user.id, photo_key):
+        return await _fail(request, 400, "api.cover_bad")
+    # Кадр берётся из исходника ролика, а он лежит у исходной задачи.
+    root = getattr(job, "root_id", None) or job.id
+    if photo_key is None:
+        origin = job if root == job.id else await repo.get_job(root)
+        if origin is None or origin.files_purged_at is not None:
+            return await _fail(request, 410, "api.cover_unavailable")
+
+    try:
+        made = await repo.create_job(
+            user.id,
+            source_file_id=None,
+            source_key=None,
+            source_size=None,
+            preset=job.preset,
+            chat_id=user.id,
+            options={"cover": {"style": style, "text": text, "photo_key": photo_key}},
+            charge=cfg.charges(is_admin=user.is_admin) and cfg.tokens_per_cover > 0,
+            cost=cfg.tokens_per_cover,
+            kind="cover",
+            root_id=root,
+        )
+    except repo.InsufficientBalance:
+        return await _fail(request, 402, "api.no_balance_cover", extra={"balance": user.balance})
+
+    status_id: int | None = None
+    try:
+        try:
+            sent = await bot.send_message(user.id, t("cover.accepted", lang))
+            status_id = sent.message_id
+            await repo.update_job(made.id, status_message_id=status_id)
+        except Exception as e:  # noqa: BLE001 — нет чата с ботом: прогресс увидят в приложении
+            log.warning("обложка %s: не смог написать в чат %s: %s", made.id, user.id, e)
+        queue = await get_queue(QUEUE_CPU)
+        try:
+            await queue.enqueue_job("process_job", str(made.id), _queue_name=QUEUE_CPU)
+        finally:
+            await queue.close()
+    except Exception as e:  # noqa: BLE001
+        log.exception("обложка %s: не поставилась в очередь", made.id)
+        await repo.mark_failed(made.id, f"постановка в очередь: {e}")
+        await repo.refund_job(made.id)
+        return await _fail(request, 500, "api.enqueue_failed")
+
+    if status_id is not None:
+        watch_job(bot, user.id, status_id, str(made.id), job.preset)
+    latest = await repo.get_job(made.id)
+    return web.json_response(
+        {"job": _job_view(latest or made, live=None, secret=cfg.bot_token, lang=lang, cfg=cfg)}
+    )
+
+
+async def cover_image(request: web.Request) -> web.StreamResponse:
+    """Готовая обложка в полном размере — для просмотра в приложении."""
+    cfg = request.app[CFG_KEY]
+    job_id = request.match_info["job_id"]
+    if not check_media_token(job_id, request.query.get("t", ""), cfg.bot_token):
+        return _json_error(403, t("api.link_expired", _browser_lang(request)))
+    try:
+        job = await repo.get_job(job_id)
+    except ValueError:
+        job = None
+    if job is None or not job.result_key or job.files_purged_at is not None \
+            or getattr(job, "kind", "video") != "cover":
+        return _json_error(404, t("api.video_not_found", _browser_lang(request)))
+    cache = Path(cfg.work_dir) / "media-cache" / f"{job.id}.cover.jpg"
+    if not cache.exists():
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        part = cache.with_suffix(".part")
+        await storage.download(job.result_key, part)
+        part.replace(cache)
+    return web.FileResponse(cache, headers={"Cache-Control": "private, max-age=3600"})
+
+
 async def _own_job(request: web.Request, user: WebAppUser) -> Job | None:
     try:
         job = await repo.get_job(request.match_info["job_id"])
@@ -1148,6 +1293,207 @@ async def _own_job(request: web.Request, user: WebAppUser) -> Job | None:
     if job is None or job.user_id != user.id:
         return None
     return job
+
+
+# ------------------------------------------------------------------ редактор сцен
+
+# Своя картинка для сцены: файл кладётся в хранилище под ключом с id человека,
+# и в правках принимаются только ключи этого вида — чужой файл не подставить.
+EDIT_MEDIA_PREFIX = "edit-media"
+EDIT_MEDIA_MAX_BYTES = 8 * 1024 * 1024
+
+
+def _own_media_key(user_id: int, key: Any) -> bool:
+    return isinstance(key, str) and bool(
+        re.fullmatch(rf"{EDIT_MEDIA_PREFIX}/\d{{4}}/\d{{2}}/\d{{2}}/{int(user_id)}/[0-9a-f]{{32}}\.jpg", key)
+    )
+
+
+def _editable(job: Job) -> bool:
+    """Можно ли открыть ролик в редакторе сцен: готов, лист сохранён, файлы целы."""
+    status = job.status.value if isinstance(job.status, JobStatus) else str(job.status)
+    return (
+        getattr(job, "kind", "video") == "video"
+        and status == JobStatus.DONE.value
+        and bool(getattr(job, "edl", None))
+        and getattr(job, "files_purged_at", None) is None
+    )
+
+
+async def _edit_context(request: web.Request) -> tuple[Any, Job, Any, JobOptions] | web.Response:
+    """Ролик, его лист и опции для редактора — или готовый отказ.
+
+    Исходник версии лежит у исходной задачи (`Job.root_id`): удалён по сроку
+    хранения — собирать новую версию не из чего, и сказать об этом надо до
+    того, как человек полчаса правил сцены.
+    """
+    from src.core.edl import EDL
+
+    user = await _db_user(request)
+    job = await _own_job(request, request[USER_KEY])
+    if job is None:
+        return await _fail(request, 404, "api.video_not_found")
+    if not _editable(job):
+        return await _fail(request, 409, "api.edit_unavailable")
+    root_id = getattr(job, "root_id", None)
+    if root_id:
+        origin = await repo.get_job(root_id)
+        if origin is None or origin.files_purged_at is not None:
+            return await _fail(request, 410, "api.edit_source_gone")
+    try:
+        edl = EDL(**job.edl)
+    except Exception as e:  # noqa: BLE001 — лист старого формата редактор не откроет
+        log.warning("задача %s: лист не читается редактором: %s", job.id, e)
+        return await _fail(request, 409, "api.edit_unavailable")
+    return user, job, edl, JobOptions.from_stored(job.options)
+
+
+async def job_scenes(request: web.Request) -> web.Response:
+    """Сцены ролика для редактора: текст, слова, место и размер текста, картинка."""
+    from src.core.edit import MAX_SCENE_TEXT, MAX_TITLE, scenes_of
+
+    cfg = request.app[CFG_KEY]
+    got = await _edit_context(request)
+    if isinstance(got, web.Response):
+        return got
+    user, job, edl, options = got
+    lang = lang_of(user)
+    return web.json_response(
+        {
+            "job": _job_view(job, live=None, secret=cfg.bot_token, lang=lang, cfg=cfg),
+            "scenes": scenes_of(edl, apply_cuts=options.cut),
+            "duration": round(float(job.result_duration or edl.out_duration), 2),
+            "preset": job.preset,
+            "accent": options.accent,
+            "title": edl.title,
+            # Сколько спишется за сборку версии; владельцу и в бесплатном режиме — ноль.
+            "cost": cfg.tokens_per_edit if cfg.charges(is_admin=user.is_admin) else 0,
+            "limits": {"text": MAX_SCENE_TEXT, "title": MAX_TITLE},
+        }
+    )
+
+
+async def edit_media(request: web.Request) -> web.Response:
+    """Своя картинка для сцены. Тело запроса — сам файл; ответ — ключ для правок.
+
+    Картинка здесь же приводится к JPEG: так сервер убеждается, что это
+    картинка, а не что угодно с расширением `.jpg`, и в хранилище не лежат
+    десятимегабайтные оригиналы.
+    """
+    from src.pipeline.reedit import _normalise_picture
+
+    cfg = request.app[CFG_KEY]
+    user: WebAppUser = request[USER_KEY]
+    body = await request.read()
+    if not body or len(body) > EDIT_MEDIA_MAX_BYTES:
+        return await _fail(request, 413 if body else 400, "api.media_bad")
+    folder = Path(cfg.work_dir) / "edit-media-in"
+    folder.mkdir(parents=True, exist_ok=True)
+    name = uuid.uuid4().hex
+    raw, out = folder / f"{name}.src", folder / f"{name}.jpg"
+    try:
+        raw.write_bytes(body)
+        try:
+            aspect = await asyncio.to_thread(_normalise_picture, raw, out)
+        except Exception:  # noqa: BLE001 — не картинка или битый файл
+            return await _fail(request, 415, "api.media_bad")
+        day = datetime.now(timezone.utc).strftime("%Y/%m/%d")
+        key = f"{EDIT_MEDIA_PREFIX}/{day}/{user.id}/{name}.jpg"
+        await storage.upload(out, key, content_type="image/jpeg")
+    finally:
+        raw.unlink(missing_ok=True)
+        out.unlink(missing_ok=True)
+    return web.json_response({"key": key, "aspect": round(aspect, 4)})
+
+
+async def job_edit(request: web.Request) -> web.Response:
+    """«Собрать»: правки редактора → новая версия ролика.
+
+    Версия — обычная задача: со своей полосой в приложении, возвратом токенов
+    при сбое и доставкой в чат. От ролика её отличают правленый лист, ссылка на
+    исходную задачу (`root_id`) и цена (`TOKENS_PER_EDIT`).
+    """
+    from src.bot.handlers.video import watch_job
+    from src.core.edit import EditError, apply_edits, changed
+    from src.worker.tasks import QUEUE_CPU, get_queue
+
+    cfg = request.app[CFG_KEY]
+    bot = request.app[BOT_KEY]
+    got = await _edit_context(request)
+    if isinstance(got, web.Response):
+        return got
+    user, job, edl, options = got
+    lang = lang_of(user)
+    try:
+        body = await request.json()
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        return await _fail(request, 400, "api.edit_bad")
+
+    try:
+        new, cut_on = apply_edits(edl, body.get("edits") or {}, apply_cuts=options.cut)
+    except EditError as e:
+        return await _fail(request, 400, f"api.{e.code}")
+    # Картинки: либо те, что уже были в листе, либо загруженные этим человеком.
+    known = {b.asset_key for b in edl.broll if b.asset_key}
+    for item in new.broll:
+        if item.asset_key and item.asset_key not in known and not _own_media_key(user.id, item.asset_key):
+            return await _fail(request, 400, "api.edit_bad")
+
+    preset = body.get("preset") if body.get("preset") in available() else job.preset
+    accent = body.get("accent") if body.get("accent") in ACCENTS else options.accent
+    if not changed(edl, new) and preset == job.preset and accent == options.accent:
+        return await _fail(request, 400, "api.edit_nothing")
+    new.preset = preset
+    fresh = options.model_copy(update={"cut": cut_on, "accent": accent})
+
+    root = getattr(job, "root_id", None) or job.id
+    version = await repo.next_version(root)
+    try:
+        made = await repo.create_job(
+            user.id,
+            source_file_id=None,
+            source_key=None,
+            source_size=None,
+            preset=preset,
+            chat_id=user.id,
+            options=fresh.model_dump(),
+            charge=cfg.charges(is_admin=user.is_admin) and cfg.tokens_per_edit > 0,
+            cost=cfg.tokens_per_edit,
+            root_id=root,
+            version=version,
+            edl=json.loads(new.model_dump_json()),
+            source_duration=job.source_duration,
+        )
+    except repo.InsufficientBalance:
+        return await _fail(request, 402, "api.no_balance_edit", extra={"balance": user.balance})
+
+    status_id: int | None = None
+    try:
+        try:
+            status = await bot.send_message(user.id, t("video.accepted_edit", lang, n=version))
+            status_id = status.message_id
+            await repo.update_job(made.id, status_message_id=status_id)
+        except Exception as e:  # noqa: BLE001 — нет чата с ботом: прогресс увидят в приложении
+            log.warning("задача %s: не смог написать в чат %s: %s", made.id, user.id, e)
+        queue = await get_queue(QUEUE_CPU)
+        try:
+            await queue.enqueue_job("process_job", str(made.id), _queue_name=QUEUE_CPU)
+        finally:
+            await queue.close()
+    except Exception as e:  # noqa: BLE001
+        log.exception("задача %s: версия не поставилась в очередь", made.id)
+        await repo.mark_failed(made.id, f"постановка в очередь: {e}")
+        await repo.refund_job(made.id)
+        return await _fail(request, 500, "api.enqueue_failed")
+
+    if status_id is not None:
+        watch_job(bot, user.id, status_id, str(made.id), preset)
+    latest = await repo.get_job(made.id)
+    return web.json_response(
+        {"job": _job_view(latest or made, live=None, secret=cfg.bot_token, lang=lang, cfg=cfg)}
+    )
 
 
 # ------------------------------------------------------------------ PayHot
@@ -1441,6 +1787,15 @@ async def _grab_frame(job: Job, folder: Path, cache: Path) -> None:
         video = borrowed
     part = folder / f"{job.id}.jpg.part"
     try:
+        if getattr(job, "kind", "video") == "cover":
+            # Обложка — уже картинка: уменьшаем её саму.
+            await affmpeg(
+                ["-i", str(video), "-frames:v", "1",
+                 "-vf", f"scale={THUMB_WIDTH}:-2", "-q:v", "4", "-f", "image2", str(part)],
+                timeout=30,
+            )
+            part.replace(cache)
+            return
         # Полсекунды от начала: первый кадр часто чёрный или смазанный.
         await affmpeg(
             ["-ss", "0.5", "-i", str(video), "-frames:v", "1",
@@ -1551,6 +1906,11 @@ def create_app(bot: Bot, cfg: Settings) -> web.Application:
     app.router.add_post("/api/music", music_check)
     app.router.add_get("/api/jobs", jobs_list)
     app.router.add_post("/api/jobs/{job_id}/send", job_send)
+    app.router.add_get("/api/jobs/{job_id}/scenes", job_scenes)
+    app.router.add_post("/api/jobs/{job_id}/edit", job_edit)
+    app.router.add_post("/api/edit-media", edit_media)
+    app.router.add_post("/api/covers", cover_create)
+    app.router.add_get("/cover/{job_id}.jpg", cover_image)
     app.router.add_post("/api/invoice", invoice)
     app[PAYHOT_LOCKS_KEY] = {}
     app.router.add_post("/api/payhot/orders", payhot_order)

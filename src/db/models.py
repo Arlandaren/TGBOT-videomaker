@@ -119,6 +119,13 @@ class Job(Base):
     # начале задачи, кладёт результат на место исходника и обнуляет счётчик —
     # дальше это обычный ролик из одного файла. NULL и 0 — склеивать нечего.
     source_parts: Mapped[int | None] = mapped_column(Integer)
+    # Что это за задача: `video` — ролик, `cover` — обложка для ролика.
+    kind: Mapped[str] = mapped_column(String(16), default="video", server_default="video", nullable=False)
+    # Версия ролика из редактора сцен и обложка ссылаются на ИСХОДНУЮ задачу:
+    # оттуда берутся файлы исходника (своих у версии нет). У исходной — пусто.
+    root_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    # Номер версии ролика: исходный монтаж — первая, каждая сборка из редактора — следующая.
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
     # Второй исходник режима «Два видео» — верхняя половина кадра, без звука.
     # NULL — обычный ролик из одного видео.
     top_source_key: Mapped[str | None] = mapped_column(String(512))

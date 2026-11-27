@@ -211,15 +211,25 @@ async def create_job(
     chat_id: int | None = None,
     options: dict[str, Any] | None = None,
     charge: bool = False,
+    cost: int | None = None,
+    kind: str = "video",
+    root_id: uuid.UUID | str | None = None,
+    version: int = 1,
+    edl: dict[str, Any] | None = None,
+    source_duration: float | None = None,
 ) -> Job:
     """Создаёт задачу. С `charge=True` — списывает ролик в ТОЙ ЖЕ транзакции.
+
+    `cost` — цена не ролика, а версии из редактора или обложки; без него
+    списывается цена ролика. `kind`, `root_id`, `version`, `edl` — для них же:
+    версия и обложка ссылаются на исходную задачу и несут свой лист.
 
     Списание и задача — одна транзакция намеренно: по отдельности обрыв между
     ними оставлял бы либо списанный ролик без задачи, либо задачу без оплаты.
     Проверка баланса и списание — один UPDATE с условием, поэтому две
     одновременные загрузки не уведут баланс в минус.
     """
-    cost = default_settings.tokens_per_video if charge else 0
+    cost = (default_settings.tokens_per_video if cost is None else max(0, cost)) if charge else 0
     async with session() as s:
         if charge:
             left = (
@@ -243,11 +253,30 @@ async def create_job(
             options=options,
             charged=charge,
             cost=cost,
+            kind=kind,
+            root_id=uuid.UUID(str(root_id)) if root_id else None,
+            version=version,
+            edl=edl,
+            source_duration=source_duration,
         )
         s.add(job)
         await s.flush()
         await s.refresh(job)
         return job
+
+
+async def next_version(root_id: uuid.UUID | str) -> int:
+    """Номер следующей версии ролика: на единицу больше последней собранной."""
+    root = uuid.UUID(str(root_id))
+    async with session() as s:
+        last = (
+            await s.execute(
+                select(func.max(Job.version)).where(
+                    or_(Job.id == root, Job.root_id == root), Job.kind == "video"
+                )
+            )
+        ).scalar_one_or_none()
+        return int(last or 1) + 1
 
 
 async def get_job(job_id: uuid.UUID | str) -> Job | None:

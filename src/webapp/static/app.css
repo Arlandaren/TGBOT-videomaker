@@ -227,7 +227,6 @@ html.is-sub .topbar__logo { display: none; }
   background: var(--card); border: 1px solid var(--line); font-weight: 700; font-size: 14px; color: var(--muted);
 }
 .chips button.is-active { background: var(--pill); color: var(--pill-text); border-color: var(--pill); }
-.chips b { margin-left: 6px; opacity: 0.6; }
 
 /* ---------------------------------------------------------------- списки */
 .list { display: flex; flex-direction: column; }
@@ -729,6 +728,157 @@ html.is-sub .topbar__logo { display: none; }
 }
 :root[data-theme="light"] .skeleton::after { background: linear-gradient(90deg, transparent, rgb(0 0 0 / 4%), transparent); }
 @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+/* ---------------------------------------------------------------- обложка */
+/* Стопка превью у строки «Обложка» в «Студии». */
+.cover-stack { position: relative; flex: none; width: 62px; height: 56px; }
+.cover-stack img {
+  position: absolute; top: 4px; width: 30px; height: 48px; object-fit: cover; border-radius: 7px;
+  box-shadow: 0 4px 10px rgb(0 0 0 / 35%);
+}
+.cover-stack img:nth-child(1) { left: 0; transform: rotate(-8deg); }
+.cover-stack img:nth-child(2) { left: 16px; top: 2px; z-index: 1; }
+.cover-stack img:nth-child(3) { left: 32px; transform: rotate(8deg); }
+.badge--new { display: inline-block; margin-left: 8px; font-style: normal; vertical-align: 2px; font-size: 10px; padding: 2px 7px; border-radius: 999px; }
+.list-row__text b:has(.badge--new) { overflow: visible; }
+
+.cover-reels { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; margin: 0 -18px; padding: 2px 18px; }
+.cover-reels::-webkit-scrollbar { display: none; }
+.cover-reels .skeleton, .cover-reels .empty-line { flex: 1; padding: 6px 0; }
+.cover-reel { flex: none; padding: 3px; border-radius: 14px; border: 2px solid transparent; opacity: 0.6; transition: opacity 160ms ease, border-color 160ms ease; }
+.cover-reel .thumb { width: 54px; height: 74px; display: flex; }
+.cover-reel.is-active { border-color: var(--text); opacity: 1; }
+
+.cover-styles { padding: 12px; gap: 6px; }
+.cover-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.cover-style { position: relative; aspect-ratio: 9 / 16; border-radius: 14px; overflow: hidden; background: var(--card-2); transition: transform 120ms ease; }
+.cover-style:active { transform: scale(0.97); }
+.cover-style img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cover-style.is-active { outline: 3px solid var(--text); outline-offset: -3px; }
+.cover-style__check {
+  position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--pill); color: var(--pill-text); display: none; align-items: center; justify-content: center;
+}
+.cover-style.is-active .cover-style__check { display: inline-flex; }
+.cover-grid__foot { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+.cover-grid__foot .link-hint span { border-bottom: 0; font-size: 14px; font-weight: 700; }
+#cover-all { display: inline-flex; align-items: center; gap: 4px; margin-right: 0; padding: 0 2px; }
+.cover-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.cover-head h3 { font-size: 16px; font-weight: 800; }
+.cover-head .muted { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.field__input {
+  flex: 1; min-width: 0; height: 52px; background: transparent; border: 0; outline: none; color: var(--text);
+  font: inherit; font-size: 16px; text-overflow: ellipsis;
+}
+#cover-photo { align-self: stretch; min-height: 46px; }
+img.player { aspect-ratio: auto; max-height: 62vh; margin: 0 auto; width: auto; max-width: 100%; }
+
+/* ---------------------------------------------------------------- редактор сцен */
+/* «Собрать» в шапке: спит, пока правок нет, и загорается с первой. */
+.build-btn {
+  flex: none; height: 40px; padding: 0 18px; border-radius: 999px;
+  background: var(--card-2); border: 1px solid var(--line); color: var(--muted);
+  font-weight: 800; font-size: 15px; transition: background 160ms ease, color 160ms ease;
+}
+.build-btn.is-on { background: var(--grad); border-color: transparent; color: #fff; box-shadow: 0 6px 18px rgb(255 63 134 / 25%); }
+.build-btn[disabled] { opacity: 0.6; }
+html.is-editor .tabbar { display: none; }
+/* «Редактирование» рядом с «назад» и «Собрать» на телефоне в 22 px не помещается. */
+html.is-editor .topbar h1 { font-size: 19px; }
+html.is-editor .main { padding-bottom: calc(16px + var(--safe-bottom)); }
+html.is-editor .screens { padding-left: 0; padding-right: 0; }
+
+.ed { display: flex; flex-direction: column; gap: 10px; }
+.ed__player {
+  position: relative; align-self: center; overflow: hidden;
+  height: min(40vh, 340px); aspect-ratio: 9 / 16; border-radius: 18px; background: #000;
+}
+.ed__player video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.ed__spin {
+  position: absolute; top: 50%; left: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%;
+  border: 3px solid rgb(255 255 255 / 18%); border-top-color: #ff4d8a; border-right-color: #ffb547;
+  animation: spin 0.9s linear infinite; display: none;
+}
+.ed__player.is-loading .ed__spin { display: block; }
+.ed__mute {
+  position: absolute; right: 10px; bottom: 10px; width: 32px; height: 32px; border-radius: 50%;
+  background: rgb(20 18 27 / 70%); color: #fff; display: inline-flex; align-items: center; justify-content: center;
+}
+.ed__mute .i-mute, .ed__player.is-muted .ed__mute .i-sound { display: none; }
+.ed__player.is-muted .ed__mute .i-mute { display: block; }
+
+.ed__bar { display: flex; align-items: center; gap: 12px; padding: 0 18px; }
+.ed__play { flex: none; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; }
+.ed__play .i-pause, .ed:has(.ed__player.is-playing) .ed__play .i-play { display: none; }
+.ed:has(.ed__player.is-playing) .ed__play .i-pause { display: block; }
+/* Шкала: отрезок на сцену, текущая — светлее, бегунок — время плеера. */
+.ed__line { position: relative; flex: 1; height: 28px; cursor: pointer; }
+.ed-seg {
+  position: absolute; top: 12px; height: 4px; border-radius: 2px; background: rgb(255 255 255 / 22%);
+  box-shadow: inset -2px 0 0 var(--bg);
+}
+:root[data-theme="light"] .ed-seg { background: rgb(0 0 0 / 18%); }
+.ed-seg.is-active { background: var(--text); }
+.ed-seg.is-gone { opacity: 0.35; }
+.ed-knob {
+  position: absolute; top: 7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%;
+  background: var(--text); box-shadow: 0 0 0 3px var(--bg);
+}
+.ed__time { flex: none; font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.ed__nav { display: flex; align-items: center; gap: 6px; padding: 0 12px 0 10px; }
+.ed__hist { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+.ed__hist[disabled] { opacity: 0.3; cursor: default; }
+.ed__count { flex: 1; text-align: center; font-size: 15px; }
+.ed__general { min-height: 40px; padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; }
+
+/* Лента карточек сцен: листается вбок и встаёт карточкой по центру. */
+.ed__cards {
+  display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x mandatory;
+  padding: 2px 6% 8px;
+}
+.ed__cards::-webkit-scrollbar { display: none; }
+.ed-card {
+  flex: none; width: 100%; scroll-snap-align: center; padding: 14px 14px 6px;
+  display: flex; flex-direction: column; gap: 10px; opacity: 0.55; transition: opacity 180ms ease;
+}
+.ed-card.is-active { opacity: 1; }
+.ed-card.skeleton { height: 280px; opacity: 1; }
+.ed-card__label { font-size: 13px; font-weight: 700; color: var(--muted); }
+.ed-card__note { font-size: 13px; margin-top: -4px; }
+.ed-text {
+  width: 100%; min-height: 56px; padding: 10px 12px 10px 14px; border-radius: 14px;
+  background: var(--card-2); border: 1px solid var(--line);
+  display: flex; align-items: center; gap: 10px; text-align: left;
+}
+.ed-text__value { flex: 1; min-width: 0; font-weight: 800; font-size: 17px; line-height: 1.25; overflow-wrap: anywhere; }
+.ed-text__value.is-empty { color: var(--muted); font-weight: 600; }
+.ed-text__pen { color: var(--muted); }
+.ed-accent { color: #ff7a3d; }
+.ed-rows { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.ed-row { width: 100%; min-height: 50px; padding: 0 12px 0 14px; display: flex; align-items: center; gap: 10px; text-align: left; }
+.ed-row + .ed-row { border-top: 1px solid var(--line); }
+.ed-row__label { flex: 1 0 auto; font-weight: 700; font-size: 15px; white-space: nowrap; }
+.ed-row__value { min-width: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ed-row[disabled] { opacity: 0.45; cursor: default; }
+
+/* Листы правок. */
+.ed-area, .ed-input {
+  width: 100%; padding: 12px 14px; border-radius: 14px; background: var(--card-2); border: 1px solid var(--line);
+  color: var(--text); font: inherit; font-size: 17px; font-weight: 700; outline: none; resize: none;
+}
+.ed-area:focus, .ed-input:focus { border-color: var(--muted); }
+.ed-sheet__foot { display: flex; justify-content: flex-end; margin: 6px 2px 12px; }
+.ed-words { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
+.ed-word {
+  min-height: 40px; padding: 0 14px; border-radius: 999px; background: var(--card-2); border: 1px solid var(--line);
+  font-weight: 700; font-size: 15px;
+}
+.ed-word.is-cut { text-decoration: line-through; color: var(--muted); background: transparent; border-style: dashed; }
+.ed-remove { display: block; width: 100%; margin-top: 10px; min-height: 46px; }
+.sheet__body .label { margin: 14px 0 8px; }
+.sheet__body .label:first-child { margin-top: 4px; }
+.sheet__body > p.muted { margin-bottom: 10px; }
 
 /* ---------------------------------------------------------------- тарифы */
 .balance-box__head { display: flex; justify-content: space-between; align-items: center; }

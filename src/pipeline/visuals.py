@@ -1320,6 +1320,22 @@ async def _ask(edl: EDL, llm: LLMClient, cfg: Any) -> Visuals | None:
     return None
 
 
+def transitions_only(edl: EDL) -> Visuals:
+    """Лист с одними переходами: графику человек выключил, а переходы оставил.
+
+    Переходы на склейках расставляет тот же шаг, что и графику, поэтому без
+    этого галочка «Графика» молча забирала бы с собой и их. Модель не зовётся:
+    ради одних переходов платить незачем, программа ставит их сама. Не бросает.
+    """
+    try:
+        if not edl.words:
+            return Visuals()
+        return sanitize_visuals(Visuals(transitions=fallback_transitions(edl)), edl)
+    except Exception:  # noqa: BLE001 — переходы не имеют права уронить ролик
+        log.exception("переходы: расстановка упала — ролик выйдет без них")
+        return Visuals()
+
+
 async def plan_visuals(
     edl: EDL,
     *,

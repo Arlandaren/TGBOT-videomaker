@@ -5,6 +5,8 @@
 
 Что делает этап:
 
+0. чистка голоса и «студийный звук» — срез гула, шумоподавление, де-эссер,
+   тембр, компрессия (`voice_clean_filter`, `voice_studio_filter`);
 1. `loudnorm` голоса на `preset.audio.target_lufs` — речь ровная по громкости;
 2. подложка из `assets/music/` (`preset.audio.music`), зациклённая под длину
    ролика, с фейдами `preset.audio.music_fade_s` на входе и выходе;
@@ -646,6 +648,83 @@ def voice_clean_filter(cfg: Settings | None = None) -> str:
 # лежит фон; речь туда не опускается даже на тихих окончаниях.
 VOICE_NOISE_FLOOR_DB = -40.0
 
+# «Студийный звук». Числа намеренно скромные: обработку слышно на сравнении, а
+# не в лоб. Голос, который «звучит обработанным», хуже голоса с телефона.
+#
+# Сильнее этого запись не подтягивается перед обработкой: тише −40 LUFS это уже
+# не голос, а фон, и усиливать его до уровня речи незачем.
+STUDIO_GAIN_LIMIT_DB = 24.0
+# Де-эссер: насколько охотно срабатывает и насколько приглушает свистящие.
+# Сила подобрана замером (samples/phase-0-source.mp4, 27.11.2026, полоса
+# 6-9 кГц): 0.4 снимает 1.5 дБ свиста и 0.7 дБ разборчивости; 0.7 — уже 6.4 и
+# 4.6 дБ, то есть шепелявость. Шкала крутая, выше 0.5 не поднимать.
+STUDIO_DEESS_INTENSITY = 0.4
+STUDIO_DEESS_MAX = 0.5
+# Тембр: (частота, Гц; усиление, дБ; добротность). Гул коробки вниз, разборчивость
+# согласных вверх. Подъёма «воздуха» выше 8 кГц нет намеренно: на замере
+# (samples/, 27.11.2026) полка +1.5 дБ вместе с компрессией поднимала свистящие
+# на 2.2-2.7 дБ, а микрофон телефона и без того резкий.
+STUDIO_EQ: tuple[tuple[float, float, float], ...] = (
+    (250.0, -2.0, 1.0),
+    (3500.0, 2.0, 1.2),
+)
+# Компрессор. Порог считается от полной шкалы и имеет смысл только потому, что
+# голос к этому месту уже подтянут к цели громкости (`voice_studio_filter`):
+# речь тогда идёт выше порога на 5-10 дБ и теряет две трети превышения.
+# Замер на живой речи (samples/phase-0-source.mp4, 27.11.2026): при пороге −20
+# и 2.5:1 разброс громкости (LRA) менялся с 6.0 до 5.8 LU — обработки по сути
+# не было; нынешние числа — обычные для дикторского голоса.
+STUDIO_COMP_THRESHOLD_DB = -24.0
+STUDIO_COMP_RATIO = 3.0
+STUDIO_COMP_ATTACK_MS = 10
+STUDIO_COMP_RELEASE_MS = 150
+STUDIO_COMP_KNEE_DB = 4.0
+
+
+def voice_studio_filter(
+    cfg: Settings | None,
+    measured: dict[str, float] | None,
+    *,
+    target_lufs: float,
+) -> str:
+    """«Студийный звук»: де-эссер, тембр и мягкая компрессия голоса.
+
+    Стоит после чистки и перед `loudnorm`. Три звена, все встроены в ffmpeg:
+
+    - `deesser` приглушает свистящие — их же поднимает звено тембра ниже;
+    - эквалайзер убирает «коробку» комнаты и добавляет разборчивости;
+    - `acompressor` сближает громкие и тихие слоги: голос звучит плотнее, а
+      окончания фраз не проваливаются под музыку.
+
+    Перед ними голос подтягивается к цели громкости (`volume`). Без этого порог
+    компрессора ничего не значил бы: записи приходят от −8 до −30 LUFS, и одна
+    и та же настройка одну давила бы вдвое, а другую не трогала вовсе. Поэтому
+    нужен замер сырого звука; нет замера или в записи тишина — обработки нет,
+    остаются чистка и нормализация, как до появления этого звена.
+
+    `aformat` в начале — чтобы `volume` считал в плавающей точке: на целых
+    отсчётах усиление тихой записи обрезало бы пики ещё до компрессора.
+
+    Возвращает звенья с запятой на конце или пустую строку.
+    """
+    cfg = cfg or default_settings
+    if not cfg.voice_studio:
+        return ""
+    level = (measured or {}).get("input_i")
+    if level is None or not math.isfinite(level) or level <= -70.0:
+        return ""
+    gain = max(-STUDIO_GAIN_LIMIT_DB, min(STUDIO_GAIN_LIMIT_DB, target_lufs - level))
+    links = [
+        "aformat=sample_fmts=fltp",
+        f"volume={gain:.2f}dB",
+        f"deesser=i={STUDIO_DEESS_INTENSITY:g}:m={STUDIO_DEESS_MAX:g}:f=0.5",
+        *(f"equalizer=f={hz:g}:t=q:w={q:g}:g={db:g}" for hz, db, q in STUDIO_EQ),
+        f"acompressor=threshold={10 ** (STUDIO_COMP_THRESHOLD_DB / 20):.4f}"
+        f":ratio={STUDIO_COMP_RATIO:g}:attack={STUDIO_COMP_ATTACK_MS}"
+        f":release={STUDIO_COMP_RELEASE_MS}:knee={10 ** (STUDIO_COMP_KNEE_DB / 20):.4f}:makeup=1",
+    ]
+    return "".join(link + "," for link in links)
+
 
 def build_audio(
     edl: EDL,
@@ -717,7 +796,16 @@ def build_audio(
     edl.music = music[1] if music is not None else None
 
     target = preset.audio.target_lufs
-    measured = measure_loudness(video, target_lufs=target)
+    raw = measured = measure_loudness(video, target_lufs=target)
+    # Что стоит перед нормализацией: чистка и, если включён, «студийный звук».
+    # Студийные звенья меняют громкость, поэтому замер для loudnorm с ними
+    # снимается заново — уже с того звука, который он получит. Без них замер
+    # прежний, один: чистка громкость речи не двигает.
+    voice_pre = voice_clean_filter(cfg)
+    studio = voice_studio_filter(cfg, raw, target_lufs=target)
+    if studio:
+        voice_pre += studio
+        measured = measure_loudness(video, target_lufs=target, pre=voice_pre)
     inputs: list[str] = ["-i", str(video)]
     # `apad` + `atrim` фиксируют длину голоса на `total` ДО микса. Без них длину
     # задавал только `-t`, а он умеет резать, но не умеет добавлять: если звуковой
@@ -725,7 +813,7 @@ def build_audio(
     # дорожку короче себя. Плюс `amix=duration=first` меряет длину микса по первому
     # входу — то есть ровно по этому голосу.
     parts: list[str] = [
-        f"[0:a]{voice_clean_filter(cfg)}{loudnorm_filter(measured, target_lufs=target)},{AFORMAT},"
+        f"[0:a]{voice_pre}{loudnorm_filter(measured, target_lufs=target)},{AFORMAT},"
         f"atrim=0:{total:.3f},asetpts=N/SR/TB,apad=whole_dur={total:.3f}[voice]"
     ]
     mix: list[str] = ["[voice]"]
@@ -803,7 +891,7 @@ def build_audio(
             "дорожка %s вышла %.3f с вместо %.3f — звук разъедется с видео",
             out.name, real, total,
         )
-    lufs_in = (measured or {}).get("input_i")
+    lufs_in = (raw or {}).get("input_i")  # громкость записи, а не обработанного голоса
     # На немом входе loudnorm печатает «-inf»: в отчёте джоба это превращается в
     # `-Infinity`, которого нет в JSON и который ломает любого читателя отчёта.
     if lufs_in is not None and not math.isfinite(lufs_in):

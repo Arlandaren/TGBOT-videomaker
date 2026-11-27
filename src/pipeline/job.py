@@ -17,14 +17,14 @@ from typing import Any, Awaitable, Callable
 
 from src.core.config import Settings, settings as default_settings
 from src.core.edl import EDL, validate_edl
-from src.core.options import JobOptions, apply_accent, apply_font
+from src.core.options import JobOptions, apply_accent, apply_font, apply_grade, job_settings
 from src.core.preset import load_preset
 from src.core.camera import filmed_plan
 from src.core.render_plan import block_windows
 from src.core.track import load_track
 from src.llm.client import LLMClient
 from src.pipeline import broll as broll_mod
-from src.pipeline.visuals import plan_visuals, visuals_llm
+from src.pipeline.visuals import plan_visuals, transitions_only, visuals_llm
 from src.pipeline.asr import ASRResult, transcribe
 from src.pipeline.audio_post import build_audio
 from src.pipeline.crop import autocrop, framing_spans
@@ -206,8 +206,12 @@ async def process_video(
     включено, цвет выделения — как в теме. Нарезка по-прежнему управляется
     `cut_pauses`; вызывающий сводит одно с другим сам.
     """
-    cfg = cfg or default_settings
     options = options or JobOptions()
+    # Дальше `cfg` — настройки ЭТОГО ролика: то, что человек выключил галочкой
+    # (студийный звук, слежение за головой, переходы, графика, полоса, 60 к/с),
+    # выключено и в них. Этапы про галочки не знают — они читают настройки.
+    server_cfg = cfg or default_settings
+    cfg = job_settings(server_cfg, options)
     src = Path(src)
     work = Path(work_dir)
     work.mkdir(parents=True, exist_ok=True)
@@ -288,8 +292,11 @@ async def process_video(
         # Шрифт — в ЛИСТ, а не только в стиль: перерендер получает ровно лист,
         # и выбор, оставшийся в опциях задачи, до него бы не доехал (инвариант 4).
         edl.font = options.font
-        style = apply_font(
-            apply_accent(load_preset(preset or edl.preset), options.accent), options.font
+        style = apply_grade(
+            apply_font(
+                apply_accent(load_preset(preset or edl.preset), options.accent), options.font
+            ),
+            options.grade,
         )
 
         if not options.camera:
@@ -323,7 +330,10 @@ async def process_video(
                 asr.text, edl.out_duration, llm=llm, language=asr.language, cfg=cfg
             )
             title = (metadata or {}).get("title")
-            if isinstance(title, str) and title.strip():
+            # Галочка «Заголовок в начале»: без текста в листе титра нет ни в
+            # этом ролике, ни в его перерендере — и маска «за головой» под него
+            # не считается (`matte.measure_behind`).
+            if options.title and isinstance(title, str) and title.strip():
                 edl.title = title.strip()
             mark("metadata", t)
 
@@ -349,7 +359,16 @@ async def process_video(
             if cfg.visuals_enabled and top_seconds is None:
                 t = time.perf_counter()
                 edl.visuals = await plan_visuals(edl, llm=visuals_llm(cfg), cfg=cfg)
+                if not cfg.transitions_enabled:
+                    # Переходы выключены: из листа уходят и они, иначе въезд
+                    # кадра остался бы без картинки, но со звуком
+                    # (`audio_post.plan_sfx` ставит на него свуш).
+                    edl.visuals.transitions = []
                 mark("visuals", t)
+            elif server_cfg.visuals_enabled and cfg.transitions_enabled and top_seconds is None:
+                # Графику выключил человек, а переходы оставил: они живут в том
+                # же листе, поэтому лист собирается из них одних, без модели.
+                edl.visuals = transitions_only(edl)
             return metadata, broll_used
 
         dressing = asyncio.create_task(dress())

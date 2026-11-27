@@ -543,7 +543,10 @@ svg { flex: none; }
 .section-head__count { font-size: 12px; font-weight: 700; color: var(--muted); }
 
 .options { padding: 0 16px; }
-.options .toggle-row + .toggle-row { border-top: 1px solid var(--line); }
+/* Линия над строкой, перед которой есть ВИДИМАЯ строка: часть строк прячется
+   (сервер приём не умеет, режим «Два видео»), и первая из оставшихся не должна
+   получать линию под заголовком карточки. */
+.options .toggle-row:not([hidden]) ~ .toggle-row { border-top: 1px solid var(--line); }
 .toggle-row { display: flex; align-items: center; gap: 8px; min-height: 54px; }
 .toggle-row__label { font-size: 15px; }
 .toggle-row .help { margin-right: auto; }

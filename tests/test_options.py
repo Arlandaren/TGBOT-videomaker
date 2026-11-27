@@ -5,14 +5,152 @@ from __future__ import annotations
 import pytest
 
 from src.core.config import Settings
-from src.core.options import ACCENTS, FONTS, JobOptions, apply_accent, apply_font
+from src.core.options import (
+    ACCENTS,
+    FONTS,
+    REMEMBERED,
+    JobOptions,
+    apply_accent,
+    apply_font,
+    apply_grade,
+    available_switches,
+    job_settings,
+)
 from src.core.preset import load_preset
+
+# Переключатели, добавленные 27.11.2026.
+NEW_SWITCHES = ("studio", "tracking", "transitions", "visuals", "title", "progress", "grade", "smooth")
 
 
 def test_a_job_without_options_behaves_as_before():
     """Задачи из чата и из времени до Mini App опций не несут — всё включено."""
     o = JobOptions.from_stored(None)
     assert (o.accent, o.cut, o.sfx, o.broll, o.camera) == ("theme", True, True, True, True)
+
+
+def test_the_new_switches_are_on_for_a_job_that_never_heard_of_them():
+    """Задача из чата и задача до появления переключателей: всё как было."""
+    o = JobOptions.from_stored(None)
+    assert all(getattr(o, name) is True for name in NEW_SWITCHES)
+    assert all(getattr(JobOptions.for_new_job({}), name) is True for name in NEW_SWITCHES)
+
+
+def test_default_options_leave_the_server_settings_alone():
+    """Ничего не выключено — настройки тот же объект, а не копия: этапы обязаны
+    видеть ровно то, что задано на сервере."""
+    cfg = Settings(_env_file=None)
+    assert job_settings(cfg, JobOptions()) is cfg
+
+
+def test_each_switch_turns_its_own_stage_off_and_nothing_else():
+    # 60 кадров заданы явно: умолчание сервера — отдельное решение, и тест про
+    # галочку от него зависеть не должен.
+    cfg = Settings(_env_file=None, output_fps=60)
+    expected = {
+        "studio": {"voice_studio": False, "voice_highpass_hz": 0.0, "voice_denoise_db": 0.0},
+        "tracking": {"crop_follow": False},
+        "transitions": {"transitions_enabled": False},
+        "visuals": {"visuals_enabled": False},
+        "progress": {"progress_bar": False},
+        "smooth": {"output_fps": 0},
+    }
+    watched = sorted({key for change in expected.values() for key in change})
+    for name, change in expected.items():
+        got = job_settings(cfg, JobOptions(**{name: False}))
+        for key in watched:
+            want = change.get(key, getattr(cfg, key))
+            assert getattr(got, key) == want, f"{name}: {key}={getattr(got, key)!r}"
+    # Настройки сервера — общий объект процесса: выключенное у одного ролика не
+    # имеет права остаться выключенным у следующего.
+    assert cfg.voice_studio and cfg.crop_follow and cfg.visuals_enabled and cfg.output_fps == 60
+
+
+def test_a_switch_never_turns_on_what_the_server_turned_off():
+    """Галочка умеет только выключать: графика, снятая владельцем, и 60 кадров,
+    которым на сервере нет памяти, роликом не включаются."""
+    cfg = Settings(
+        _env_file=None, visuals_enabled=False, transitions_enabled=False, progress_bar=False,
+        voice_studio=False, crop_follow=False, output_fps=0,
+    )
+    got = job_settings(cfg, JobOptions())
+    assert not (got.visuals_enabled or got.transitions_enabled or got.progress_bar)
+    assert not (got.voice_studio or got.crop_follow) and got.output_fps == 0
+
+
+def test_the_app_is_offered_only_the_switches_that_change_something():
+    """Сервер, где приём выключен, не показывает его галочку: включить его
+    роликом нельзя, и галочка не меняла бы ничего. Так на проде с 60 кадрами:
+    там `OUTPUT_FPS=0`."""
+    base = {"_env_file": None, "openai_api_key": "k", "llm_provider": "openai", "output_fps": 60}
+    assert available_switches(Settings(**base)) == list(REMEMBERED)
+
+    def missing(**kw) -> set[str]:
+        cfg = Settings(**{**base, **kw})
+        return set(REMEMBERED) - set(available_switches(cfg))
+
+    assert missing(output_fps=0) == {"smooth"}
+    assert missing(visuals_enabled=False) == {"visuals"}
+    assert missing(transitions_enabled=False) == {"transitions"}
+    assert missing(progress_bar=False) == {"progress"}
+    assert missing(crop_follow=False) == {"tracking"}
+    assert missing(broll_enabled=False) == {"broll"}
+    assert missing(audio_post_enabled=False) == {"sfx", "studio"}
+    assert missing(voice_studio=False) == set(), "без студийных звеньев галочка ещё снимает чистку"
+    assert missing(voice_studio=False, voice_denoise_db=0, voice_highpass_hz=0) == {"studio"}
+    assert missing(render_backend="ass") == {"transitions", "visuals", "progress"}
+    assert missing(openai_api_key="") == {"title"}, "заголовок сочиняет модель"
+
+
+def test_an_old_job_reads_its_transitions_from_the_camera_switch():
+    """До своей галочки переходы выключались «Движением камеры». Перерендер
+    задачи тех времён обязан дать тот же ролик: без камеры — без переходов."""
+    assert JobOptions.from_stored({"camera": False}).transitions is False
+    assert JobOptions.from_stored({"camera": True}).transitions is True
+    assert JobOptions.from_stored({"camera": False, "transitions": True}).transitions is True
+    # Новая задача: галочки независимы.
+    assert JobOptions.for_new_job({"camera": False}).transitions is True
+
+
+def test_the_grade_switch_turns_the_colour_correction_off():
+    from src.pipeline.crop import grade_filter
+
+    glass = load_preset("glass")
+    assert grade_filter(glass.grade), "у glass цветокор есть — иначе тест ничего не проверяет"
+    assert apply_grade(glass, True) is glass
+    plain = apply_grade(glass, False)
+    assert grade_filter(plain.grade) == ""
+    assert load_preset("glass").grade.enabled, "исходная тема — общий объект кеша"
+
+
+def test_what_is_remembered_between_reels():
+    """Запоминаются переключатели второго шага, нарезка — нет: «без нарезки»
+    выбирают под конкретное видео, и запомненный отказ молча оставлял бы паузы
+    в роликах, присланных в чат."""
+    kept = JobOptions(studio=False, cut=False).remembered()
+    assert set(kept) == set(REMEMBERED) and "cut" not in kept
+    assert kept["studio"] is False and kept["sfx"] is True
+    assert set(NEW_SWITCHES) <= set(REMEMBERED)
+    # Запомненное действует на следующий ролик — и из приложения, и из чата.
+    again = JobOptions.for_new_job({"accent": "red", **kept})
+    assert again.studio is False and again.cut is True
+
+
+def test_every_switch_has_a_toggle_and_texts_in_the_app():
+    """Переключатель без строки в приложении выключить нечем, строка без поля
+    ничего не меняет. Сверяем разметку и словарь с моделью."""
+    import re
+    from pathlib import Path
+
+    static = Path(__file__).resolve().parents[1] / "src" / "webapp" / "static"
+    html = (static / "index.html").read_text(encoding="utf-8")
+    app = (static / "app.js").read_text(encoding="utf-8")
+    toggles = set(re.findall(r'data-option="(\w+)"', html))
+    assert toggles == set(REMEMBERED), toggles ^ set(REMEMBERED)
+    assert toggles <= set(JobOptions.model_fields)
+    for name in toggles:
+        assert f'data-help="{name}"' in html, name
+        for key in (f'"opt.{name}"', f'"help.{name}"'):
+            assert app.count(key) == 2, f"{key}: нужен в обоих языках"
 
 
 def test_an_unknown_accent_falls_back_to_the_theme():

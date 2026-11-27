@@ -254,22 +254,74 @@
                     </div>
                   </div>
 
+                  <!-- Переключатели монтажа — три карточки по смыслу: звук, кадр,
+                       графика. `data-option` — имя поля `JobOptions`; строка с
+                       `data-single-only` прячется в «Двух видео»: там этого
+                       приёма нет вовсе, и галочка ничего бы не меняла. -->
                   <div class="card options">
-                    <div class="options__head"><h2 data-i18n="edit.effects">Эффекты</h2></div>
+                    <div class="options__head"><h2 data-i18n="edit.sound">Звук</h2></div>
+                    <div class="toggle-row">
+                      <span class="toggle-row__label" data-i18n="opt.studio">Студийный звук</span>
+                      <button class="help" type="button" data-help="studio">?</button>
+                      <label class="switch"><input type="checkbox" data-option="studio" /><span></span></label>
+                    </div>
                     <div class="toggle-row">
                       <span class="toggle-row__label" data-i18n="opt.sfx">Звуковые эффекты</span>
                       <button class="help" type="button" data-help="sfx">?</button>
                       <label class="switch"><input type="checkbox" data-option="sfx" /><span></span></label>
                     </div>
+                  </div>
+
+                  <div class="card options">
+                    <div class="options__head"><h2 data-i18n="edit.frame">Кадр</h2></div>
                     <div class="toggle-row">
-                      <span class="toggle-row__label" data-i18n="opt.broll">Медиа-карточки</span>
-                      <button class="help" type="button" data-help="broll">?</button>
-                      <label class="switch"><input type="checkbox" data-option="broll" /><span></span></label>
+                      <span class="toggle-row__label" data-i18n="opt.tracking">Слежение за головой</span>
+                      <button class="help" type="button" data-help="tracking">?</button>
+                      <label class="switch"><input type="checkbox" data-option="tracking" /><span></span></label>
                     </div>
                     <div class="toggle-row">
                       <span class="toggle-row__label" data-i18n="opt.camera">Движение камеры</span>
                       <button class="help" type="button" data-help="camera">?</button>
                       <label class="switch"><input type="checkbox" data-option="camera" /><span></span></label>
+                    </div>
+                    <div class="toggle-row" data-single-only>
+                      <span class="toggle-row__label" data-i18n="opt.transitions">Переходы</span>
+                      <button class="help" type="button" data-help="transitions">?</button>
+                      <label class="switch"><input type="checkbox" data-option="transitions" /><span></span></label>
+                    </div>
+                    <div class="toggle-row">
+                      <span class="toggle-row__label" data-i18n="opt.grade">Цветокоррекция</span>
+                      <button class="help" type="button" data-help="grade">?</button>
+                      <label class="switch"><input type="checkbox" data-option="grade" /><span></span></label>
+                    </div>
+                    <div class="toggle-row">
+                      <span class="toggle-row__label" data-i18n="opt.smooth">Плавность 60 к/с</span>
+                      <button class="help" type="button" data-help="smooth">?</button>
+                      <label class="switch"><input type="checkbox" data-option="smooth" /><span></span></label>
+                    </div>
+                  </div>
+
+                  <div class="card options">
+                    <div class="options__head"><h2 data-i18n="edit.graphics">Графика</h2></div>
+                    <div class="toggle-row">
+                      <span class="toggle-row__label" data-i18n="opt.title">Заголовок в начале</span>
+                      <button class="help" type="button" data-help="title">?</button>
+                      <label class="switch"><input type="checkbox" data-option="title" /><span></span></label>
+                    </div>
+                    <div class="toggle-row" data-single-only>
+                      <span class="toggle-row__label" data-i18n="opt.broll">Медиа-карточки</span>
+                      <button class="help" type="button" data-help="broll">?</button>
+                      <label class="switch"><input type="checkbox" data-option="broll" /><span></span></label>
+                    </div>
+                    <div class="toggle-row" data-single-only>
+                      <span class="toggle-row__label" data-i18n="opt.visuals">Графика и стикеры</span>
+                      <button class="help" type="button" data-help="visuals">?</button>
+                      <label class="switch"><input type="checkbox" data-option="visuals" /><span></span></label>
+                    </div>
+                    <div class="toggle-row" data-single-only>
+                      <span class="toggle-row__label" data-i18n="opt.progress">Полоса прогресса</span>
+                      <button class="help" type="button" data-help="progress">?</button>
+                      <label class="switch"><input type="checkbox" data-option="progress" /><span></span></label>
                     </div>
                   </div>
 

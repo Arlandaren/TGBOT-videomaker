@@ -846,3 +846,115 @@ async def test_a_failed_mix_does_not_fail_the_rerender(tmp_path, monkeypatch):
     out = await tasks.rerender_job({"redis": FakeRedis()}, "job-1", "pulse")
     assert out["result_key"]
     assert got["audio_path"] is None
+
+# ------------------------------------------------- переключатели монтажа
+
+
+async def test_the_switches_of_a_job_reach_its_stages(harness, monkeypatch, tmp_path):
+    """Галочки доезжают до этапов настройками ЭТОГО ролика, а настройки сервера
+    остаются нетронутыми: выключенное у одного ролика не выключено у следующего."""
+    import json
+
+    from src.core.options import JobOptions
+    from src.core.overlay_models import Visuals
+    from src.pipeline.job import process_video
+
+    src, work, seen = harness
+    got: dict = {"transitions_only": 0}
+
+    def fake_autocrop(s, d, **k):
+        got["crop_cfg"], got["crop_preset"] = k["cfg"], k["preset"]
+        shutil.copy2(s, d)
+        return d
+
+    def fake_audio(edl, *a, **k):
+        got["audio_cfg"] = k["cfg"]
+
+    def fake_fps(s, d, **k):
+        got["fps_cfg"] = k["cfg"]
+        return s
+
+    async def fake_metadata(*a, **k):
+        return {"title": "Заголовок ролика"}
+
+    async def no_visuals(*a, **k):
+        raise AssertionError("графика выключена — расстановщик звать незачем")
+
+    def only_transitions(edl):
+        got["transitions_only"] += 1
+        return Visuals()
+
+    monkeypatch.setattr("src.pipeline.job.autocrop", fake_autocrop)
+    monkeypatch.setattr("src.pipeline.job.build_audio", fake_audio)
+    monkeypatch.setattr("src.pipeline.job.to_output_fps", fake_fps)
+    monkeypatch.setattr("src.pipeline.job.make_metadata", fake_metadata)
+    monkeypatch.setattr("src.pipeline.job.plan_visuals", no_visuals)
+    monkeypatch.setattr("src.pipeline.job.transitions_only", only_transitions)
+    monkeypatch.setattr("src.pipeline.job._measure_behind", lambda *a, **k: None)
+    cfg = Settings(_env_file=None, asr_fix_by_audio=False, output_fps=60)
+
+    everything_off = JobOptions(
+        studio=False, tracking=False, transitions=False, visuals=False,
+        title=False, progress=False, grade=False, smooth=False,
+    )
+    result = await process_video(src, work, preset="glass", cfg=cfg, options=everything_off)
+
+    assert result.edl.title is None, "заголовок выключен — в листе его нет"
+    assert result.edl.visuals is None and got["transitions_only"] == 0
+    assert got["crop_cfg"].crop_follow is False
+    assert got["crop_preset"].grade.enabled is False
+    assert got["audio_cfg"].voice_studio is False
+    assert got["audio_cfg"].voice_denoise_db == 0 and got["audio_cfg"].voice_highpass_hz == 0
+    assert got["fps_cfg"].output_fps == 0
+    meta = json.loads((work / "plan.json").read_text(encoding="utf-8"))["meta"]
+    assert "progress" not in meta and "cuts" not in meta
+    assert cfg.crop_follow and cfg.voice_studio and cfg.progress_bar and cfg.output_fps == 60
+
+    # Графика выключена, переходы оставлены: лист собирается из одних переходов.
+    work2 = tmp_path / "work2"
+    await process_video(src, work2, preset="glass", cfg=cfg, options=JobOptions(visuals=False))
+    assert got["transitions_only"] == 1
+
+    # Всё включено: этапы видят настройки сервера как есть.
+    async def some_visuals(*a, **k):
+        return Visuals()
+
+    monkeypatch.setattr("src.pipeline.job.plan_visuals", some_visuals)
+    work3 = tmp_path / "work3"
+    result = await process_video(src, work3, preset="glass", cfg=cfg, options=JobOptions())
+    assert result.edl.title == "Заголовок ролика"
+    assert got["crop_cfg"] is cfg and got["audio_cfg"] is cfg and got["fps_cfg"] is cfg
+    assert got["crop_preset"].grade.enabled is True
+    assert "progress" in json.loads((work3 / "plan.json").read_text(encoding="utf-8"))["meta"]
+
+
+async def test_the_rerender_repeats_the_switches_of_the_job(tmp_path, monkeypatch):
+    """Ролик в другой теме — тот же ролик: без студийного звука, со стоящим
+    кадром и без цветокоррекции, если человек так его и монтировал."""
+    from types import SimpleNamespace
+
+    tasks, FakeRedis, got = _rerender_harness(tmp_path, monkeypatch)
+
+    async def fake_get_job(job_id):
+        return SimpleNamespace(
+            id="job-1", edl=edl_of().model_dump(), top_source_key=None, music_key=None,
+            # Без нарезки — как в обвязке: настоящий ffmpeg тесту не нужен.
+            options={"cut": False, "studio": False, "tracking": False, "grade": False,
+                     "smooth": False},
+        )
+
+    def fake_crop(src, dst, **k):
+        got["crop"] = k
+        shutil.copy2(src, dst)
+        return Path(dst)
+
+    monkeypatch.setattr(tasks.repo, "get_job", fake_get_job)
+    monkeypatch.setattr("src.pipeline.crop.autocrop", fake_crop)
+
+    await tasks.rerender_job({"redis": FakeRedis()}, "job-1", "glass")
+
+    mix_cfg = got["mix"][0]["cfg"]
+    assert mix_cfg.voice_studio is False and mix_cfg.voice_denoise_db == 0
+    assert got["crop"]["cfg"].crop_follow is False and got["crop"]["cfg"].output_fps == 0
+    assert got["crop"]["preset"].grade.enabled is False
+    assert tasks.settings.voice_studio and tasks.settings.crop_follow, "настройки сервера не тронуты"

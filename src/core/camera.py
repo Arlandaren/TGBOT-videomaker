@@ -298,9 +298,11 @@ def filmed_plan(
         plan.meta["camera"] = to_meta(shots)
     if backend != "ass" and isinstance(getattr(plan, "meta", None), dict):
         cfg = plan_args.get("cfg") or default_settings
-        # Переходы — движение видео, как и камера: галочка «Движение камеры»
-        # выключает и их.
-        if cfg.transitions_enabled and edl.camera:
+        # У переходов своя галочка («Переходы»), и приходит она сюда настройкой
+        # ролика (`options.job_settings`). До 27.11.2026 их выключала галочка
+        # «Движение камеры» — задачи тех времён читаются так же
+        # (`JobOptions.from_stored`).
+        if cfg.transitions_enabled:
             cuts = plan_cuts(edl, plan, apply_cuts=plan_args.get("apply_cuts", True))
             if cuts:
                 plan.meta["cuts"] = cuts

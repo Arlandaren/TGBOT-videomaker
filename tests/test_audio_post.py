@@ -292,6 +292,68 @@ def test_the_voice_is_cleaned_before_it_is_levelled():
     assert voice_clean_filter(Settings(_env_file=None, voice_highpass_hz=0, voice_denoise_db=0)) == ""
 
 
+def test_the_studio_chain_needs_the_switch_and_a_measured_voice():
+    """«Студийный звук» — звенья между чисткой и `loudnorm`.
+
+    Порог компрессора считается от полной шкалы, поэтому голос сперва
+    подтягивается к цели громкости — на разницу между целью и замером. Нет
+    замера или в записи тишина — подтягивать нечем, и обработки нет вовсе:
+    компрессор на записи неизвестной громкости хуже, чем его отсутствие.
+    """
+    from src.core.config import Settings
+    from src.pipeline.audio_post import voice_studio_filter
+
+    on = Settings(_env_file=None, voice_studio=True)
+    measured = {"input_i": -27.5}
+    chain = voice_studio_filter(on, measured, target_lufs=-16.0)
+    assert chain.startswith("aformat=sample_fmts=fltp,volume=11.50dB,deesser=") and chain.endswith(",")
+    assert chain.index("deesser=") < chain.index("equalizer=") < chain.index("acompressor=")
+
+    off = Settings(_env_file=None, voice_studio=False)
+    assert voice_studio_filter(off, measured, target_lufs=-16.0) == ""
+    assert voice_studio_filter(on, None, target_lufs=-16.0) == ""
+    assert voice_studio_filter(on, {"input_i": -70.0}, target_lufs=-16.0) == ""
+    assert voice_studio_filter(on, {"input_i": float("-inf")}, target_lufs=-16.0) == ""
+    # Запись тише шёпота не усиливается до речи: это фон, а не голос.
+    assert "volume=24.00dB" in voice_studio_filter(on, {"input_i": -60.0}, target_lufs=-16.0)
+
+
+@pytest.fixture(scope="module")
+def uneven_voice(tmp_path_factory):
+    """Голос, который три секунды говорит громко, а потом на 8 дБ тише."""
+    path = tmp_path_factory.mktemp("audio") / "uneven.mp4"
+    graph = f"sine=frequency={VOICE_HZ}:duration=6,volume=volume='if(lt(t,3),2.5,1)':eval=frame"
+    return make_video(path, graph)
+
+
+def test_studio_sound_evens_the_voice_and_still_hits_the_target(tmp_path, uneven_voice):
+    """Компрессор сближает громкие и тихие слоги, а громкость ролика остаётся
+    на цели темы: замер для нормализации снимается уже с обработанного голоса.
+
+    Без «студийного звука» разница между громкой и тихой половиной остаётся
+    той же, что в записи: нормализация только двигает уровень целиком.
+    """
+    preset = load_preset("glass")
+    gaps: dict[bool, float] = {}
+    for studio in (True, False):
+        track = build_audio(
+            simple_edl(), uneven_voice, tmp_path / f"studio-{studio}.wav", preset=preset,
+            sfx=False, cfg=cfg_with(tmp_path, voice_studio=studio),
+        )
+        assert track is not None
+        got = measure_ebur128(track.path)
+        assert got is not None
+        assert got["i"] == pytest.approx(preset.audio.target_lufs, abs=1.5), (studio, got)
+        assert track.lufs_in is not None and track.lufs_in < preset.audio.target_lufs, (
+            "в отчёте — громкость записи, а не обработанного голоса"
+        )
+        loud = band_rms(track.path, VOICE_HZ, 0.5, 2.0)
+        quiet = band_rms(track.path, VOICE_HZ, 3.5, 2.0)
+        gaps[studio] = loud - quiet
+    assert gaps[False] == pytest.approx(8.0, abs=1.0), gaps
+    assert gaps[True] < gaps[False] - 1.5, gaps
+
+
 def test_loudnorm_hits_preset_target(tmp_path, voice_video):
     preset = load_preset("glass")
     track = build_audio(simple_edl(), voice_video, tmp_path / "a.wav",

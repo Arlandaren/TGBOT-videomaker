@@ -1609,4 +1609,37 @@ async def test_a_new_job_never_takes_a_font_from_the_request(client, finish_ok, 
     assert r.status == 200
     assert seen["options"]["font"] == "theme"
     assert seen["options"]["accent"] == "red", "цвет при этом остаётся выбором человека"
-    assert seen["settings"] == {"accent": "red", "font": "theme"}
+    assert {k: seen["settings"][k] for k in ("accent", "font")} == {"accent": "red", "font": "theme"}
+
+
+async def test_the_effect_switches_are_remembered_between_reels(client, finish_ok, monkeypatch):
+    """Переключатели эффектов пишутся в профиль вместе с цветом: их одиннадцать,
+    и выставлять «свои» перед каждым роликом заново никто не станет. Нарезка не
+    запоминается — её выбирают под конкретное видео."""
+    from src.core.options import REMEMBERED
+    from src.db import repo
+
+    seen: dict = {}
+    create = repo.create_job
+
+    async def create_job(*a, **k):
+        seen["options"] = k.get("options")
+        return await create(*a, **k)
+
+    async def set_user_settings(user_id, **k):
+        seen["settings"] = k
+
+    monkeypatch.setattr(repo, "create_job", create_job)
+    monkeypatch.setattr(repo, "set_user_settings", set_user_settings)
+    bottom = await _uploaded(client, b"abcd")
+    r = await client.post(
+        f"/api/uploads/{bottom}/finish",
+        json={"preset": "glass", "options": {"studio": False, "tracking": False, "cut": False}},
+        headers=auth(),
+    )
+    assert r.status == 200
+    assert seen["options"]["studio"] is False and seen["options"]["tracking"] is False
+    assert seen["options"]["smooth"] is True, "чего в запросе нет — включено"
+    assert set(seen["settings"]) == {"accent", "font", *REMEMBERED}
+    assert seen["settings"]["studio"] is False and seen["settings"]["tracking"] is False
+    assert "cut" not in seen["settings"]

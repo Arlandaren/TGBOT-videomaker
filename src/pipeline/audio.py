@@ -48,13 +48,17 @@ def extract_wav(src: str | Path, dst: str | Path, *, sample_rate: int = ASR_SAMP
 
 
 def measure_loudness(
-    src: str | Path, *, target_lufs: float = LOUDNORM_TARGET_LUFS
+    src: str | Path, *, target_lufs: float = LOUDNORM_TARGET_LUFS, pre: str = ""
 ) -> dict[str, float] | None:
     """Первый проход loudnorm: замер. None, если замерить не удалось.
 
     Цель нужна уже здесь: loudnorm печатает `target_offset` относительно неё, и
     подставлять замер одной цели в фильтр с другой — значит промахнуться мимо
     обеих.
+
+    `pre` — звенья, которые во втором проходе встанут ПЕРЕД loudnorm (с запятой
+    на конце). Компрессор и эквалайзер меняют громкость на децибелы, и замер
+    сырого звука для них уже не годится: мерить надо то, что loudnorm получит.
     """
     code, out, err = capture(
         [
@@ -68,7 +72,7 @@ def measure_loudness(
             # 20-секундном клипе это 1.58 с против 0.94 с, а замеров за джоб два.
             "-vn",
             "-af",
-            f"{loudnorm_base(target_lufs)}:print_format=json",
+            f"{pre}{loudnorm_base(target_lufs)}:print_format=json",
             "-f",
             "null",
             "-",

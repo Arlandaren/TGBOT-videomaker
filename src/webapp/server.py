@@ -39,7 +39,7 @@ from aiohttp import web
 from src.core.config import CLAIMED_PREFIX, MUSIC_PREFIX, UPLOAD_PREFIX, Settings
 from src.core.geometry import load_metrics, metrics_for, space_width
 from src.core.i18n import LANGS, error_text, lang_of, stage_title, t, tokens_text
-from src.core.options import ACCENTS, FONTS, JobOptions, theme_label
+from src.core.options import ACCENTS, FONTS, JobOptions, available_switches, theme_label
 from src.core.preset import available, load_preset
 from src.core.referral import code_of
 from src.db import repo
@@ -547,7 +547,8 @@ async def bootstrap(request: web.Request) -> web.Response:
                 "balance": user.balance,
                 "videos_done": user.videos_done,
                 "preset": user.preset,
-                # Запомненные цвет и шрифт. Приложение берёт их вместо умолчаний.
+                # Запомненные цвет, шрифт и переключатели эффектов. Приложение
+                # берёт их вместо умолчаний.
                 "settings": user.settings or {},
                 "lang": lang,
             },
@@ -581,6 +582,9 @@ async def bootstrap(request: web.Request) -> web.Response:
                 "max_clips": _max_clips(),
             },
             "defaults": JobOptions().model_dump(),
+            # Какие переключатели эффектов показывать: только те, что на этом
+            # сервере что-то меняют (`options.available_switches`).
+            "switches": available_switches(cfg),
             "retention_days": cfg.storage_retention_days,
             # Приглашения. Ссылку собирает приложение из имени бота и кода: так
             # она одна и та же в чате, в «Поделиться» и в поле для копирования.
@@ -984,7 +988,12 @@ async def upload_finish(request: web.Request) -> web.Response:
             await repo.set_user_preset(user.id, preset)
             # Цвет запоминается между роликами, как и тема. Шрифт пишется
             # сброшенным («как в теме»): так старый выбор стирается из профиля.
-            await repo.set_user_settings(user.id, accent=options.accent, font=options.font)
+            # Переключатели эффектов запоминаются тоже: их одиннадцать, и
+            # выключать «свои три» перед каждым роликом заново никто не станет.
+            # Они же действуют на ролик, присланный в чат (`handlers/video.py`).
+            await repo.set_user_settings(
+                user.id, accent=options.accent, font=options.font, **options.remembered()
+            )
 
             status_id: int | None = None
             try:

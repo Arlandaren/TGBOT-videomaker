@@ -26,7 +26,7 @@ from src.core.config import CLAIMED_PREFIX, MUSIC_PREFIX, UPLOAD_PREFIX, setting
 from src.core.logging import setup_logging
 from src.db import repo
 from src.db.models import JobStatus
-from src.core.options import JobOptions, apply_accent, apply_font
+from src.core.options import JobOptions, apply_accent, apply_font, apply_grade, job_settings
 from src.llm.client import LLMClient, Usage
 from src.pipeline.job import STAGE_KEYS_BY_TITLE, JobError, process_video
 from src.storage.s3 import RESULTS, SOURCES, storage
@@ -407,15 +407,22 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
         # пишется этим же выбором (`process_video`), а у листов, сохранённых до
         # появления поля, его нет вовсе.
         options = JobOptions.from_stored(job.options)
-        style = apply_font(
-            apply_accent(load_preset(preset), options.accent), edl.font or options.font
+        # Настройки ЭТОГО ролика: галочки задачи (студийный звук, слежение за
+        # головой, переходы, полоса, 60 к/с) действуют и на перерендер — он
+        # обязан дать тот же ролик в другой теме (`options.job_settings`).
+        cfg = job_settings(settings, options)
+        style = apply_grade(
+            apply_font(
+                apply_accent(load_preset(preset), options.accent), edl.font or options.font
+            ),
+            options.grade,
         )
         # Нарезка — решение пользователя, и перерендер обязан его повторить: без
         # этого ролик, смонтированный без вырезания пауз, при смене темы
         # нарезался бы, а субтитры и звук разъехались бы с картинкой.
         cut_path = work / "cut.mp4"
         if options.cut:
-            await asyncio.to_thread(apply_cuts, edl, src_path, cut_path, info=info, cfg=settings)
+            await asyncio.to_thread(apply_cuts, edl, src_path, cut_path, info=info, cfg=cfg)
         else:
             await asyncio.to_thread(shutil.copy2, src_path, cut_path)
         # Звук собирается заново, как и в основном прогоне. Без этого шага ролик
@@ -430,7 +437,7 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
                 track = await asyncio.to_thread(
                     build_audio,
                     edl, cut_path, work / "audio.wav", preset=style,
-                    apply_cuts=options.cut, sfx=options.sfx, cfg=settings,
+                    apply_cuts=options.cut, sfx=options.sfx, cfg=cfg,
                     music_file=await fetch_music(job, work),
                 )
                 if track is not None:
@@ -451,20 +458,20 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
                 cut_path, top_path, work / "vertical.mp4",
                 until=edl.split_until,
                 out_duration=edl.out_duration if options.cut else info.duration,
-                work_dir=work, cfg=settings,
+                work_dir=work, cfg=cfg,
                 preset=style, framing=framing_spans(edl, applied_cuts=options.cut),
                 track_out=work / "track.json",
             )
         else:
             vertical = await asyncio.to_thread(
                 autocrop,
-                cut_path, work / "vertical.mp4", work_dir=work, cfg=settings,
+                cut_path, work / "vertical.mp4", work_dir=work, cfg=cfg,
                 preset=style, framing=framing_spans(edl, applied_cuts=options.cut),
                 track_out=work / "track.json",
             )
         vertical = await asyncio.to_thread(
             to_output_fps, vertical, work / "smooth.mp4",
-            info=await asyncio.to_thread(probe, vertical), work_dir=work, cfg=settings,
+            info=await asyncio.to_thread(probe, vertical), work_dir=work, cfg=cfg,
         )
         staged_info = await asyncio.to_thread(probe, vertical)
 
@@ -473,7 +480,7 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
         # значение — не замер»). Правило контраста по чужому числу красило бы
         # текст под фон, которого в этом ролике нет.
         await asyncio.to_thread(
-            _measure_luma, edl, vertical, preset=style, cut_pauses=options.cut, cfg=settings
+            _measure_luma, edl, vertical, preset=style, cut_pauses=options.cut, cfg=cfg
         )
 
         # Трек считается заново, а не берётся из кеша задачи. MOTION_PLAN просит
@@ -485,7 +492,7 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
         # другой, значит и кадры титра другие.
         behind = await asyncio.to_thread(
             _measure_behind, edl, vertical, work, preset=style, cut_pauses=options.cut,
-            backend=settings.render_backend, cfg=settings,
+            backend=settings.render_backend, cfg=cfg,
         )
         # Галочка «Движение камеры» — из опций задачи: у листов, сохранённых до
         # появления `EDL.camera`, её в листе нет.
@@ -494,15 +501,15 @@ async def rerender_job(ctx: dict[str, Any], job_id: str, preset: str) -> dict[st
             edl, str(vertical), backend=settings.render_backend,
             video_duration=staged_info.duration, fps=int(round(staged_info.fps)),
             width=staged_info.width, height=staged_info.height,
-            preset=style, apply_cuts=options.cut, audio_path=audio_path, cfg=settings,
+            preset=style, apply_cuts=options.cut, audio_path=audio_path, cfg=cfg,
             track=load_track(work / "track.json"),
             behind=behind,
         )
         out = work / "result.mp4"
         if settings.render_backend == "ass":
-            await asyncio.to_thread(render_ass, plan, out, work_dir=work, cfg=settings)
+            await asyncio.to_thread(render_ass, plan, out, work_dir=work, cfg=cfg)
         else:
-            await arender_remotion(plan, out, assets_dir=work, job_key=work.name, cfg=settings)
+            await arender_remotion(plan, out, assets_dir=work, job_key=work.name, cfg=cfg)
 
         key = storage.key_for(RESULTS, f"{job.id}-{preset}", "result.mp4")
         await storage.upload(out, key, content_type="video/mp4")

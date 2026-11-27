@@ -196,9 +196,10 @@ def test_the_switches_turn_transitions_and_the_bar_off():
     assert on["cuts"] and on["progress"]["height"] >= 4 and on["progress"]["color"].startswith("#")
     off = plan_of(edl, transitions_enabled=False, progress_bar=False).meta
     assert "cuts" not in off and "progress" not in off
-    # Галочка «Движение камеры» выключает и переходы.
+    # У переходов своя галочка: «Движение камеры» их больше не выключает.
     still = edl.model_copy(update={"camera": False})
-    assert "cuts" not in plan_of(still).meta
+    assert plan_of(still).meta["cuts"]
+    assert "cuts" not in plan_of(still, transitions_enabled=False).meta
 
 
 def test_a_slide_gets_a_swish_and_the_others_stay_silent():

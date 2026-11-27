@@ -25,7 +25,8 @@ const I18N = {
     "edit.s1_title": "Загрузите видео для ролика",
     "edit.s1_lead": "Видео, где человек говорит в камеру. Соберём из него вертикальный ролик с субтитрами.",
     "edit.limits": "до {mb} МБ · от {min} с до {max} мин",
-    "edit.style": "Стиль субтитров", "edit.font": "Шрифт", "edit.color": "Цвет выделения", "edit.effects": "Эффекты",
+    "edit.style": "Стиль субтитров", "edit.font": "Шрифт", "edit.color": "Цвет выделения",
+    "edit.sound": "Звук", "edit.frame": "Кадр", "edit.graphics": "Графика",
     "card.captions": "Субтитры",
     "music.title": "Музыка по ссылке", "music.placeholder": "Ссылка на рилс, TikTok или файл", "music.paste": "Вставить",
     "music.checking": "Достаём звук…", "music.ready": "Трек {t}", "music.clear": "Убрать музыку",
@@ -39,8 +40,19 @@ const I18N = {
     "cut.on_hint": "Уберём затяжные паузы и долгие «эээ» — ролик станет плотнее.",
     "cut.off_hint": "Видео пойдёт целиком, как снято: только кадр 9:16 и субтитры.",
     "opt.sfx": "Звуковые эффекты", "opt.broll": "Медиа-карточки", "opt.camera": "Движение камеры",
+    "opt.studio": "Студийный звук", "opt.tracking": "Слежение за головой", "opt.transitions": "Переходы",
+    "opt.grade": "Цветокоррекция", "opt.smooth": "Плавность 60 к/с", "opt.visuals": "Графика и стикеры",
+    "opt.title": "Заголовок в начале", "opt.progress": "Полоса прогресса",
     "help.cut": ["Нарезка", "Вырезаем затяжные паузы дольше 1.2 секунды и долгие «эээ». Обычные вдохи и слова-паразиты остаются — так речь звучит естественно."],
-    "help.sfx": ["Звуковые эффекты", "Тихий щелчок на каждом субтитре, «whoosh» на появлении медиа-карточки и при смене крупности. Громкость голоса выравнивается в любом случае."],
+    "help.sfx": ["Звуковые эффекты", "«Whoosh» на появлении медиа-карточки, при смене крупности и на въезде кадра сбоку. Громкость голоса выравнивается в любом случае."],
+    "help.studio": ["Студийный звук", "Убираем гул и шипение, приглушаем свистящие, добавляем голосу разборчивости и плотности. Выключите, если хотите оставить звук как записан, — тогда выровняем только громкость."],
+    "help.tracking": ["Слежение за головой", "Кадр плавно едет за вами, когда вы двигаетесь, и лицо остаётся в центре. Выключите, если снимаете со штатива и хотите неподвижный кадр: он встанет по вашему обычному положению."],
+    "help.transitions": ["Переходы", "На склейках и ударных словах кадр на треть секунды наезжает, въезжает сбоку или вспыхивает — рез читается как приём, а не как рывок. Выключите — склейки останутся жёсткими."],
+    "help.grade": ["Цветокоррекция", "Чуть больше контраста и насыщенности, чтобы видео с телефона не выглядело тёмным и плоским; в части стилей — лёгкое затемнение по краям. Выключите, если уже обработали цвет сами."],
+    "help.smooth": ["Плавность 60 кадров/с", "Кадр, субтитры и графика двигаются вдвое плавнее. Выключите — ролик останется в частоте исходника (обычно 30 кадров/с), а монтаж пойдёт быстрее."],
+    "help.visuals": ["Графика и стикеры", "Плашки с цифрами и ценами, стикеры и подчёркивания по смыслу сказанного. Выключите — плашек и стикеров в ролике не будет."],
+    "help.title": ["Заголовок в начале", "В первые секунды поверх видео появляется крупный заголовок ролика — его придумывает ИИ по вашей речи. Есть не во всех стилях субтитров."],
+    "help.progress": ["Полоса прогресса", "Тонкая линия вверху кадра заполняется по ходу ролика: зрителю видно, сколько осталось до конца."],
     "help.broll": ["Медиа-карточки", "Картинки и короткие клипы по смыслу сказанного — не чаще одной на 8 секунд и никогда поверх субтитров."],
     "help.camera": ["Движение камеры", "На резах кадр чередует общий и крупный план, чтобы склейки читались как монтаж. Выключите — весь ролик пойдёт одним планом."],
     "req.title": "Требования к видео",
@@ -127,7 +139,8 @@ const I18N = {
     "edit.s1_title": "Upload a video for your reel",
     "edit.s1_lead": "A video of someone talking to the camera. We'll turn it into a vertical reel with captions.",
     "edit.limits": "up to {mb} MB · {min} s to {max} min",
-    "edit.style": "Caption style", "edit.font": "Typeface", "edit.color": "Highlight colour", "edit.effects": "Effects",
+    "edit.style": "Caption style", "edit.font": "Typeface", "edit.color": "Highlight colour",
+    "edit.sound": "Sound", "edit.frame": "Frame", "edit.graphics": "Graphics",
     "card.captions": "Captions",
     "music.title": "Music from a link", "music.placeholder": "Reel, TikTok or file link", "music.paste": "Paste",
     "music.checking": "Getting the sound…", "music.ready": "Track {t}", "music.clear": "Remove music",
@@ -141,8 +154,19 @@ const I18N = {
     "cut.on_hint": "We'll remove long pauses and drawn-out “umm”s — the reel gets tighter.",
     "cut.off_hint": "The video stays whole, as shot: just the 9:16 frame and captions.",
     "opt.sfx": "Sound effects", "opt.broll": "Media cards", "opt.camera": "Camera movement",
+    "opt.studio": "Studio sound", "opt.tracking": "Head tracking", "opt.transitions": "Transitions",
+    "opt.grade": "Colour correction", "opt.smooth": "Smooth 60 fps", "opt.visuals": "Graphics and stickers",
+    "opt.title": "Opening title", "opt.progress": "Progress bar",
     "help.cut": ["Cutting", "We remove pauses longer than 1.2 seconds and long “umm”s. Normal breaths and filler words stay, so the speech sounds natural."],
-    "help.sfx": ["Sound effects", "A quiet tick on every caption, a “whoosh” when a media card appears and when the shot size changes. Voice loudness is levelled either way."],
+    "help.sfx": ["Sound effects", "A “whoosh” when a media card appears, when the shot size changes and when the frame slides in. Voice loudness is levelled either way."],
+    "help.studio": ["Studio sound", "We remove hum and hiss, soften harsh “s” sounds and make the voice clearer and fuller. Turn it off to keep the sound as recorded — then we only level the loudness."],
+    "help.tracking": ["Head tracking", "The frame follows you smoothly as you move, keeping your face centred. Turn it off if you shoot on a tripod and want a still frame: it settles on your usual position."],
+    "help.transitions": ["Transitions", "At cuts and on stressed words the frame punches in, slides in or flashes for a third of a second — the cut reads as a move, not a jolt. Turn it off to keep hard cuts."],
+    "help.grade": ["Colour correction", "A touch more contrast and saturation so phone footage doesn't look dark and flat; some styles add a slight vignette. Turn it off if you've already graded the video."],
+    "help.smooth": ["Smooth 60 fps", "The frame, captions and graphics move twice as smoothly. Turn it off to keep the source frame rate (usually 30 fps) — editing gets faster."],
+    "help.visuals": ["Graphics and stickers", "Number and price chips, stickers and underlines that match what's being said. Turn it off for a reel without chips and stickers."],
+    "help.title": ["Opening title", "A large title appears over the video in the first seconds — AI writes it from your speech. Not every caption style has one."],
+    "help.progress": ["Progress bar", "A thin line at the top fills as the reel plays, so viewers see how much is left."],
     "help.broll": ["Media cards", "Images and short clips that match what's being said — at most one per 8 seconds and never over the captions."],
     "help.camera": ["Camera movement", "At cuts the frame alternates between wide and close-up so the edits read as editing. Turn it off to keep one shot throughout."],
     "req.title": "Video requirements",
@@ -920,6 +944,25 @@ function renderOptions() {
   renderLayout();
 }
 
+// Какие переключатели видны. Сервер прислал те, что у него что-то меняют
+// (`boot.switches`): галочка, которая ничего не меняет, хуже отсутствующей. А в
+// «Двух видео» нет картинок по смыслу, графики, переходов и полосы прогресса —
+// верхнюю половину человек показывает сам (`data-single-only` в разметке).
+// Карточка, в которой не осталось ни одной строки, прячется целиком.
+function renderSwitches() {
+  const split = state.layout === "split";
+  const live = state.boot && state.boot.switches;
+  for (const card of $$(".card.options")) {
+    let shown = 0;
+    for (const row of card.querySelectorAll(".toggle-row")) {
+      const key = row.querySelector("[data-option]").dataset.option;
+      row.hidden = (!!live && !live.includes(key)) || (split && row.hasAttribute("data-single-only"));
+      if (!row.hidden) shown += 1;
+    }
+    card.hidden = shown === 0;
+  }
+}
+
 // Раскладка кадра — выбор из двух, как нарезка. Помнится между заходами: кто
 // снимает ролики «сверху товар, снизу я», снимает их подряд.
 const LAYOUT_KEY = "reelbot:layout";
@@ -949,10 +992,9 @@ function renderLayout() {
   $("#drop-role").hidden = !split;
   $("#drop-role-chip").hidden = !split;
   $("#s1-lead").textContent = tr(split ? "edit.s1_lead_split" : "edit.s1_lead");
-  // Два файла в чат с ботом не отправить, а картинок по смыслу в этом режиме
-  // нет вовсе: верхнюю половину пользователь показывает сам.
+  // Два файла в чат с ботом не отправить.
   $("#send-in-chat").hidden = split;
-  $('[data-option="broll"]').closest(".toggle-row").hidden = split;
+  renderSwitches();
   // В «Двух видео» снизу одно видео: от списка остаётся первое.
   if (split && state.clips.length > 1) state.clips.length = 1;
   renderClips();
@@ -2191,6 +2233,12 @@ async function main() {
   // а цвет до сих пор сбрасывался на каждом открытии приложения.
   const saved = (b.user && b.user.settings) || {};
   state.accent = saved.accent || b.defaults.accent || "theme";
+  // Переключатели эффектов помнятся так же (`options.REMEMBERED` на сервере).
+  // Нарезка — нет: её выбирают под конкретное видео на первом шаге.
+  for (const input of $$("[data-option]")) {
+    const key = input.dataset.option;
+    if (typeof saved[key] === "boolean") state.options[key] = saved[key];
+  }
 
   declareFonts();
   renderUser();

@@ -3,6 +3,11 @@
 Сохраняются в задаче целиком (`jobs.options`) и читаются воркером: чат и Mini
 App ставят задачи одним путём, а различаются только набором галочек.
 
+Переключатели доходят до пайплайна тремя путями: нарезка, звуки, картинки,
+камера и заголовок читаются прямо в `pipeline/job.py`; остальные сужают
+настройки сервера на один ролик (`job_settings`); цветокоррекция правит пресет
+(`apply_grade`).
+
 Здесь нет ни одной опции, которую пайплайн не умеет выполнить. Экран-образец
 предлагал ещё «хук», «эмодзи в субтитрах» и «плашки»: первых двух в пайплайне
 нет (режиссёр хук находит, но не сочиняет, и эмодзи не расставляет), а плашки
@@ -192,6 +197,17 @@ class JobOptions(BaseModel):
     sfx: bool = Field(default=True, description="звуковые акценты: щелчок на субтитре, картинки, укрупнения")
     broll: bool = Field(default=True, description="медиа-карточки по смыслу")
     camera: bool = Field(default=True, description="смена крупности на резах")
+    # Ниже — переключатели, добавленные 27.11.2026. У каждого умолчание
+    # «включено»: задача без поля ведёт себя как до его появления. Что именно
+    # каждый выключает в пайплайне — `job_settings` и `apply_grade` ниже.
+    studio: bool = Field(default=True, description="студийный звук: чистка, тембр и плотность голоса")
+    tracking: bool = Field(default=True, description="кадр едет за головой")
+    transitions: bool = Field(default=True, description="переходы на склейках и ударных словах")
+    visuals: bool = Field(default=True, description="плашки, стикеры и сцены поверх ролика")
+    title: bool = Field(default=True, description="заголовок-титр в первые секунды")
+    progress: bool = Field(default=True, description="полоса прогресса сверху")
+    grade: bool = Field(default=True, description="цветокоррекция темы")
+    smooth: bool = Field(default=True, description="ролик в 60 кадров в секунду")
 
     @field_validator("accent")
     @classmethod
@@ -218,8 +234,94 @@ class JobOptions(BaseModel):
 
     @classmethod
     def from_stored(cls, raw: dict[str, Any] | None) -> "JobOptions":
-        """Опции из БД. Старые задачи опций не несут — это поведение по умолчанию."""
-        return cls.model_validate(raw or {})
+        """Опции из БД. Старые задачи опций не несут — это поведение по умолчанию.
+
+        Переходы до 27.11.2026 своей галочки не имели и выключались вместе с
+        «Движением камеры». У задачи тех времён поля `transitions` нет, и
+        читается оно как тогдашняя камера: перерендер обязан дать тот же ролик.
+        """
+        raw = dict(raw or {})
+        raw.setdefault("transitions", raw.get("camera", True))
+        return cls.model_validate(raw)
+
+    def remembered(self) -> dict[str, bool]:
+        """Переключатели, которые запоминаются между роликами (`users.settings`)."""
+        return {name: bool(getattr(self, name)) for name in REMEMBERED}
+
+
+# Что из галочек помнится между роликами — рядом с цветом выделения. Нарезки
+# здесь нет намеренно: «без нарезки» выбирают под конкретное видео на первом
+# шаге, и запомненный отказ молча оставлял бы паузы в роликах, присланных в чат.
+REMEMBERED: tuple[str, ...] = (
+    "sfx", "broll", "camera",
+    "studio", "tracking", "transitions", "visuals", "title", "progress", "grade", "smooth",
+)
+
+
+def available_switches(cfg: Any) -> list[str]:
+    """Переключатели, которые на ЭТОМ сервере что-то меняют, в порядке `REMEMBERED`.
+
+    Приложение показывает только их. Галочка умеет лишь выключить включённое
+    (`job_settings`), поэтому там, где сервер приём уже выключил, она не меняла
+    бы ничего: на проде `OUTPUT_FPS=0`, и «60 кадров» там включить нечем.
+    Галочка, которая ничего не меняет, хуже отсутствующей.
+    """
+    drawn = cfg.render_backend != "ass"  # быстрый путь графику и переходы не рисует
+    works = {
+        "sfx": cfg.audio_post_enabled,
+        "broll": cfg.broll_enabled,
+        "camera": True,
+        "studio": cfg.audio_post_enabled
+        and (cfg.voice_studio or cfg.voice_denoise_db > 0 or cfg.voice_highpass_hz > 0),
+        "tracking": cfg.crop_follow,
+        "transitions": cfg.transitions_enabled and drawn,
+        "visuals": cfg.visuals_enabled and drawn,
+        # Текст титра сочиняет модель (`director.make_metadata`): без неё его нет.
+        "title": cfg.llm_ready,
+        "progress": cfg.progress_bar and drawn,
+        "grade": True,
+        "smooth": cfg.output_fps > 0,
+    }
+    return [name for name in REMEMBERED if works[name]]
+
+
+def job_settings(cfg: Any, options: JobOptions) -> Any:
+    """Настройки сервера, суженные галочками одного ролика.
+
+    Галочка умеет только ВЫКЛЮЧИТЬ то, что на сервере включено: включить
+    выключенное владельцем (нет памяти под 60 кадров, графика снята) ролик не
+    вправе. Поэтому здесь нет ни одного присваивания `True`.
+
+    Возвращается копия: настройки — общий объект процесса, и правка на месте
+    выключила бы графику у всех следующих роликов.
+    """
+    off: dict[str, Any] = {}
+    if not options.studio:
+        # Голос как записан: остаётся только выравнивание громкости.
+        off.update(voice_studio=False, voice_highpass_hz=0.0, voice_denoise_db=0.0)
+    if not options.tracking:
+        off["crop_follow"] = False
+    if not options.transitions:
+        off["transitions_enabled"] = False
+    if not options.visuals:
+        off["visuals_enabled"] = False
+    if not options.progress:
+        off["progress_bar"] = False
+    if not options.smooth and cfg.output_fps > 0:
+        # Частота как у исходника (`pipeline/fps.py`, ноль). Не «ровно 30»:
+        # съёмку в 25 кадров перевод в 30 заставил бы дёргаться повторами.
+        # Телефон снимает в 30 — рендер рисует вдвое меньше кадров.
+        off["output_fps"] = 0
+    return cfg.model_copy(update=off) if off else cfg
+
+
+def apply_grade(preset: Preset, grade: bool) -> Preset:
+    """Пресет без цветокоррекции, если человек её выключил. Исходный не трогается."""
+    if grade or not preset.grade.enabled:
+        return preset
+    clone = preset.model_copy(deep=True)
+    clone.grade.enabled = False
+    return clone
 
 
 def apply_accent(preset: Preset, accent: str) -> Preset:

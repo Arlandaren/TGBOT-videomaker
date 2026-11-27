@@ -1120,6 +1120,35 @@ def test_window_jumps_on_a_cut_inside_the_source():
     assert len(set(smooth.xs)) > 20
 
 
+def test_without_head_tracking_the_window_stands_still():
+    """Галочка «Слежение за головой» выключена: окно не едет за человеком.
+
+    Тот же трек, что едет в тесте выше: человек проходит через весь кадр. Со
+    слежением окно идёт за ним, без него — стоит на медиане плана. Склейка в
+    файле по-прежнему переставляет окно: это другой план, а не ход.
+    """
+    preset = load_preset("glass")
+    info = info_of(3840, 2160, duration=6.0)
+    faces = [face(y=1000.0, h=400.0, x=900.0 + 55.0 * i) for i in range(36)]
+    args = dict(info=info, out_w=1080, out_h=1920, preset=preset)
+
+    moving = plan_segments(track_of(faces), [(0.0, 6.0, "wide")], **args)[0]
+    assert len(set(moving.xs)) > 20, "со слежением окно обязано ехать — иначе тест пуст"
+
+    still = plan_segments(track_of(faces), [(0.0, 6.0, "wide")], follow=False, **args)[0]
+    assert len(still.xs) == len(moving.xs) == 180
+    assert still.static_x and still.static_y
+    assert (still.win_w, still.win_h) == (moving.win_w, moving.win_h), "размер окна тот же"
+    assert min(moving.xs) < still.xs[0] < max(moving.xs), "окно стоит посреди хода, а не с краю"
+
+    jump = [face(y=1000.0, h=400.0, x=900.0 if i < 18 else 2900.0) for i in range(36)]
+    track = track_of(jump)
+    track.cuts = [3.0]
+    cut = plan_segments(track, [(0.0, 6.0, "wide")], follow=False, **args)[0]
+    assert len(set(cut.xs[:90])) == 1 and len(set(cut.xs[90:])) == 1
+    assert cut.xs[90] - cut.xs[89] > 1500
+
+
 def test_a_face_that_steals_the_track_for_two_samples_does_not_move_the_window():
     """Чужое лицо на пару проб — выброс, а не повод везти окно туда и обратно."""
     preset = load_preset("glass")

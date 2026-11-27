@@ -922,6 +922,7 @@ def plan_segments(
     smooth_seconds: float = 1.2,
     sample_fps: float = 6.0,
     deadzone_ratio: float = 0.012,
+    follow: bool = True,
 ) -> list[Segment]:
     """Трек + крупность по кускам → готовые прямоугольники кропа.
 
@@ -931,6 +932,10 @@ def plan_segments(
 
     `seg.times`, `seg.xs`, `seg.ys` — по одному значению на КАДР куска, а не на
     пробу трекера: см. «Про шаг окна» в шапке модуля.
+
+    `follow=False` — слежение за головой выключено: окно на каждом плане стоит
+    там, где голова была чаще всего (медиана проб плана), и не едет за ней.
+    Размер окна и смена крупности на резах остаются: выключается только ход.
     """
     crop = preset.crop
     lo, hi = window_bounds(info.width, info.height, out_w, out_h, crop.max_scale)
@@ -1063,6 +1068,12 @@ def plan_segments(
             raw = [place_at(i, seg) for i in shot]
             sampled = [track.times[i] for i in shot]
             for axis, size, path in ((0, seg.win_w, path_x), (1, seg.win_h, path_y)):
+                if not follow:
+                    # Медиана, а не среднее: человек, на секунду наклонившийся
+                    # за чашкой, не должен сдвинуть кадр на весь план.
+                    still = median(p[axis] for p in raw)
+                    path += [still] * len(shot_at)
+                    continue
                 steady = apply_deadzone(
                     moving_average(median_filter([p[axis] for p in raw], BLIP_SAMPLES), window),
                     size * deadzone_ratio,
@@ -1447,6 +1458,10 @@ def autocrop(
             track, spans, info=info, out_w=out_w, out_h=out_h, preset=preset,
             smooth_seconds=smooth_seconds, sample_fps=sample_fps,
             deadzone_ratio=deadzone_ratio,
+            # Галочка «Слежение за головой» приходит настройкой ролика
+            # (`options.job_settings`), а не аргументом: кроп зовут из трёх
+            # сборок и из «Двух видео», и аргумент пришлось бы тянуть через все.
+            follow=cfg.crop_follow,
         )
 
     work = Path(work_dir) if work_dir else dst.parent

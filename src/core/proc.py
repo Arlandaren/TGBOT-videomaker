@@ -119,7 +119,17 @@ def _ffmpeg_cmd(args: list[str]) -> list[str]:
 # Замер на сервере (ролик 52 с, 4K → 1080×1920): кодирование кропа на medium
 # шло 3.5 мин из 20 на весь монтаж. При том же crf картинка та же, файл
 # крупнее — он живёт в рабочей папке до конца задачи.
-INTERMEDIATE_PRESET = "veryfast"
+#
+# Значение — настройка машины (`INTERMEDIATE_PRESET`, по умолчанию veryfast) и
+# читается один раз при загрузке модуля: этапы берут константу в значения по
+# умолчанию своих аргументов, а менять пресет посреди работы процесса незачем.
+def _intermediate_preset() -> str:
+    from src.core.config import settings
+
+    return settings.intermediate_preset
+
+
+INTERMEDIATE_PRESET = _intermediate_preset()
 
 
 def ffmpeg(args: list[str], *, timeout: float | None = None) -> str:

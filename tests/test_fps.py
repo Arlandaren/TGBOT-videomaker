@@ -62,10 +62,21 @@ def test_zero_keeps_the_source_rate():
     assert target_fps(0.0, cfg(output_fps=0, render_fps=25)) == 25
 
 
-def test_sixty_is_the_default():
-    # Дорисовка по движению в лимиты воркера не помещается (см. config) —
-    # по умолчанию кадры повторяются.
-    assert cfg().output_fps == 60 and cfg().fps_interpolation == "repeat"
+def test_the_source_rate_is_the_default():
+    # 60 повтором кадров плавности не даёт, а рендер удваивает (см. config);
+    # дорисовка по движению в лимиты воркера не помещается.
+    assert cfg().output_fps == 0 and cfg().fps_interpolation == "repeat"
+    assert target_fps(30.0, cfg()) == 30 and target_fps(59.94, cfg()) == 60
+
+
+def test_a_reel_at_its_own_rate_skips_the_pass_by_default(tmp_path, monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("ffmpeg не должен запускаться")
+
+    monkeypatch.setattr(fps_mod, "ffmpeg", boom)
+    src = tmp_path / "v.mp4"
+    src.write_bytes(b"x")
+    assert to_output_fps(src, tmp_path / "s.mp4", info=info_of(30.0), cfg=cfg()) == src
 
 
 # ------------------------------------------------------------------ бюджет
@@ -190,9 +201,9 @@ def test_motion_makes_new_frames_not_copies(clip30, tmp_path):
         return np.frombuffer(raw, np.uint8).reshape(-1, 256 * 144).astype(np.int16)
 
     motion = grey(to_output_fps(clip30, tmp_path / "m.mp4", work_dir=tmp_path,
-                                cfg=cfg(fps_interpolation="motion", fps_workers=1)))
+                                cfg=cfg(output_fps=60, fps_interpolation="motion", fps_workers=1)))
     repeat = grey(to_output_fps(clip30, tmp_path / "r.mp4", work_dir=tmp_path,
-                                cfg=cfg(fps_interpolation="repeat")))
+                                cfg=cfg(output_fps=60, fps_interpolation="repeat")))
 
     def still(frames: np.ndarray) -> int:
         """Сколько соседних пар кадров почти одинаковы."""
@@ -207,12 +218,17 @@ def test_a_failed_interpolation_falls_back_to_repeat(clip30, tmp_path, monkeypat
         raise RuntimeError("minterpolate упал")
 
     monkeypatch.setattr(fps_mod, "_motion", broken)
-    out = to_output_fps(clip30, tmp_path / "s.mp4", work_dir=tmp_path, cfg=cfg())
+    out = to_output_fps(
+        clip30, tmp_path / "s.mp4", work_dir=tmp_path,
+        cfg=cfg(output_fps=60, fps_interpolation="motion"),
+    )
     assert probe(out).fps == pytest.approx(60, abs=0.01)
 
 
 def test_an_unreadable_file_leaves_the_reel_at_its_own_rate(tmp_path):
     src = tmp_path / "broken.mp4"
     src.write_bytes(b"not a video")
-    out = to_output_fps(src, tmp_path / "s.mp4", info=info_of(30.0), work_dir=tmp_path, cfg=cfg())
+    out = to_output_fps(
+        src, tmp_path / "s.mp4", info=info_of(30.0), work_dir=tmp_path, cfg=cfg(output_fps=60),
+    )
     assert out == src

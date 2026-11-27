@@ -1643,3 +1643,129 @@ async def test_the_effect_switches_are_remembered_between_reels(client, finish_o
     assert set(seen["settings"]) == {"accent", "font", *REMEMBERED}
     assert seen["settings"]["studio"] is False and seen["settings"]["tracking"] is False
     assert "cut" not in seen["settings"]
+
+
+# ------------------------------------------------------------ вид приложения 27.11.2026
+
+
+JOB_ID = "11111111-1111-1111-1111-111111111111"
+
+
+def _done_job(**extra):
+    """Готовый ролик, каким его отдаёт база: 24 ноября 00:38."""
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    from src.db.models import JobStatus
+
+    born = datetime(2026, 11, 24, 0, 38, tzinfo=timezone.utc)
+    fields = dict(
+        id=JOB_ID, user_id=42, status=JobStatus.DONE, stage=None, progress=1.0, preset="glass",
+        options={}, created_at=born, finished_at=born, source_duration=60.0, result_duration=40.0,
+        error=None, error_code=None, delivered=True, result_key="results/x/result.mp4",
+        files_purged_at=None,
+    )
+    fields.update(extra)
+    return SimpleNamespace(**fields)
+
+
+def test_a_finished_reel_carries_a_thumbnail_and_its_storage_deadline():
+    """Строка списка: миниатюра и «хранится до 24 дек.» — срок от окончания
+    монтажа, тот же, по которому файлы убирает воркер."""
+    from src.webapp.server import _job_view
+
+    cfg = Settings(_env_file=None, bot_token=TOKEN, storage_retention_days=30)
+    view = _job_view(_done_job(), live=None, secret=TOKEN, lang="ru", cfg=cfg)
+    path, token = view["thumb_url"].split("?t=")
+    assert path == f"/media/{JOB_ID}.jpg"
+    assert check_media_token(JOB_ID, token, TOKEN), "миниатюра ходит по той же подписи, что ролик"
+    assert view["expires_at"].startswith("2026-12-24")
+
+
+def test_a_reel_without_files_promises_neither():
+    """Файлы убраны по сроку — ни кадра, ни даты; срок хранения выключен — даты нет."""
+    from datetime import datetime, timezone
+
+    from src.db.models import JobStatus
+    from src.webapp.server import _job_view
+
+    cfg = Settings(_env_file=None, bot_token=TOKEN, storage_retention_days=30)
+    purged = _done_job(files_purged_at=datetime(2026, 12, 24, tzinfo=timezone.utc))
+    view = _job_view(purged, live=None, secret=TOKEN, lang="ru", cfg=cfg)
+    assert view["thumb_url"] is None and view["expires_at"] is None and view["purged"] is True
+
+    running = _done_job(status=JobStatus.RUNNING, result_key=None, finished_at=None)
+    view = _job_view(running, live=None, secret=TOKEN, lang="ru", cfg=cfg)
+    assert view["thumb_url"] is None and view["expires_at"] is None
+
+    forever = Settings(_env_file=None, bot_token=TOKEN, storage_retention_days=0)
+    view = _job_view(_done_job(), live=None, secret=TOKEN, lang="ru", cfg=forever)
+    assert view["thumb_url"] and view["expires_at"] is None
+
+
+async def test_the_thumbnail_needs_a_signed_link(client):
+    r = await client.get(f"/media/{JOB_ID}.jpg?t=garbage")
+    assert r.status == 403
+
+
+async def test_the_thumbnail_is_a_frame_of_the_reel(client, monkeypatch, tmp_path):
+    """Кадр снимается ffmpeg-ом и кладётся в кеш; сам ролик ради кадра в кеше
+    не остаётся — список из тридцати роликов иначе удвоил бы их место на диске."""
+    import shutil
+    import subprocess
+
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("нужен ffmpeg")
+    from src.db import repo
+    from src.webapp import server as mod
+
+    sample = tmp_path / "sample.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=270x480:rate=30",
+         "-t", "1", "-pix_fmt", "yuv420p", str(sample)],
+        check=True,
+    )
+    calls = []
+
+    async def get_job(job_id):
+        return _done_job() if str(job_id) == JOB_ID else None
+
+    async def download(key, path):
+        calls.append(key)
+        shutil.copyfile(sample, path)
+        return Path(path)
+
+    monkeypatch.setattr(repo, "get_job", get_job)
+    monkeypatch.setattr(mod.storage, "download", download)
+    url = f"/media/{JOB_ID}.jpg?t={media_token(JOB_ID, TOKEN)}"
+
+    r = await client.get(url)
+    assert r.status == 200 and r.content_type == "image/jpeg"
+    assert (await r.read())[:2] == b"\xff\xd8", "это JPEG"
+    cache = tmp_path / "media-cache"
+    assert sorted(f.name for f in cache.iterdir()) == [f"{JOB_ID}.jpg"], "ни ролика, ни недописанных файлов"
+
+    assert (await client.get(url)).status == 200
+    assert calls == ["results/x/result.mp4"], "второй запрос отдаёт готовый кадр из кеша"
+
+    purged = await client.get(f"/media/22222222-2222-2222-2222-222222222222.jpg?t="
+                              f"{media_token('22222222-2222-2222-2222-222222222222', TOKEN)}")
+    assert purged.status == 404
+
+
+async def test_bootstrap_carries_the_profile_links_and_the_partner_share(booted):
+    """Строки профиля «Официальный канал», «Поддержка», «Публичная оферта» ведут
+    по ссылкам с сервера; ненастроенная ссылка — пустая, и строки в приложении нет."""
+    body = await (await booted.get("/api/bootstrap", headers=auth())).json()
+    assert set(body["links"]) == {"channel", "support", "offer"}
+    assert body["links"]["channel"] == "" and body["links"]["offer"] == ""
+    assert body["partner_percent"] == 15
+
+
+def test_a_support_contact_becomes_a_telegram_link():
+    from src.webapp.server import _tg_link
+
+    assert _tg_link("@reel_support") == "https://t.me/reel_support"
+    assert _tg_link("https://t.me/reel_support") == "https://t.me/reel_support"
+    assert _tg_link("напишите нам") == "", "из произвольного текста ссылку не выдумываем"
+    assert _tg_link(None) == "" and _tg_link("  ") == ""

@@ -38,6 +38,7 @@ def test_main_buttons_carry_icons_and_no_colour_emoji_in_the_label():
         assert b.text[0].isalpha(), f"в подписи осталось эмодзи: {b.text!r}"
     assert buttons[t("kb.start", "ru")].style == "primary"
     assert buttons[t("kb.balance", "ru")].style == "success"
+    assert buttons[t("kb.videos", "ru")].style == "primary"
 
 
 def test_the_open_app_button_has_its_icon():
@@ -55,7 +56,7 @@ def test_old_emoji_labels_still_work_in_every_language():
 
 def test_the_new_keyboard_is_delivered_once_more():
     """Кто уже получил клавиатуру с цветными эмодзи, получит новую — отметка другая."""
-    assert menu.SEEN_FLAG not in ("kb", "kb2", "kb3")
+    assert menu.SEEN_FLAG not in ("kb", "kb2", "kb3", "kb4")
 
 
 def test_icons_can_be_switched_off():

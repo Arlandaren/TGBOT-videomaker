@@ -61,7 +61,8 @@ def test_no_channel_button_without_a_channel(monkeypatch):
 def test_bottom_menu_colours():
     kb = keyboards.main_keyboard("ru")
     assert [[(b.text, b.style) for b in row] for row in kb.keyboard] == [
-        [("Начать монтаж", "primary"), ("Баланс", "success")],
+        [("Начать монтаж", "primary")],
+        [("Баланс", "success"), ("Мои ролики", "primary")],
         [("Реф. программа", None), ("Поддержка", None)],
     ]
     assert t("kb.ready", "ru") == "Меню внизу 👇"

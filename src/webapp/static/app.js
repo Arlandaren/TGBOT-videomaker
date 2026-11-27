@@ -1,4 +1,4 @@
-/* Mini App. Без сборки и фреймворка: шесть экранов, история переходов, API на том же хосте. */
+/* Mini App. Без сборки и фреймворка: семь экранов, история переходов, API на том же хосте. */
 "use strict";
 
 const tg = window.Telegram && window.Telegram.WebApp;
@@ -9,21 +9,24 @@ const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 const I18N = {
   ru: {
     theme: "Сменить тему", back: "Назад", forward: "Вперёд", close: "Закрыть",
-    "nav.home": "Главная", "nav.invite": "Приглашения", "nav.edit": "Монтаж", "nav.videos": "Результаты",
+    "nav.home": "Главная", "nav.invite": "Пригласить", "nav.studio": "Студия", "nav.edit": "Монтаж", "nav.videos": "Результаты",
     "nav.tariffs": "Тарифы", "nav.profile": "Профиль", "nav.collapse": "Свернуть панель",
     "title.invite": "Приглашайте друзей", "step": "Шаг {n} из 2",
     "home.new": "Новый ролик", "home.new_sub": "Загрузите видео — смонтируем за пару минут",
     "home.recent": "Последнее", "home.all": "Все", "home.invite": "Пригласите друга",
-    "home.invite_sub": "{p}% с каждой его покупки — вам на баланс",
+    "home.invite_sub": "Токены вам — с каждой его покупки",
+    "studio.new_sub": "Из видео — готовый Reels",
+    "notif.title": "Уведомления", "notif.empty": "Пока нет уведомлений",
+    "notif.done": "Ролик готов", "notif.failed": "Ролик не получился", "notif.failed_sub": "Токены вернулись на баланс",
     "home.empty": "Роликов пока нет", "home.empty_sub": "Первый ролик появится здесь",
-    "home.offer_trial": "Первый ролик — бесплатно. Дальше ролик — {cost}",
-    "home.offer_paid": "Ролик — {cost}, пакеты от {pack}",
     "preview.pause": "Пауза", "preview.play": "Воспроизвести",
     "preview.s1": ["это", "пример", "субтитров", "в", "стиле"],
     "preview.s2": ["паузы", "уже", "вырезаны"],
     "preview.s3": ["и", "кадр", "по центру", "лица"],
     "edit.s1_title": "Загрузите видео для ролика",
-    "edit.s1_lead": "Видео, где человек говорит в камеру. Соберём из него вертикальный ролик с субтитрами.",
+    "edit.s1_lead": "Можно одно или несколько — склеим их в один Reels в том порядке, который вы зададите.",
+    "edit.s1_lead_one": "Видео, где человек говорит в камеру. Соберём из него вертикальный ролик с субтитрами.",
+    "edit.drop_many": "Сразу несколько — тоже можно",
     "edit.limits": "до {mb} МБ · от {min} с до {max} мин",
     "edit.style": "Стиль субтитров", "edit.font": "Шрифт", "edit.color": "Цвет выделения",
     "edit.sound": "Звук", "edit.frame": "Кадр", "edit.graphics": "Графика",
@@ -32,7 +35,7 @@ const I18N = {
     "music.checking": "Достаём звук…", "music.ready": "Трек {t}", "music.clear": "Убрать музыку",
     "music.hint": "Звук по ссылке тихо заиграет под вашей речью",
     "music.dropped": "Музыка не успела подготовиться — ролик будет без неё",
-    "edit.requirements": "Требования к видео", "edit.in_chat": "Отправить в чат с ботом",
+    "edit.requirements": "Требования к видео", "edit.in_chat": "Загрузить в боте",
     "edit.untitled": "Видео", "edit.remove": "Убрать видео",
     "edit.next": "Далее: оформление", "edit.next_idle": "Сначала добавьте видео", "edit.next_ready": "стиль, шрифт и цвет субтитров",
     "edit.back_to_video": "← Вернуться к видео",
@@ -42,7 +45,8 @@ const I18N = {
     "opt.sfx": "Звуковые эффекты", "opt.broll": "Медиа-карточки", "opt.camera": "Движение камеры",
     "opt.studio": "Студийный звук", "opt.tracking": "Слежение за головой", "opt.transitions": "Переходы",
     "opt.grade": "Цветокоррекция", "opt.smooth": "Плавность 60 к/с", "opt.visuals": "Графика и стикеры",
-    "opt.title": "Заголовок в начале", "opt.progress": "Полоса прогресса",
+    "opt.title": "Заголовок в начале", "opt.progress": "Полоса прогресса", "opt.music": "Фоновая музыка",
+    "help.music": ["Фоновая музыка", "ИИ подбирает спокойный трек под смысл ролика и тихо кладёт его под голос. Если вы вставили свою музыку по ссылке, играет она."],
     "help.cut": ["Нарезка", "Вырезаем затяжные паузы дольше 1.2 секунды и долгие «эээ». Обычные вдохи и слова-паразиты остаются — так речь звучит естественно."],
     "help.sfx": ["Звуковые эффекты", "«Whoosh» на появлении медиа-карточки, при смене крупности и на въезде кадра сбоку. Громкость голоса выравнивается в любом случае."],
     "help.studio": ["Студийный звук", "Убираем гул и шипение, приглушаем свистящие, добавляем голосу разборчивости и плотности. Выключите, если хотите оставить звук как записан, — тогда выровняем только громкость."],
@@ -84,9 +88,9 @@ const I18N = {
     "jobs.all": "Все", "jobs.done": "Готовые", "jobs.active": "В работе",
     "jobs.empty": "Роликов пока нет", "jobs.empty_hint": "Загрузите видео — готовый ролик придёт в чат и появится здесь.",
     "jobs.empty_filter": "Здесь пока пусто",
-    "jobs.to_edit": "К монтажу", "jobs.reel": "Ролик", "jobs.refunded": "Токены вернулись на баланс.",
+    "jobs.to_edit": "К монтажу", "jobs.reel": "Монтаж", "jobs.refunded": "Токены вернулись на баланс.",
+    "jobs.keep": "хранится до {d}", "jobs.purged_short": "удалён с сервера",
     "jobs.purged": "Удалён с сервера по сроку хранения. В чате ролик остался.",
-    "jobs.retention": "Готовые ролики хранятся на сервере {n} дн., в чате — всегда.",
     "jobs.send": "Прислать в чат", "jobs.sent": "Отправил в чат.", "jobs.not_sent": "Не отправилось",
     "tariffs.balance": "Баланс", "tariffs.history": "История", "tariffs.package": "Пакет", "tariffs.method": "Способ оплаты",
     "pkg.per": "до {n} {w}", "pkg.rub": "≈ {n} ₽", "pkg.popular": "популярный", "pkg.save": "выгода −{n}%",
@@ -104,40 +108,50 @@ const I18N = {
     "invite.lead": "За каждую оплату друга вам возвращается {p}% от купленных им токенов — прямо на баланс.",
     "invite.your_link": "Ваша ссылка", "invite.copy": "Скопировать", "invite.share": "Поделиться",
     "invite.copied": "Ссылка скопирована",
-    "invite.step1": "Друг открывает бота по вашей ссылке", "invite.step2": "Покупает пакет токенов",
-    "invite.step3": "Вам на баланс — {p}% от купленного",
     "invite.all_time": "За всё время", "invite.came": "Пришли", "invite.paid": "Оплатили", "invite.earned": "Токенов",
     "invite.today": "+{n} сегодня",
     "invite.credit": "Накоплено {n} токена — на баланс уйдёт целым токеном, как только наберётся.",
-    "invite.friends": "Приглашённые", "invite.summary": "{a} пришли · {b} оплатили · +{c} токенов",
-    "invite.none": "Пока никого", "invite.none_sub": "Поделитесь ссылкой — приглашённые появятся здесь.",
+    "invite.friends": "Приглашённые", "invite.sum_came": "пришли", "invite.sum_paid": "оплатили", "invite.sum_tokens": "токенов",
+    "invite.none_period": "За этот период по вашей ссылке никто не зарегистрировался.",
+    "invite.none_all": "По вашей ссылке пока никто не зарегистрировался.",
     "invite.friend_paid": "оплатил", "invite.friend_waiting": "ещё не покупал", "invite.noname": "Без имени",
-    "period.7": "7 дней", "period.30": "30 дней", "period.0": "Всё время",
+    "period.7": "7 дней", "period.30": "30 дней", "period.0": "Всё время", "period.title": "Период",
+    "partner.title": "Деньги вместо токенов", "partner.terms": "Условия", "partner.become": "Стать партнёром",
+    "partner.sub": "{p}% с оплат приглашённых — рублями на реквизиты, для самозанятых и ИП.",
+    "partner.payout": "Выплата", "partner.payout_foot": "{p}% · на карту",
+    "partner.row_sub": "{p}% рублями — для самозанятых и ИП",
+    "partner.terms_text": "Партнёрам — самозанятым и ИП — платим за приглашённых деньгами, а не токенами: {p}% с каждой их оплаты, рублями на реквизиты. Нажмите «Стать партнёром» и напишите нам — расскажем условия и оформим партнёрство.",
+    "partner.soon": "Партнёрская программа для самозанятых и ИП скоро откроется — следите за новостями.",
     "invite.text": "Монтирую вертикальные ролики за пару минут: субтитры, паузы, кадр 9:16.",
-    "profile.noname": "Без имени", "profile.done": "смонтировано", "profile.balance": "на балансе",
-    "profile.language": "Язык", "profile.theme": "Тема", "profile.chat": "Чат с ботом",
+    "profile.noname": "Без имени",
+    "profile.language": "Язык", "profile.theme": "Тема",
+    "profile.invite": "Пригласить друга", "profile.invite_sub": "{p}% с каждой оплаты — вам на баланс",
+    "profile.login": "Вход и уведомления", "profile.channel": "Официальный канал", "profile.support": "Поддержка",
+    "profile.offer": "Публичная оферта",
     "profile.hint_admin": "Вы в списке владельцев: монтаж без списаний. Чтобы проверить оплату как обычный пользователь, уберите свой id из ADMIN_IDS.",
-    "profile.hint": "Видео можно присылать и прямо в чат с ботом — стиль возьмётся последний выбранный здесь.",
-    "blocker.title": "Откройте из Telegram", "blocker.text": "Приложение работает внутри бота: нажмите кнопку «Монтаж» в чате.",
+    "blocker.title": "Откройте из Telegram", "blocker.text": "Приложение работает внутри бота: нажмите кнопку «Приложение» в чате.",
     "blocker.failed": "Не получилось открыть",
   },
   en: {
     theme: "Toggle theme", back: "Back", forward: "Forward", close: "Close",
-    "nav.home": "Home", "nav.invite": "Invites", "nav.edit": "Editor", "nav.videos": "Results",
+    "nav.home": "Home", "nav.invite": "Invite", "nav.studio": "Studio", "nav.edit": "Editor", "nav.videos": "Results",
     "nav.tariffs": "Pricing", "nav.profile": "Profile", "nav.collapse": "Collapse sidebar",
     "title.invite": "Invite friends", "step": "Step {n} of 2",
     "home.new": "New reel", "home.new_sub": "Upload a video — we'll edit it in a couple of minutes",
     "home.recent": "Recent", "home.all": "All", "home.invite": "Invite a friend",
-    "home.invite_sub": "{p}% of every purchase they make goes to your balance",
+    "home.invite_sub": "Tokens for you — from every purchase they make",
+    "studio.new_sub": "From a video to a finished Reel",
+    "notif.title": "Notifications", "notif.empty": "No notifications yet",
+    "notif.done": "Your reel is ready", "notif.failed": "The reel failed", "notif.failed_sub": "The tokens went back to your balance",
     "home.empty": "No videos yet", "home.empty_sub": "Your first reel will show up here",
-    "home.offer_trial": "Your first reel is free. After that a reel is {cost}",
-    "home.offer_paid": "A reel is {cost}, packs from {pack}",
     "preview.pause": "Pause", "preview.play": "Play",
     "preview.s1": ["this", "is", "captions", "in", "style"],
     "preview.s2": ["pauses", "are", "gone"],
     "preview.s3": ["and", "the frame", "follows", "the face"],
     "edit.s1_title": "Upload a video for your reel",
-    "edit.s1_lead": "A video of someone talking to the camera. We'll turn it into a vertical reel with captions.",
+    "edit.s1_lead": "One video or several — we'll join them into one Reel in the order you set.",
+    "edit.s1_lead_one": "A video of someone talking to the camera. We'll turn it into a vertical reel with captions.",
+    "edit.drop_many": "Several at once works too",
     "edit.limits": "up to {mb} MB · {min} s to {max} min",
     "edit.style": "Caption style", "edit.font": "Typeface", "edit.color": "Highlight colour",
     "edit.sound": "Sound", "edit.frame": "Frame", "edit.graphics": "Graphics",
@@ -146,7 +160,7 @@ const I18N = {
     "music.checking": "Getting the sound…", "music.ready": "Track {t}", "music.clear": "Remove music",
     "music.hint": "The sound plays quietly under your voice",
     "music.dropped": "The music wasn't ready — the video will have none",
-    "edit.requirements": "Video requirements", "edit.in_chat": "Send it in the bot chat",
+    "edit.requirements": "Video requirements", "edit.in_chat": "Upload in the bot",
     "edit.untitled": "Video", "edit.remove": "Remove video",
     "edit.next": "Next: design", "edit.next_idle": "Add a video first", "edit.next_ready": "caption style, typeface and colour",
     "edit.back_to_video": "← Back to the video",
@@ -156,7 +170,8 @@ const I18N = {
     "opt.sfx": "Sound effects", "opt.broll": "Media cards", "opt.camera": "Camera movement",
     "opt.studio": "Studio sound", "opt.tracking": "Head tracking", "opt.transitions": "Transitions",
     "opt.grade": "Colour correction", "opt.smooth": "Smooth 60 fps", "opt.visuals": "Graphics and stickers",
-    "opt.title": "Opening title", "opt.progress": "Progress bar",
+    "opt.title": "Opening title", "opt.progress": "Progress bar", "opt.music": "Background music",
+    "help.music": ["Background music", "AI picks a calm track that fits the reel and plays it quietly under your voice. If you added your own music by link, that one plays instead."],
     "help.cut": ["Cutting", "We remove pauses longer than 1.2 seconds and long “umm”s. Normal breaths and filler words stay, so the speech sounds natural."],
     "help.sfx": ["Sound effects", "A “whoosh” when a media card appears, when the shot size changes and when the frame slides in. Voice loudness is levelled either way."],
     "help.studio": ["Studio sound", "We remove hum and hiss, soften harsh “s” sounds and make the voice clearer and fuller. Turn it off to keep the sound as recorded — then we only level the loudness."],
@@ -198,9 +213,9 @@ const I18N = {
     "jobs.all": "All", "jobs.done": "Ready", "jobs.active": "In progress",
     "jobs.empty": "No videos yet", "jobs.empty_hint": "Upload a video — the finished reel will arrive in the chat and show up here.",
     "jobs.empty_filter": "Nothing here yet",
-    "jobs.to_edit": "Go to editor", "jobs.reel": "Reel", "jobs.refunded": "The tokens went back to your balance.",
+    "jobs.to_edit": "Go to editor", "jobs.reel": "Edit", "jobs.refunded": "The tokens went back to your balance.",
+    "jobs.keep": "kept until {d}", "jobs.purged_short": "removed from the server",
     "jobs.purged": "Removed from the server after the storage period. It's still in your chat.",
-    "jobs.retention": "Finished videos stay on the server for {n} days and in your chat forever.",
     "jobs.send": "Send to chat", "jobs.sent": "Sent to the chat.", "jobs.not_sent": "Couldn't send",
     "tariffs.balance": "Balance", "tariffs.history": "History", "tariffs.package": "Package", "tariffs.method": "Payment method",
     "pkg.per": "up to {n} {w}", "pkg.rub": "≈ {n} ₽", "pkg.popular": "popular", "pkg.save": "save {n}%",
@@ -218,26 +233,38 @@ const I18N = {
     "invite.lead": "Every time a friend pays, {p}% of the tokens they bought comes back to you — straight to your balance.",
     "invite.your_link": "Your link", "invite.copy": "Copy", "invite.share": "Share",
     "invite.copied": "Link copied",
-    "invite.step1": "A friend opens the bot with your link", "invite.step2": "They buy a video package",
-    "invite.step3": "You get {p}% of it on your balance",
     "invite.all_time": "All time", "invite.came": "Joined", "invite.paid": "Paid", "invite.earned": "Tokens",
     "invite.today": "+{n} today",
     "invite.credit": "{n} of a token saved up — it moves to your balance as a whole token once it adds up.",
-    "invite.friends": "Invited", "invite.summary": "{a} joined · {b} paid · +{c} videos",
-    "invite.none": "Nobody yet", "invite.none_sub": "Share your link — invited friends will show up here.",
+    "invite.friends": "Invited", "invite.sum_came": "joined", "invite.sum_paid": "paid", "invite.sum_tokens": "tokens",
+    "invite.none_period": "Nobody signed up with your link in this period.",
+    "invite.none_all": "Nobody has signed up with your link yet.",
     "invite.friend_paid": "paid", "invite.friend_waiting": "hasn't bought yet", "invite.noname": "No name",
-    "period.7": "7 days", "period.30": "30 days", "period.0": "All time",
+    "period.7": "7 days", "period.30": "30 days", "period.0": "All time", "period.title": "Period",
+    "partner.title": "Money instead of tokens", "partner.terms": "Terms", "partner.become": "Become a partner",
+    "partner.sub": "{p}% of what your invited friends pay — in roubles to your bank details, for the self-employed and sole traders.",
+    "partner.payout": "Payout", "partner.payout_foot": "{p}% · to your card",
+    "partner.row_sub": "{p}% in roubles — for the self-employed and sole traders",
+    "partner.terms_text": "Self-employed partners and sole traders get paid in money, not tokens: {p}% of every payment their invited friends make, in roubles. Tap “Become a partner” and write to us — we'll set it up.",
+    "partner.soon": "The partner programme for the self-employed and sole traders is opening soon.",
     "invite.text": "I turn talking-head videos into vertical reels in a couple of minutes: captions, pauses cut, 9:16 frame.",
-    "profile.noname": "No name", "profile.done": "edited", "profile.balance": "balance",
-    "profile.language": "Language", "profile.theme": "Theme", "profile.chat": "Bot chat",
+    "profile.noname": "No name",
+    "profile.language": "Language", "profile.theme": "Theme",
+    "profile.invite": "Invite a friend", "profile.invite_sub": "{p}% of every payment — to your balance",
+    "profile.login": "Sign-in and notifications", "profile.channel": "Official channel", "profile.support": "Support",
+    "profile.offer": "Public offer",
     "profile.hint_admin": "You're on the owners list: editing is free. To test payments as a regular user, remove your id from ADMIN_IDS.",
-    "profile.hint": "You can also send videos straight to the bot chat — it will use the style you last picked here.",
-    "blocker.title": "Open from Telegram", "blocker.text": "This app runs inside the bot: tap the “Editor” button in the chat.",
+    "blocker.title": "Open from Telegram", "blocker.text": "This app runs inside the bot: tap the “App” button in the chat.",
     "blocker.failed": "Couldn't open the app",
   },
 };
 
-const SCREENS = ["home", "invite", "edit", "videos", "tariffs", "profile"];
+const SCREENS = ["home", "invite", "studio", "edit", "videos", "tariffs", "profile"];
+// Вкладки нижней панели. У них в шапке логотип, тема, уведомления и баланс;
+// у вложенных экранов (монтаж, тарифы) — «назад» и название.
+const ROOT_SCREENS = ["home", "invite", "studio", "videos", "profile"];
+// Какая вкладка подсвечена на вложенном экране: монтаж открывают из «Студии».
+const NAV_OF = { edit: "studio" };
 // Старые имена вкладок: бот присылает кнопки с `?screen=balance`.
 const SCREEN_ALIASES = { balance: "tariffs" };
 
@@ -426,6 +453,13 @@ function fmtDuration(sec) {
 
 function openTelegram(url) {
   if (tg && tg.openTelegramLink) tg.openTelegramLink(url);
+  else window.open(url, "_blank");
+}
+
+// Ссылка из настроек сервера: адрес Telegram открывает сам Telegram, остальное — браузер.
+function openLink(url) {
+  if (/^https:\/\/t\.me\//i.test(url)) openTelegram(url);
+  else if (tg && tg.openLink) tg.openLink(url);
   else window.open(url, "_blank");
 }
 
@@ -991,7 +1025,7 @@ function renderLayout() {
   $("#drop-role").textContent = tr("split.bottom_sub");
   $("#drop-role").hidden = !split;
   $("#drop-role-chip").hidden = !split;
-  $("#s1-lead").textContent = tr(split ? "edit.s1_lead_split" : "edit.s1_lead");
+  $("#s1-lead").textContent = tr(split ? "edit.s1_lead_split" : (maxClips() > 1 ? "edit.s1_lead" : "edit.s1_lead_one"));
   // Два файла в чат с ботом не отправить.
   $("#send-in-chat").hidden = split;
   renderSwitches();
@@ -1031,7 +1065,11 @@ function renderCut() {
 
 function renderLimits() {
   const l = state.boot.limits;
-  $("#drop-limits").textContent = tr("edit.limits", { mb: l.max_upload_mb, min: l.min_seconds, max: l.max_minutes });
+  // Под «Выбрать видео» — что видео можно несколько; сами пределы длины и
+  // размера живут в «Требованиях к видео». Сервер склейку не умеет — пределы.
+  $("#drop-limits").textContent = maxClips() > 1
+    ? tr("edit.drop_many")
+    : tr("edit.limits", { mb: l.max_upload_mb, min: l.min_seconds, max: l.max_minutes });
 }
 
 // Поля загрузки: нижнее (говорящий, оно же единственное в обычном режиме) и
@@ -1549,36 +1587,129 @@ async function uploadAndStart() {
 
 // ------------------------------------------------------------------ «Главная»
 
-function jobTitle(j) {
-  return j.result_duration ? `${tr("jobs.reel")} · ${fmtDuration(j.result_duration)}` : tr("jobs.reel");
+function jobTitle() {
+  return tr("jobs.reel");
+}
+
+const isActive = (j) => j.status === "queued" || j.status === "running";
+
+function fmtClock(iso) {
+  return iso ? new Date(iso).toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" }) : "";
+}
+function fmtDay(iso) {
+  return iso ? new Date(iso).toLocaleDateString(locale(), { day: "numeric", month: "long" }) : "";
+}
+
+// Вторая строка ролика: «00:38 · хранится до 24 дек.».
+function jobSub(j) {
+  if (isActive(j)) return `${tr(`status.${j.status}`)} · ${Math.round((j.progress || 0) * 100)}%`;
+  const parts = [fmtClock(j.created_at)];
+  if (j.status !== "done") parts.push(tr(`status.${j.status}`));
+  else if (j.purged) parts.push(tr("jobs.purged_short"));
+  else if (j.expires_at) parts.push(tr("jobs.keep", { d: fmtDate(j.expires_at) }));
+  return parts.filter(Boolean).join(" · ");
+}
+
+// Адрес миниатюры подписан сроком и в каждом ответе сервера новый, а кадр тот
+// же. Держим первый адрес: иначе браузер тянул бы картинку заново на каждую
+// перерисовку списка, и строки мигали бы.
+const thumbUrls = new Map();
+function thumbOf(j) {
+  if (!j.thumb_url) return "";
+  if (!thumbUrls.has(j.id)) thumbUrls.set(j.id, j.thumb_url);
+  return thumbUrls.get(j.id);
+}
+
+function jobThumb(j) {
+  const box = el("span", { class: "thumb" }, [icon(isActive(j) ? "clock" : "film", 20)]);
+  const url = thumbOf(j);
+  if (url) {
+    const img = el("img", { src: url, alt: "", loading: "lazy", decoding: "async" });
+    img.addEventListener("load", () => box.classList.add("has-image"));
+    // Подпись истекла или кадр не снялся — остаётся значок, а адрес спросим заново.
+    img.addEventListener("error", () => { img.remove(); thumbUrls.delete(j.id); });
+    box.append(img);
+  }
+  return box;
+}
+
+const playable = (j) => j.status === "done" && !!j.video_url && !j.purged;
+
+// Нажатие на ролик: готовый открывается в плеере, остальные ведут в «Результаты».
+function openJob(j) {
+  if (playable(j)) openPlayer(j);
+  else go("videos");
+}
+
+async function sendToChat(j, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    await api(`/api/jobs/${j.id}/send`, { method: "POST" });
+    haptic("success");
+    toast(tr("jobs.sent"));
+  } catch (e) {
+    haptic("error");
+    popup(tr("jobs.not_sent"), e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function openPlayer(j) {
+  haptic();
+  openSheet(jobTitle(j), [
+    // `#t=0.1` — пока ролик не запущен, плеер показывает кадр, а не чёрный прямоугольник.
+    el("video", { class: "player", src: `${j.video_url}#t=0.1`, controls: true, playsinline: true, preload: "metadata" }),
+    el("p", { class: "muted small player__meta", text: jobSub(j) }),
+    el("button", { class: "cta cta--slim", type: "button", onclick: (ev) => sendToChat(j, ev.currentTarget) }, [
+      el("span", { class: "cta__title", text: tr("jobs.send") }),
+    ]),
+  ]);
 }
 
 function renderHome() {
   const box = $("#home-recent");
   if (!state.jobsLoaded) {
-    box.replaceChildren(el("div", { class: "skeleton" }));
+    box.replaceChildren(el("div", { class: "skeleton skeleton--flat" }));
     return;
   }
   const recent = state.jobs.slice(0, 3);
   if (!recent.length) {
-    box.replaceChildren(el("button", { class: "card list-row", type: "button", onclick: () => go("edit") }, [
+    box.replaceChildren(el("button", { class: "list-row", type: "button", onclick: () => go("studio") }, [
       el("span", { class: "thumb" }, [icon("film", 20)]),
       el("span", { class: "list-row__text" }, [el("b", { text: tr("home.empty") }), el("span", { class: "muted", text: tr("home.empty_sub") })]),
       icon("chevron", 18, "chev"),
     ]));
     return;
   }
-  box.replaceChildren(...recent.map((j) => {
-    const active = j.status === "queued" || j.status === "running";
-    const sub = active
-      ? `${tr(`status.${j.status}`)} · ${Math.round((j.progress || 0) * 100)}%`
-      : [j.status === "done" ? null : tr(`status.${j.status}`), fmtWhen(j.created_at)].filter(Boolean).join(" · ");
-    return el("button", { class: "card list-row", type: "button", onclick: () => go("videos") }, [
-      el("span", { class: "thumb" }, [icon(active ? "clock" : "film", 20)]),
-      el("span", { class: "list-row__text" }, [el("b", { text: jobTitle(j) }), el("span", { class: "muted", text: sub })]),
+  box.replaceChildren(...recent.map((j) =>
+    el("button", { class: "list-row", type: "button", onclick: () => openJob(j) }, [
+      jobThumb(j),
+      el("span", { class: "list-row__text" }, [el("b", { text: jobTitle(j) }), el("span", { class: "muted", text: jobSub(j) })]),
       icon("chevron", 18, "chev"),
-    ]);
-  }));
+    ])));
+}
+
+// ------------------------------------------------------------------ «Студия»
+
+// Экран телефона в карточке: кадр последнего готового ролика. Ставится только
+// после загрузки картинки — до неё (и если кадра нет) виден нарисованный.
+function renderStudio() {
+  const phone = $("#studio-phone");
+  const last = state.jobs.find((j) => j.thumb_url);
+  const url = last ? thumbOf(last) : "";
+  if (phone.dataset.url === url) return;
+  phone.dataset.url = url;
+  phone.classList.remove("has-image");
+  phone.style.backgroundImage = "";
+  if (!url) return;
+  const img = new Image();
+  img.onload = () => {
+    if (phone.dataset.url !== url) return;
+    phone.style.backgroundImage = `url("${url}")`;
+    phone.classList.add("has-image");
+  };
+  img.src = url;
 }
 
 // ------------------------------------------------------------------ «Результаты»
@@ -1586,7 +1717,7 @@ function renderHome() {
 const JOB_FILTERS = {
   all: () => true,
   done: (j) => j.status === "done",
-  active: (j) => j.status === "queued" || j.status === "running",
+  active: (j) => isActive(j),
 };
 
 function renderJobFilter() {
@@ -1603,9 +1734,6 @@ function renderJobFilter() {
 function renderJobs() {
   const box = $("#jobs");
   renderJobFilter();
-  const retention = $("#jobs-retention");
-  retention.hidden = !(state.boot.retention_days > 0 && state.jobs.length);
-  retention.textContent = tr("jobs.retention", { n: state.boot.retention_days });
   if (!state.jobsLoaded) {
     box.replaceChildren(...[0, 1, 2].map(() => el("div", { class: "skeleton" })));
     return;
@@ -1620,47 +1748,101 @@ function renderJobs() {
     ]));
     return;
   }
-  const presets = Object.fromEntries(state.boot.presets.map((p) => [p.name, p.label || p.title]));
-  box.replaceChildren(...jobs.map((j) => {
-    const accent = state.boot.accents.find((a) => a.key === (j.options && j.options.accent));
-    const meta = [presets[j.preset] || j.preset, accent && accent.key !== "theme" ? accent.title : null, fmtWhen(j.created_at)].filter(Boolean).join(" · ");
-    const parts = [
-      el("div", { class: "job__head" }, [
-        el("div", {}, [el("div", { class: "job__title", text: jobTitle(j) }), el("div", { class: "muted", text: meta })]),
-        el("span", { class: `status status--${j.status}`, text: tr(`status.${j.status}`) }),
-      ]),
-    ];
-    if (j.status === "queued" || j.status === "running") {
-      parts.push(el("div", { class: "muted", text: j.stage || "" }));
-      parts.push(el("div", { class: "bar" }, [el("i", { style: `width:${Math.round((j.progress || 0) * 100)}%` })]));
-    } else if (j.status === "failed") {
-      parts.push(el("div", { class: "muted", text: j.error || "" }));
-      if (pays(state.boot.user)) parts.push(el("div", { class: "muted", text: tr("jobs.refunded") }));
-    } else if (j.purged) {
-      parts.push(el("div", { class: "muted", text: tr("jobs.purged") }));
-    } else if (j.status === "done" && j.video_url) {
-      // `#t=0.5` — браузер покажет кадр ролика обложкой, а не чёрный прямоугольник.
-      parts.push(el("video", { src: `${j.video_url}#t=0.5`, controls: true, playsinline: true, preload: "metadata" }));
-      parts.push(el("div", { class: "job__actions" }, [
-        el("button", {
-          class: "btn-soft", type: "button", text: tr("jobs.send"),
-          onclick: async (ev) => {
-            const b = ev.currentTarget;
-            b.disabled = true;
-            try { await api(`/api/jobs/${j.id}/send`, { method: "POST" }); haptic("success"); toast(tr("jobs.sent")); }
-            catch (e) { haptic("error"); popup(tr("jobs.not_sent"), e.message); }
-            finally { b.disabled = false; }
-          },
-        }),
-      ]));
+  // Ролики идут по дням: над первым роликом каждого дня — его дата.
+  const out = [];
+  let day = null;
+  for (const j of jobs) {
+    const d = j.created_at ? new Date(j.created_at).toDateString() : "";
+    if (d !== day) {
+      day = d;
+      if (d) out.push(el("div", { class: "day-label", text: fmtDay(j.created_at) }));
     }
-    return el("div", { class: "card job" }, parts);
-  }));
+    out.push(jobRow(j));
+  }
+  box.replaceChildren(...out);
+}
+
+// Строка «Результатов»: миниатюра, название, срок хранения и кнопка «прислать
+// в чат». У ролика в работе под строкой — этап и полоса, у упавшего — причина.
+function jobRow(j) {
+  const text = el("span", { class: "list-row__text" }, [
+    el("b", { text: jobTitle(j) }),
+    el("span", { class: "muted", text: jobSub(j) }),
+  ]);
+  const ready = playable(j);
+  const main = ready
+    ? el("button", { class: "job-row__main", type: "button", onclick: () => openPlayer(j) }, [jobThumb(j), text])
+    : el("div", { class: "job-row__main" }, [jobThumb(j), text]);
+  const row = el("div", { class: `card job-row job-row--${j.status}` }, [main]);
+  if (ready) {
+    row.append(el("button", {
+      class: "round-act", type: "button", "aria-label": tr("jobs.send"), title: tr("jobs.send"),
+      onclick: (ev) => sendToChat(j, ev.currentTarget),
+    }, [icon("download", 18)]));
+  }
+  const more = [];
+  if (isActive(j)) {
+    if (j.stage) more.push(el("div", { class: "muted", text: j.stage }));
+    more.push(el("div", { class: "bar" }, [el("i", { style: `width:${Math.round((j.progress || 0) * 100)}%` })]));
+  } else if (j.status === "failed") {
+    if (j.error) more.push(el("div", { class: "muted", text: j.error }));
+    if (pays(state.boot.user)) more.push(el("div", { class: "muted", text: tr("jobs.refunded") }));
+  } else if (j.purged) {
+    more.push(el("div", { class: "muted", text: tr("jobs.purged") }));
+  }
+  if (more.length) row.append(el("div", { class: "job-row__more" }, more));
+  return row;
 }
 
 function renderActivity() {
-  const active = state.jobs.some((j) => j.status === "queued" || j.status === "running");
+  const active = state.jobs.some(isActive);
   for (const dot of $$("[data-active-dot]")) dot.hidden = !active;
+  renderBell();
+}
+
+// ------------------------------------------------------------------ уведомления
+
+// Колокольчик в шапке: готовые и упавшие ролики, свежие сверху. Точка горит,
+// пока есть ролик новее последнего просмотренного — отметка лежит на устройстве.
+const NOTIF_KEY = "reel-notif-seen";
+
+function notifItems() {
+  return state.jobs.filter((j) => j.status === "done" || j.status === "failed").slice(0, 20);
+}
+function notifSeen() {
+  try { return localStorage.getItem(NOTIF_KEY) || ""; } catch (_) { return ""; }
+}
+function renderBell() {
+  const latest = notifItems()[0];
+  $("#bell-dot").hidden = !(latest && latest.created_at && latest.created_at > notifSeen());
+}
+
+function openNotifications() {
+  haptic();
+  const items = notifItems();
+  if (items[0] && items[0].created_at) {
+    try { localStorage.setItem(NOTIF_KEY, items[0].created_at); } catch (_) { /* не критично */ }
+  }
+  renderBell();
+  if (!items.length) {
+    openSheet(tr("notif.title"), el("p", { class: "muted empty-line", text: tr("notif.empty") }));
+    return;
+  }
+  openSheet(tr("notif.title"), items.map((j) => {
+    const failed = j.status === "failed";
+    const when = [fmtWhen(j.created_at), failed && pays(state.boot.user) ? tr("notif.failed_sub") : null].filter(Boolean).join(" · ");
+    return el("button", {
+      class: "history-row", type: "button",
+      onclick: () => { closeSheet(); openJob(j); },
+    }, [
+      jobThumb(j),
+      el("span", { class: "list-row__text" }, [
+        el("b", { text: tr(failed ? "notif.failed" : "notif.done") }),
+        el("span", { class: "muted", text: when }),
+      ]),
+      icon("chevron", 18, "chev"),
+    ]);
+  }));
 }
 
 async function loadJobs() {
@@ -1678,6 +1860,7 @@ async function loadJobs() {
     if (changed) {
       if (state.screen === "videos") renderJobs();
       if (state.screen === "home") renderHome();
+      if (state.screen === "studio") renderStudio();
     }
   } catch (e) {
     if (state.screen === "videos") toast(e.message);
@@ -1687,8 +1870,7 @@ async function loadJobs() {
 
 function schedulePoll() {
   clearTimeout(state.pollTimer);
-  const active = state.jobs.some((j) => j.status === "queued" || j.status === "running");
-  if (active) state.pollTimer = setTimeout(loadJobs, 3000);
+  if (state.jobs.some(isActive)) state.pollTimer = setTimeout(loadJobs, 3000);
 }
 
 // ------------------------------------------------------------------ «Тарифы»
@@ -1860,6 +2042,8 @@ function openSheet(title, body) {
 function closeSheet() {
   if ($("#sheet").hidden) return false;
   $("#sheet").hidden = true;
+  // Содержимое убираем: плеер в закрытом листе продолжал бы играть.
+  $("#sheet-body").replaceChildren();
   syncBackButton();
   if (sheetReturnFocus && sheetReturnFocus.focus) sheetReturnFocus.focus();
   return true;
@@ -1930,17 +2114,43 @@ function renderInviteStatic() {
   const r = state.boot.referral;
   if (!r) return;
   $("#invite-lead").textContent = tr("invite.lead", { p: r.percent });
-  $("#invite-step3").textContent = tr("invite.step3", { p: r.percent });
   $("#invite-link").textContent = referralLink();
   const credit = $("#ref-credit");
   credit.hidden = !(r.credit > 0);
   credit.textContent = tr("invite.credit", { n: fmtShare(r.credit) });
-  $("#ref-period").replaceChildren(...[7, 30, 0].map((d) =>
+  $("#ref-period-text").textContent = tr(`period.${state.refDays}`);
+  const p = state.boot.partner_percent || 0;
+  $("#partner-sub").textContent = tr("partner.sub", { p });
+  $("#payout-foot").textContent = tr("partner.payout_foot", { p });
+}
+
+// Период списка приглашённых — выбор из трёх в листе снизу.
+function openPeriod() {
+  haptic();
+  openSheet(tr("period.title"), [7, 30, 0].map((d) =>
     el("button", {
-      type: "button", role: "radio", class: d === state.refDays ? "is-active" : "",
-      "aria-checked": d === state.refDays ? "true" : "false",
-      onclick: () => { if (state.refDays !== d) { state.refDays = d; haptic(); renderInviteStatic(); loadReferrals(); } },
-    }, d ? [icon("calendar", 15), tr(`period.${d}`)] : [tr("period.0")])));
+      class: `option-row${d === state.refDays ? " is-active" : ""}`, type: "button",
+      onclick: () => {
+        closeSheet();
+        if (state.refDays === d) return;
+        state.refDays = d;
+        haptic();
+        renderInviteStatic();
+        loadReferrals();
+      },
+    }, [el("span", { text: tr(`period.${d}`) }), d === state.refDays ? icon("check", 18) : null])));
+}
+
+// «Стать партнёром»: выплаты деньгами оформляет живой человек — ведём к нему.
+function becomePartner() {
+  haptic();
+  const link = state.boot.links && state.boot.links.support;
+  if (link) openLink(link);
+  else popup(tr("partner.become"), tr("partner.soon"));
+}
+function partnerTerms() {
+  haptic();
+  popup(tr("partner.title"), tr("partner.terms_text", { p: state.boot.partner_percent || 0 }));
 }
 
 function renderReferrals() {
@@ -1960,11 +2170,15 @@ function renderReferrals() {
   const friends = data.friends;
   const paid = friends.filter((f) => f.paid).length;
   const earned = friends.reduce((sum, f) => sum + f.earned, 0);
-  $("#ref-summary").textContent = tr("invite.summary", { a: friends.length, b: paid, c: fmtShare(earned) });
+  $("#ref-summary").replaceChildren(
+    el("b", { text: String(friends.length) }), ` ${tr("invite.sum_came")} · `,
+    el("b", { text: String(paid) }), ` ${tr("invite.sum_paid")} · `,
+    el("b", { class: "pos", text: `+${fmtShare(earned)} ${tr("invite.sum_tokens")}` }),
+  );
   if (!friends.length) {
-    $("#ref-friends").replaceChildren(el("div", { class: "empty-line" }, [
-      el("b", { text: tr("invite.none") }), el("span", { class: "muted small", text: tr("invite.none_sub") }),
-    ]));
+    $("#ref-friends").replaceChildren(el("p", {
+      class: "muted friends-empty", text: tr(state.refDays ? "invite.none_period" : "invite.none_all"),
+    }));
     return;
   }
   $("#ref-friends").replaceChildren(...friends.map((f) => {
@@ -1999,44 +2213,33 @@ function renderUser() {
   const name = u.first_name || u.username || tr("profile.noname");
   for (const n of $$("[data-user-name]")) n.textContent = name;
   for (const n of $$("[data-user-handle]")) n.textContent = u.username ? `@${u.username}` : "";
-  for (const n of $$("[data-avatar]")) n.textContent = name.slice(0, 1).toUpperCase();
-  const brand = $("#brand");
-  brand.replaceChildren(state.boot.bot_name || "Reels", el("i", { class: "grad-dot", text: "." }));
+  // Фото из Telegram, а без него — первая буква имени.
+  const me = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+  const photo = me && /^https:\/\//.test(me.photo_url || "") ? me.photo_url : "";
+  for (const n of $$("[data-avatar]")) {
+    n.textContent = photo ? "" : name.slice(0, 1).toUpperCase();
+    n.classList.toggle("has-photo", !!photo);
+    n.style.backgroundImage = photo ? `url("${encodeURI(photo)}")` : "";
+  }
+  for (const brand of $$("[data-brand]")) {
+    brand.replaceChildren(state.boot.bot_name || "Reels", el("i", { class: "grad-dot", text: "." }));
+  }
   for (const n of $$("[data-needs='referral']")) n.hidden = !state.boot.referral;
   const p = state.boot.referral ? state.boot.referral.percent : 0;
-  $("#home-invite-sub").textContent = tr("home.invite_sub", { p });
-  $("#profile-invite-sub").textContent = tr("home.invite_sub", { p });
-  const offer = offerText();
-  const offerNode = $("#home-offer");
-  if (offerNode) {
-    offerNode.textContent = offer;
-    offerNode.hidden = !offer;
-  }
-}
-
-// Условия одной строкой на первом экране: что бесплатно и сколько стоит
-// следующий ролик. Раньше о цене человек узнавал отказом после загрузки видео.
-// Владельцу строка не нужна — с него ролики не списываются.
-function offerText() {
-  const boot = state.boot;
-  if (boot.user.is_admin) return "";
-  // Бесплатный режим — без строки об этом, как и в приветствии бота.
-  if (boot.free) return "";
-  const packs = boot.packages || [];
-  if (!packs.length) return "";
-  const first = packs[0];
-  const pack = first.rub ? `${tokensText(first.tokens)} · ${fmtRub(first.rub)} ₽` : `${tokensText(first.tokens)} · ${first.stars} ⭐`;
-  // Проба ещё не потрачена: ни одного готового ролика, а на балансе что-то есть.
-  const trial = boot.trial > 0 && boot.user.videos_done === 0 && boot.user.balance > 0;
-  return tr(trial ? "home.offer_trial" : "home.offer_paid", { cost: tokensText(videoCost()), pack });
+  $("#profile-invite-sub").textContent = tr("profile.invite_sub", { p });
 }
 
 function renderProfile() {
   const u = state.boot.user;
-  $("#stat-done").textContent = u.videos_done;
+  const links = state.boot.links || {};
   $("#profile-topup").hidden = u.is_admin;
-  $("#profile-hint").textContent = tr(u.is_admin ? "profile.hint_admin" : "profile.hint");
-  $("#profile-bot").textContent = state.boot.bot_username ? `@${state.boot.bot_username}` : "";
+  const hint = $("#profile-hint");
+  hint.hidden = !u.is_admin;
+  hint.textContent = u.is_admin ? tr("profile.hint_admin") : "";
+  $("#profile-partner-sub").textContent = tr("partner.row_sub", { p: state.boot.partner_percent || 0 });
+  // Канал и оферта — только с адресом: строка в никуда хуже отсутствующей.
+  $("#open-channel").hidden = !links.channel;
+  $("#open-offer").hidden = !links.offer;
 }
 
 function renderBalance() {
@@ -2107,9 +2310,17 @@ function rerenderAll() {
 
 // ------------------------------------------------------------------ навигация
 
-const TITLES = { home: "nav.home", invite: "title.invite", edit: "nav.edit", videos: "nav.videos", tariffs: "nav.tariffs", profile: "nav.profile" };
+const TITLES = { home: "nav.home", invite: "title.invite", studio: "nav.studio", edit: "nav.edit", videos: "nav.videos", tariffs: "nav.tariffs", profile: "nav.profile" };
+
+const isRoot = () => ROOT_SCREENS.includes(state.screen);
 
 function renderHeader() {
+  // Вкладка: логотип, тема, уведомления, баланс. Вложенный экран: «назад»,
+  // название (у монтажа ещё шаг) и баланс.
+  const root = isRoot();
+  document.documentElement.classList.toggle("is-sub", !root);
+  $("#topbar-title").hidden = root;
+  for (const n of $$("[data-root-only]")) n.hidden = !root;
   $("#page-title").textContent = tr(TITLES[state.screen] || "nav.home");
   const step = $("#page-step");
   step.hidden = state.screen !== "edit";
@@ -2118,27 +2329,31 @@ function renderHeader() {
 }
 
 function canGoBack() {
-  return !$("#sheet").hidden || (state.screen === "edit" && state.step === 2) || state.history.length > 0;
+  return !$("#sheet").hidden || !isRoot() || state.history.length > 0;
 }
 
 function goBack() {
   if (closeSheet()) return;
   if (state.screen === "edit" && state.step === 2) { setStep(1); return; }
   const prev = state.history.pop();
-  go(prev || "home", { push: false });
+  // Вложенный экран открыли сразу (кнопкой из чата) — возвращаемся туда,
+  // откуда в него попадают: монтаж из «Студии», тарифы с главной.
+  go(prev || (state.screen === "edit" ? "studio" : "home"), { push: false });
 }
 
 // Две кнопки «назад» — Telegram и своя в шапке — живут от одного условия:
 // иначе открытый лист «Истории» закрывался одной и не закрывался другой.
 function syncBackButton() {
-  const back = canGoBack();
-  $("#back").hidden = !back;
+  // Своя «назад» — только на вложенных экранах: на вкладках её место занято
+  // логотипом, там возврат делает кнопка Telegram.
+  $("#back").hidden = isRoot();
   if (!tg || !tg.BackButton) return;
-  if (back) tg.BackButton.show(); else tg.BackButton.hide();
+  if (canGoBack()) tg.BackButton.show(); else tg.BackButton.hide();
 }
 
 function renderScreen(screen) {
   if (screen === "home") renderHome();
+  if (screen === "studio") renderStudio();
   if (screen === "videos") renderJobs();
   if (screen === "tariffs") renderTariffs();
   if (screen === "profile") renderProfile();
@@ -2158,14 +2373,14 @@ function go(screen, { push = true, replace = false } = {}) {
     state.screen = screen;
   }
   for (const s of $$("[data-screen]")) s.hidden = s.dataset.screen !== screen;
-  for (const b of $$("[data-nav]")) b.classList.toggle("is-active", b.dataset.nav === screen);
+  for (const b of $$("[data-nav]")) b.classList.toggle("is-active", b.dataset.nav === (NAV_OF[screen] || screen));
   syncDesignMode();
   window.scrollTo({ top: 0 });
   renderHeader();
   syncBackButton();
   syncPreview();
   renderScreen(screen);
-  if (screen === "videos" || screen === "home") loadJobs();
+  if (screen === "videos" || screen === "home" || screen === "studio") loadJobs();
   if (screen === "invite") loadReferrals();
   if (screen === "edit" && state.step === 2) setStep(2);
 }
@@ -2174,6 +2389,7 @@ async function refreshBoot() {
   const fresh = await api("/api/bootstrap");
   state.boot.user = fresh.user;
   state.boot.referral = fresh.referral;
+  state.boot.links = fresh.links;
   renderBalance();
   renderUser();
 }
@@ -2291,12 +2507,23 @@ async function main() {
     toast(ok ? tr("invite.copied") : referralLink());
   });
   $("#invite-share").addEventListener("click", shareInvite);
-  $("#open-chat").addEventListener("click", () => { haptic(); openTelegram(`https://t.me/${state.boot.bot_username}`); });
+  $("#ref-period").addEventListener("click", openPeriod);
+  $("#partner-go").addEventListener("click", becomePartner);
+  $("#profile-partner").addEventListener("click", becomePartner);
+  $("#partner-terms").addEventListener("click", partnerTerms);
+  $("#bell").addEventListener("click", openNotifications);
+  const botChat = () => `https://t.me/${state.boot.bot_username}`;
+  const links = () => state.boot.links || {};
+  $("#open-chat").addEventListener("click", () => { haptic(); openTelegram(botChat()); });
+  $("#open-channel").addEventListener("click", () => { haptic(); openLink(links().channel); });
+  // Без контакта поддержки пишут самому боту: там есть кнопка «Поддержка».
+  $("#open-support").addEventListener("click", () => { haptic(); openLink(links().support || botChat()); });
+  $("#open-offer").addEventListener("click", () => { haptic(); openLink(links().offer); });
 
   // Вкладка приходит параметром `?screen=`, а не фрагментом: фрагмент занят
   // Telegram — в нём едут параметры запуска (`#tgWebAppData=…`).
   go(new URLSearchParams(location.search).get("screen") || "home", { push: false });
-  if (state.screen !== "home" && state.screen !== "videos") loadJobs();
+  if (!["home", "videos", "studio"].includes(state.screen)) loadJobs();
 }
 
 main();

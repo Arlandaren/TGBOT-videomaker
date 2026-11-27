@@ -38,8 +38,9 @@ ICONS: dict[str, str] = {
 # (`icon("faq")` → None). Появятся в наборе — вписать сюда их id.
 ICONS["topup"] = ICONS["balance"]
 
-# Цвет кнопки: главное действие синее, деньги зелёные. Остальные — как в теме.
-STYLES: dict[str, str] = {"start": "primary", "balance": "success"}
+# Цвет кнопки: главное действие и «Мои ролики» синие, деньги зелёные.
+# Остальные — как в теме.
+STYLES: dict[str, str] = {"start": "primary", "balance": "success", "videos": "primary"}
 
 _enabled = True
 

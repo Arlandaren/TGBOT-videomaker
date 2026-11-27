@@ -396,10 +396,21 @@ def _job_view(job: Job, *, live: dict[str, Any] | None, secret: str, lang: str, 
         "error": error,
         "delivered": job.delivered,
         "video_url": None,
+        # Кадр ролика для строки списка: приложение показывает его миниатюрой.
+        "thumb_url": None,
+        # До какого дня ролик лежит на сервере («хранится до 24 дек.») — тот же
+        # счёт, что у уборки (`repo.jobs_with_expired_files`): срок от окончания.
+        "expires_at": None,
         "purged": job.files_purged_at is not None,
     }
     if status == JobStatus.DONE.value and job.result_key:
-        view["video_url"] = f"/media/{job.id}.mp4?t={media_token(str(job.id), secret)}"
+        token = media_token(str(job.id), secret)
+        view["video_url"] = f"/media/{job.id}.mp4?t={token}"
+        if job.files_purged_at is None:
+            view["thumb_url"] = f"/media/{job.id}.jpg?t={token}"
+            born = getattr(job, "finished_at", None) or job.created_at
+            if cfg.storage_retention_days > 0 and born:
+                view["expires_at"] = (born + timedelta(days=cfg.storage_retention_days)).isoformat()
     return view
 
 
@@ -586,6 +597,12 @@ async def bootstrap(request: web.Request) -> web.Response:
             # сервере что-то меняют (`options.available_switches`).
             "switches": available_switches(cfg),
             "retention_days": cfg.storage_retention_days,
+            # Куда ведут строки профиля: канал, поддержка, оферта. Пустая
+            # ссылка — строки нет: кнопка в никуда хуже отсутствующей.
+            "links": await _links(cfg),
+            # Доля партнёра в деньгах (карточка «Деньги вместо токенов» и строка
+            # профиля). Число одно на оба места.
+            "partner_percent": PARTNER_PERCENT,
             # Приглашения. Ссылку собирает приложение из имени бота и кода: так
             # она одна и та же в чате, в «Поделиться» и в поле для копирования.
             "referral": (
@@ -595,6 +612,37 @@ async def bootstrap(request: web.Request) -> web.Response:
             ),
         }
     )
+
+
+# Сколько процентов с оплат приглашённых получает партнёр деньгами. Показывается
+# в приложении как обещание — менять вместе с условиями партнёрской программы.
+PARTNER_PERCENT = 15
+
+
+def _tg_link(contact: str | None) -> str:
+    """«@name» или готовая ссылка → адрес, который откроет Telegram."""
+    contact = (contact or "").strip()
+    if not contact:
+        return ""
+    if contact.startswith(("https://", "http://", "tg://")):
+        return contact
+    name = contact.lstrip("@")
+    return f"https://t.me/{name}" if re.fullmatch(r"[A-Za-z0-9_]{4,32}", name) else ""
+
+
+async def _links(cfg: Settings) -> dict[str, str]:
+    from src.bot.handlers.menu import _support_contact
+
+    try:
+        support = await _support_contact()
+    except Exception as e:  # noqa: BLE001 — без контакта строка «Поддержка» ведёт в чат с ботом
+        log.warning("контакт поддержки для приложения не получен: %s", e)
+        support = None
+    return {
+        "channel": cfg.channel_url.strip(),
+        "support": _tg_link(support),
+        "offer": cfg.offer_url.strip(),
+    }
 
 
 def _packages_view(cfg: Settings) -> list[dict[str, Any]]:
@@ -1342,6 +1390,77 @@ async def media(request: web.Request) -> web.StreamResponse:
     return web.FileResponse(cache, headers={"Cache-Control": "private, max-age=3600"})
 
 
+# Кадры снимаются по одному: список роликов просит их пачкой, а ffmpeg на
+# каждый запрос разом — это пик по процессору рядом с идущим монтажом.
+THUMB_LOCK_KEY = web.AppKey("thumb_lock", asyncio.Lock)
+# Ширина миниатюры: строка списка показывает её в 44 px, макет «Студии» — в
+# ~110; 240 хватает обоим на экранах с тройной плотностью.
+THUMB_WIDTH = 240
+
+
+async def thumb(request: web.Request) -> web.StreamResponse:
+    """Кадр готового ролика — миниатюра в списках приложения.
+
+    Кадр снимается один раз и лежит рядом с копией ролика в `media-cache`
+    (ту папку чистит воркер). Сам ролик ради кадра в кеш НЕ кладётся: список
+    из тридцати роликов иначе удвоил бы их место на диске — берём копию во
+    временный файл и сразу удаляем.
+    """
+    cfg = request.app[CFG_KEY]
+    job_id = request.match_info["job_id"]
+    if not check_media_token(job_id, request.query.get("t", ""), cfg.bot_token):
+        return _json_error(403, t("api.link_expired", _browser_lang(request)))
+    try:
+        job = await repo.get_job(job_id)
+    except ValueError:
+        job = None
+    if job is None or not job.result_key or job.files_purged_at is not None:
+        return _json_error(404, t("api.video_not_found", _browser_lang(request)))
+    folder = Path(cfg.work_dir) / "media-cache"
+    cache = folder / f"{job.id}.jpg"
+    if not cache.exists():
+        async with request.app[THUMB_LOCK_KEY]:
+            if not cache.exists():
+                try:
+                    await _grab_frame(job, folder, cache)
+                except Exception as e:  # noqa: BLE001 — без кадра строка покажет значок
+                    log.warning("задача %s: кадр для миниатюры не снялся: %s", job.id, e)
+                    return _json_error(404, t("api.video_not_found", _browser_lang(request)))
+    return web.FileResponse(cache, headers={"Cache-Control": "private, max-age=86400"})
+
+
+async def _grab_frame(job: Job, folder: Path, cache: Path) -> None:
+    from src.core.proc import affmpeg
+
+    folder.mkdir(parents=True, exist_ok=True)
+    video = folder / f"{job.id}.mp4"
+    borrowed: Path | None = None
+    if not video.exists():
+        borrowed = folder / f"{job.id}.thumb-src.part"
+        await storage.download(job.result_key, borrowed)
+        video = borrowed
+    part = folder / f"{job.id}.jpg.part"
+    try:
+        # Полсекунды от начала: первый кадр часто чёрный или смазанный.
+        await affmpeg(
+            ["-ss", "0.5", "-i", str(video), "-frames:v", "1",
+             "-vf", f"scale={THUMB_WIDTH}:-2", "-q:v", "4", "-f", "image2", str(part)],
+            timeout=30,
+        )
+        if not part.exists() or part.stat().st_size == 0:
+            # Ролик короче полсекунды — берём самый первый кадр.
+            await affmpeg(
+                ["-i", str(video), "-frames:v", "1",
+                 "-vf", f"scale={THUMB_WIDTH}:-2", "-q:v", "4", "-f", "image2", str(part)],
+                timeout=30,
+            )
+        part.replace(cache)
+    finally:
+        part.unlink(missing_ok=True)
+        if borrowed is not None:
+            borrowed.unlink(missing_ok=True)
+
+
 @lru_cache(maxsize=32)
 def _gzipped_font(path: Path, mtime_ns: int) -> bytes:
     """Сжатый шрифт, посчитанный один раз на файл.
@@ -1421,7 +1540,9 @@ def create_app(bot: Bot, cfg: Settings) -> web.Application:
     app[MUSIC_CHECKS_KEY] = {}
     app.router.add_get("/", index)
     app.router.add_static("/static/", STATIC)
+    app[THUMB_LOCK_KEY] = asyncio.Lock()
     app.router.add_get("/media/{job_id}.mp4", media)
+    app.router.add_get("/media/{job_id}.jpg", thumb)
     app.router.add_get("/fonts/{name}", font)
     app.router.add_get("/api/bootstrap", bootstrap)
     app.router.add_post("/api/uploads", upload_start)

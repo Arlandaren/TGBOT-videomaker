@@ -9,16 +9,16 @@
    диапазон, и браузер не синтезирует жирность. */
 
 :root {
-  --bg: #131117;
-  --side: #17151c;
-  --card: #1d1b22;
-  --card-2: #25222b;
+  --bg: #14121b;
+  --side: #191722;
+  --card: #1c1a26;
+  --card-2: #262331;
   --line: rgb(255 255 255 / 8%);
   --text: #f4f2f8;
   --muted: #9a96a6;
   --pill: #efedf5;
   --pill-text: #17151c;
-  --field: #2a2731;
+  --field: #2b2836;
   --shadow: 0 1px 0 rgb(255 255 255 / 3%) inset;
   --grad: linear-gradient(100deg, #ffb547 0%, #ff4d8a 50%, #7a3cf0 100%);
   --orb: linear-gradient(145deg, #ff9a3d 0%, #ff3f86 55%, #b13cf0 100%);
@@ -84,15 +84,37 @@ svg { flex: none; }
   display: flex; align-items: center; gap: 10px;
   padding: 0 18px; background: var(--bg);
 }
-.topbar__title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+.topbar__title { flex: 0 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
 .topbar h1 {
-  /* Кегль тянется за шириной: «Приглашайте друзей» рядом с кнопкой «назад»
-     и аватаром на 390 px в 24 px не помещался и обрезался многоточием. */
-  font-family: var(--display); font-weight: 800; font-size: clamp(18px, 5.4vw, 24px); letter-spacing: -0.02em;
+  font-family: var(--display); font-weight: 800; font-size: 22px; letter-spacing: -0.02em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .topbar__step { font-size: 13px; font-weight: 700; color: var(--muted); white-space: nowrap; }
-.seg.lang-seg { display: none; }
+.topbar__gap { flex: 1; }
+/* Логотип — на вкладках; на вложенных экранах его место занимают «назад» и название. */
+.logo {
+  font-family: var(--display); font-weight: 800; font-size: 22px; letter-spacing: -0.03em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.topbar__logo { min-width: 0; }
+html.is-sub .topbar__logo { display: none; }
+.icon-btn--top { position: relative; width: 40px; height: 40px; }
+.bell-dot {
+  position: absolute; top: 9px; right: 10px; width: 8px; height: 8px; border-radius: 50%;
+  background: #ff6a3d; box-shadow: 0 0 0 2px var(--card);
+}
+.balance-pill {
+  flex: none; height: 40px; padding: 0 15px 0 12px; border-radius: 999px;
+  background: var(--grad); color: #fff; font-weight: 800; font-size: 16px;
+  display: inline-flex; align-items: center; gap: 7px;
+  box-shadow: 0 6px 18px rgb(255 63 134 / 25%);
+  transition: transform 120ms ease;
+}
+.balance-pill:active { transform: scale(0.96); }
+
+/* Название вкладки — в самом экране, под шапкой: «Студия», «Результаты». */
+.page-title { font-family: var(--display); font-weight: 800; font-size: 26px; letter-spacing: -0.02em; line-height: 1.15; }
+.page-head { display: flex; flex-direction: column; gap: 10px; }
 
 .screens { padding: 4px 18px 0; max-width: 980px; }
 .screen { display: flex; flex-direction: column; gap: 14px; }
@@ -108,6 +130,9 @@ svg { flex: none; }
 .icon-btn--ghost { background: transparent; }
 .icon-btn--sm { width: 36px; height: 36px; background: var(--card-2); }
 .icon-btn--light { background: var(--pill); color: var(--pill-text); border-color: var(--pill); }
+/* Кнопки в поле ссылки — скруглённые квадраты, как на образце. */
+.icon-btn--sq { width: 38px; height: 38px; border-radius: 12px; background: var(--field); }
+.icon-btn--sq.icon-btn--light { background: var(--pill); }
 [data-theme-toggle] .i-moon { display: none; }
 :root[data-theme="light"] [data-theme-toggle] .i-sun { display: none; }
 :root[data-theme="light"] [data-theme-toggle] .i-moon { display: block; }
@@ -118,8 +143,8 @@ svg { flex: none; }
   display: inline-flex; align-items: center; justify-content: center;
   font-weight: 800; font-size: 17px; text-align: center;
 }
-.avatar--lg { width: 58px; height: 58px; font-size: 22px; }
-.avatar--btn { cursor: pointer; }
+.avatar--lg { width: 52px; height: 52px; font-size: 20px; }
+.avatar.has-photo { background-size: cover; background-position: center; }
 
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
 .pad { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
@@ -159,7 +184,7 @@ svg { flex: none; }
 }
 .link-quiet--center { align-self: center; }
 
-.row-head { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+.row-head { display: flex; align-items: center; justify-content: space-between; margin: 10px 0 -8px; }
 .row-head h2 { font-size: 16px; font-weight: 800; }
 
 /* Сегменты: язык, тема, нарезка, период. Активный — «пилюля» цвета текста. */
@@ -186,16 +211,6 @@ svg { flex: none; }
      а не обрезается по краям кнопки. */
   .seg--wide button { white-space: normal; line-height: 1.15; padding: 4px 8px; font-size: 14px; text-align: center; }
 }
-.seg--period { align-self: flex-start; max-width: 100%; }
-.seg--period button { min-width: 0; padding: 0 12px; }
-@media (max-width: 374.98px) {
-  /* Три периода с иконками на 320 px не помещались: пусть займут ряд целиком,
-     а календарики уйдут — подпись и без них понятна. */
-  .seg--period { align-self: stretch; }
-  .seg--period button { flex: 1; padding: 0 6px; }
-  .seg--period svg { display: none; }
-}
-
 .chips { display: flex; gap: 8px; flex-wrap: wrap; }
 /* На телефоне фильтры роликов — одной строкой и листаются вбок, как ленты
    выбора: перенос третьей кнопки на вторую строку сдвигал весь список. Поля
@@ -225,8 +240,10 @@ svg { flex: none; }
 .list-row__text b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list-row__text .muted { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list-row--card { padding: 14px 16px; min-height: 76px; }
-#home-recent { gap: 10px; }
-#home-recent .list-row { padding: 12px 16px; min-height: 76px; }
+/* «Последнее» — одна карточка, ролики в ней строками через линию. */
+#home-recent > .list-row { min-height: 76px; }
+/* «Пригласите друга» стоит особняком, ниже списка. */
+#home-recent + .list-row--card { margin-top: 14px; }
 .list--flush .list-row { min-height: 58px; }
 .list--flush .list-row + .list-row { border-top: 1px solid var(--line); }
 .list-row__end { text-align: right; font-size: 13px; white-space: nowrap; }
@@ -236,10 +253,13 @@ svg { flex: none; }
 .empty-line b { display: block; margin-bottom: 4px; }
 
 .thumb {
-  flex: none; width: 44px; height: 56px; border-radius: 10px; overflow: hidden;
+  position: relative; flex: none; width: 44px; height: 56px; border-radius: 10px; overflow: hidden;
   background: var(--card-2) center / cover no-repeat; color: var(--muted);
   display: inline-flex; align-items: center; justify-content: center;
 }
+/* Кадр ролика проявляется, когда загрузился; до того и без него — значок. */
+.thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 160ms ease; }
+.thumb.has-image img { opacity: 1; }
 
 /* ---------------------------------------------------------------- главная */
 .hero {
@@ -264,13 +284,104 @@ svg { flex: none; }
   padding: 0 8px 0 16px; border-radius: 16px; background: var(--card-2); border: 1px solid var(--line);
 }
 .field__value { flex: 1; min-width: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: all; }
-.steps { margin: 2px 0 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 8px; }
-.steps li { counter-increment: s; display: flex; gap: 10px; align-items: baseline; font-size: 14px; color: var(--muted); }
-.steps li::before {
-  content: counter(s); flex: none; width: 22px; height: 22px; border-radius: 50%;
-  background: var(--card-2); color: var(--text); font-size: 12px; font-weight: 800;
+.period-btn {
+  align-self: flex-start; min-height: 44px; padding: 0 14px; border-radius: 999px;
+  background: var(--card); border: 1px solid var(--line); font-weight: 700; font-size: 15px;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.period-btn:active { transform: scale(0.97); }
+.friends-head { display: flex; flex-direction: column; gap: 5px; }
+.friends-sum { font-size: 13px; color: var(--muted); }
+.friends-sum b { color: var(--text); }
+.friends-sum b.pos { color: var(--ok); }
+.friends { border-top: 1px solid var(--line); padding-top: 4px; }
+.friends-empty { padding: 10px 0 2px; font-size: 14px; line-height: 1.45; }
+/* Строка выбора в листе снизу (период). */
+.option-row {
+  width: 100%; min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-weight: 600; font-size: 16px;
+}
+.option-row + .option-row { border-top: 1px solid var(--line); }
+.option-row.is-active { font-weight: 800; }
+
+/* «Деньги вместо токенов». Карточка тёмная в обеих темах: на ней градиент и
+   белая «выплата», и на светлой подложке они теряются. */
+.promo {
+  position: relative; overflow: hidden; display: flex; align-items: center; gap: 12px;
+  padding: 20px 16px 20px 18px; border-radius: 24px; border: 1px solid var(--line); color: #f4f2f8;
+  background:
+    radial-gradient(85% 120% at 100% 0%, rgb(122 60 240 / 58%), transparent 62%),
+    radial-gradient(70% 95% at 100% 100%, rgb(255 122 60 / 50%), transparent 62%),
+    radial-gradient(60% 80% at 72% 50%, rgb(255 77 138 / 30%), transparent 70%),
+    #1c1a26;
+}
+.promo__text { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.promo__title { font-family: var(--display); font-size: 22px; line-height: 1.12; letter-spacing: -0.02em; max-width: 8.5em; }
+.promo__sub { font-size: 13px; line-height: 1.4; color: rgb(255 255 255 / 74%); }
+.promo__link { font-weight: 700; color: #fff; text-decoration: underline; text-underline-offset: 2px; }
+.grad-btn {
+  margin-top: 6px; min-height: 44px; padding: 0 6px 0 18px; border-radius: 999px;
+  background: var(--grad); color: #fff; font-weight: 800; font-size: 15px; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 10px;
+  box-shadow: 0 8px 22px rgb(255 63 134 / 30%);
+}
+.grad-btn:active, .pill-btn:active { transform: scale(0.97); }
+.grad-btn__arrow, .pill-btn__arrow {
+  width: 32px; height: 32px; border-radius: 50%; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
 }
+.grad-btn__arrow { background: rgb(255 255 255 / 24%); }
+.payout {
+  flex: none; width: 96px; padding: 12px 10px 10px; border-radius: 14px; background: #fff; color: #16151b;
+  display: flex; flex-direction: column; gap: 6px; transform: rotate(6deg);
+  box-shadow: 0 14px 30px rgb(0 0 0 / 35%);
+}
+.payout__badge {
+  align-self: flex-start; padding: 3px 6px; border-radius: 5px; background: var(--grad); color: #fff;
+  font-size: 8px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.payout__sum { font-family: var(--display); font-size: 15px; letter-spacing: -0.02em; white-space: nowrap; }
+.payout__line { height: 4px; border-radius: 2px; background: #e6e4ec; }
+.payout__line--short { width: 60%; }
+.payout__foot { margin-top: 8px; font-size: 8px; color: #8a8794; white-space: nowrap; }
+@media (max-width: 359.98px) { .payout { display: none; } }
+
+/* ---------------------------------------------------------------- студия */
+.studio-hero {
+  position: relative; overflow: hidden; width: 100%; min-height: 172px;
+  display: flex; align-items: center; gap: 12px; padding: 22px 18px 22px 20px;
+  border-radius: 24px; border: 1px solid var(--line); text-align: left; color: #f4f2f8;
+  background:
+    radial-gradient(80% 130% at 100% 0%, rgb(122 60 240 / 52%), transparent 62%),
+    radial-gradient(70% 110% at 100% 100%, rgb(255 122 60 / 30%), transparent 60%),
+    #1c1a26;
+}
+.studio-hero:active { transform: scale(0.99); }
+.studio-hero__text { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.studio-hero__title { font-family: var(--display); font-size: 23px; letter-spacing: -0.02em; }
+.studio-hero__sub { font-size: 14px; color: rgb(255 255 255 / 68%); }
+.pill-btn {
+  margin-top: 12px; min-height: 42px; padding: 0 5px 0 16px; border-radius: 999px;
+  background: #f6f4fa; color: #16151b; font-weight: 800; font-size: 15px; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 10px;
+}
+.pill-btn__arrow { background: var(--orb); color: #fff; }
+/* Экран телефона: нарисованный кадр с субтитром, а когда есть готовый ролик —
+   его кадр (app.js ставит картинку и класс после загрузки). */
+.phone {
+  position: relative; flex: none; width: 88px; height: 132px; border-radius: 16px; overflow: hidden;
+  border: 2px solid #fff; box-shadow: 0 12px 30px rgb(0 0 0 / 40%);
+  background:
+    radial-gradient(60% 38% at 50% 34%, rgb(255 214 170 / 34%), transparent 70%),
+    radial-gradient(90% 60% at 80% 12%, rgb(255 170 90 / 24%), transparent 60%),
+    linear-gradient(180deg, #3a2f29 0%, #1c1713 60%, #0b0a09 100%);
+}
+.phone.has-image { background-size: cover; background-position: center; }
+.phone__caption { position: absolute; left: 14%; right: 14%; bottom: 16%; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.phone__caption i { width: 100%; height: 5px; border-radius: 3px; background: #fff; }
+.phone__caption i + i { width: 62%; background: #ffb547; }
+.phone.has-image .phone__caption { display: none; }
+
 .stats3 { display: grid; grid-template-columns: repeat(3, 1fr); }
 .stats3 > div { display: flex; flex-direction: column; gap: 4px; padding: 0 12px; min-width: 0; }
 .stats3 > div:first-child { padding-left: 0; }
@@ -585,25 +696,32 @@ svg { flex: none; }
 #to-step1 { margin-top: 6px; }
 
 /* ---------------------------------------------------------------- результаты */
-.jobs { display: grid; gap: 12px; }
-.job { padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.job__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.job__title { font-weight: 700; }
-.job .muted { font-size: 13px; }
-.status { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--field); color: var(--muted); white-space: nowrap; }
-.status--done { background: rgb(60 207 142 / 14%); color: var(--ok); }
-.status--failed { background: rgb(255 70 70 / 13%); color: #ef5a50; }
-.status--running, .status--queued { background: rgb(150 100 255 / 15%); color: #a585ff; }
-:root[data-theme="light"] .status--running, :root[data-theme="light"] .status--queued { color: #7a3cf0; }
+.jobs { display: flex; flex-direction: column; gap: 10px; }
+/* Дата над роликами дня. */
+.day-label { margin: 8px 2px -2px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.day-label:first-child { margin-top: 0; }
+.job-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px 10px 10px; }
+.job-row__main { flex: 1; min-width: 0; min-height: 56px; display: flex; align-items: center; gap: 12px; text-align: left; }
+.round-act {
+  flex: none; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--card-2); border: 1px solid var(--line);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: transform 120ms ease, opacity 160ms ease;
+}
+.round-act:active { transform: scale(0.94); }
+.round-act[disabled] { opacity: 0.5; cursor: default; }
+/* Этап и полоса у ролика в работе, причина у упавшего — под строкой, во всю ширину. */
+.job-row__more { flex-basis: 100%; display: flex; flex-direction: column; gap: 8px; padding: 0 2px 4px; font-size: 13px; }
+.player { display: block; width: 100%; max-height: 62vh; aspect-ratio: 9 / 16; object-fit: contain; border-radius: 16px; background: #000; }
+.player__meta { margin: 10px 0 12px; }
 .bar { height: 6px; border-radius: 999px; background: var(--field); overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--grad); border-radius: inherit; transition: width 400ms ease; }
-.job video { width: 100%; max-height: 60vh; aspect-ratio: 9 / 16; object-fit: contain; border-radius: 16px; background: #000; }
-.job__actions { display: flex; gap: 8px; }
 .btn-soft { min-height: 40px; padding: 0 16px; border-radius: 12px; background: var(--field); font-weight: 600; }
 .empty { padding: 34px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .empty p { margin: 0 0 10px; }
 
 .skeleton { height: 86px; border-radius: var(--radius); background: var(--card); position: relative; overflow: hidden; }
+.skeleton--flat { height: 76px; border-radius: 0; background: transparent; }
 .skeleton::after {
   content: ""; position: absolute; inset: 0;
   background: linear-gradient(90deg, transparent, rgb(255 255 255 / 4%), transparent);
@@ -645,23 +763,24 @@ svg { flex: none; }
 .pay-method.is-off { opacity: 0.45; cursor: default; }
 .star { color: #ffb800; }
 
-.history-row { display: flex; align-items: center; gap: 12px; min-height: 58px; }
+.history-row { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 58px; text-align: left; }
+button.history-row { min-height: 72px; }
 .history-row + .history-row { border-top: 1px solid var(--line); }
 
 /* ---------------------------------------------------------------- профиль */
 .profile-card { gap: 16px; }
 .profile-card__who { display: flex; align-items: center; gap: 14px; }
-.profile-card__name { font-family: var(--display); font-size: 19px; }
-.profile-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.profile-stats > div { padding: 12px 14px; border-radius: 16px; background: var(--card-2); display: flex; flex-direction: column; gap: 2px; }
-.profile-stats b { font-family: var(--display); font-size: 22px; }
-.profile-stats span { font-size: 12px; }
+.profile-card__text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.profile-card__name { font-family: var(--display); font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-hint { padding: 0 4px; }
+#open-offer { font-size: 13px; font-weight: 600; }
 
 /* ---------------------------------------------------------------- нижняя панель */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
-  display: grid; grid-template-columns: repeat(5, 1fr); align-items: end;
+  /* Вкладки делят ширину поровну, сколько бы их ни было: «Пригласить»
+     пропадает, когда приглашения выключены, и шар обязан остаться по центру. */
+  display: flex; align-items: flex-end;
   padding: 8px 6px calc(10px + var(--safe-bottom));
   background: var(--side); border-top: 1px solid var(--line);
 }
@@ -669,17 +788,13 @@ svg { flex: none; }
   position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px;
   font-size: 11px; color: var(--muted); text-align: center; min-height: 44px; justify-content: flex-end;
 }
-.tabbar__item.is-active { color: var(--text); }
-.tabbar__main { color: var(--text); font-weight: 700; }
+.tabbar > * { flex: 1 1 0; min-width: 0; }
+.tabbar__item.is-active { color: var(--text); font-weight: 700; }
+.tabbar__main.is-active { color: var(--text); font-weight: 700; }
 .tabbar__orb {
   width: 60px; height: 60px; margin-top: -28px; border-radius: 50%; background: var(--orb); color: #fff;
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 8px 24px rgb(255 63 134 / 40%), 0 0 0 5px var(--side);
-}
-.tabbar .count {
-  position: absolute; top: -4px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px;
-  border-radius: 999px; background: var(--pill); color: var(--pill-text); font-size: 10px; font-weight: 800;
-  display: flex; align-items: center; justify-content: center;
 }
 .tabbar .dot { position: absolute; top: 0; left: calc(50% + 9px); width: 9px; height: 9px; border-radius: 50%; background: #ff4d8a; }
 
@@ -721,10 +836,8 @@ svg { flex: none; }
     padding: 18px 16px; background: var(--side); border-right: 1px solid var(--line);
   }
   .sidebar__head { display: flex; align-items: center; justify-content: space-between; padding: 0 0 14px 6px; }
-  .logo {
-    font-family: var(--display); font-weight: 800; font-size: 20px; letter-spacing: -0.03em;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
+  /* Логотип на широком экране живёт в боковой панели. */
+  .topbar__logo { display: none; }
   .side-nav { display: flex; flex-direction: column; gap: 4px; }
   .side-nav__item {
     position: relative; display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 14px;
@@ -779,11 +892,11 @@ svg { flex: none; }
   :root { --top-h: 80px; }
   .topbar { padding: 0 28px; }
   .topbar h1 { font-size: 27px; }
-  .seg.lang-seg { display: inline-flex; }
   .screens { padding: 0 28px; }
   .screen { gap: 16px; }
-
-  .jobs { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  /* Экраны-вкладки — колонкой телефонной ширины: карточки, растянутые на
+     весь монитор, читаются хуже. Монтаж и тарифы раскладываются сами. */
+  .screen:not([data-screen="edit"]) { max-width: 640px; }
   .sheet { align-items: center; }
   .sheet__panel { border-radius: 24px; }
 }

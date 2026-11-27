@@ -22,12 +22,13 @@ def _tunnel_url():
     set_webapp_url(was)
 
 
-def test_the_keyboard_is_two_by_two_like_the_reference():
-    """Раскладка как у Brandly: «Начать монтаж · Баланс», «Реф. программа · Поддержка»."""
+def test_the_keyboard_is_three_rows_like_the_reference():
+    """Раскладка как у Brandly (27.11.2026): «Начать монтаж» во всю ширину,
+    «Баланс · Мои ролики», «Реф. программа · Поддержка»."""
     kb = main_keyboard("ru")
-    assert [len(row) for row in kb.keyboard] == [2, 2]
+    assert [len(row) for row in kb.keyboard] == [1, 2, 2]
     assert [b.text for row in kb.keyboard for b in row] == [
-        "Начать монтаж", "Баланс", "Реф. программа", "Поддержка",
+        "Начать монтаж", "Баланс", "Мои ролики", "Реф. программа", "Поддержка",
     ]
     # Без этих двух клавиатура либо занимает пол-экрана, либо исчезает после
     # первого нажатия — и пользователь остаётся без навигации.
@@ -162,16 +163,18 @@ async def test_a_broken_delivery_never_eats_the_answer(monkeypatch):
 
 
 def test_buttons_gone_from_the_keyboard_still_work_on_old_keyboards():
-    """«Мои ролики» и «Наш канал» с клавиатуры ушли, но у людей висит прежняя."""
+    """«Наш канал» с клавиатуры ушёл, но у людей висит прежняя. «Мои ролики»
+    27.11.2026 вернулись на клавиатуру."""
     labels = {b.text for row in main_keyboard("ru").keyboard for b in row}
+    assert t("kb.videos", "ru") in labels
+    assert t("kb.channel", "ru") not in labels
     for action in ("videos", "channel"):
-        assert t(f"kb.{action}", "ru") not in labels
         assert menu.action_for(t(f"kb.{action}", "ru")) == action
 
 
 def test_the_channel_keyboard_reaches_old_chats_once_more():
-    """Клавиатуру 2 × 2 получат и те, у кого уже была прежняя."""
-    assert menu.SEEN_FLAG not in ("kb", "kb2", "kb3")
+    """Клавиатуру в три ряда получат и те, у кого уже была прежняя."""
+    assert menu.SEEN_FLAG not in ("kb", "kb2", "kb3", "kb4")
 
 
 async def test_the_channel_button_opens_the_channel(monkeypatch):

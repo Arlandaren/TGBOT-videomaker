@@ -36,6 +36,13 @@
       <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.3 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.3-3.5-8.5S9.6 5.9 12 3.5Z" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
       <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 12a7.5 7.5 0 0 1-11 6.6L4.5 20l1.3-4A7.5 7.5 0 1 1 20 12Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
       <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 2H5zM10 20.5a2.2 2.2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7.5 11l4.5 4.5 4.5-4.5M5 19.5h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-case" viewBox="0 0 24 24"><rect x="3.5" y="7.5" width="17" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 7.5V6a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 6v1.5M3.5 12.5h17" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5 5 6v5.5c0 4.3 2.8 7.6 7 9 4.2-1.4 7-4.7 7-9V6z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m9 12 2.2 2.2L15 10.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-horn" viewBox="0 0 24 24"><path d="M4 10v4h3l8 4.5v-13L7 10zM18 9.5a4 4 0 0 1 0 5M8 14.5l1 4.5h2.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-buoy" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m6 6 3.5 3.5M14.5 14.5 18 18M18 6l-3.5 3.5M9.5 14.5 6 18" stroke="currentColor" stroke-width="1.7"/></symbol>
       <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3.8 2.5 5.1 5.6.8-4 4 .9 5.6-5-2.7-5 2.7.9-5.6-4-4 5.6-.8z" fill="currentColor"/></symbol>
     </defs>
   </svg>
@@ -44,15 +51,15 @@
     <!-- ============================================================ боковая панель (широкий экран) -->
     <aside class="sidebar">
       <div class="sidebar__head">
-        <div class="logo" id="brand">…</div>
+        <div class="logo" data-brand>…</div>
         <button class="icon-btn icon-btn--ghost" id="collapse" type="button" data-i18n-aria="nav.collapse">
           <svg width="20" height="20"><use href="#i-panel"/></svg>
         </button>
       </div>
       <nav class="side-nav">
         <button class="side-nav__item" data-nav="home" type="button"><svg width="20" height="20"><use href="#i-home"/></svg><span data-i18n="nav.home">Главная</span></button>
-        <button class="side-nav__item" data-nav="invite" type="button" data-needs="referral"><svg width="20" height="20"><use href="#i-invite"/></svg><span data-i18n="nav.invite">Приглашения</span></button>
-        <button class="side-nav__item" data-nav="edit" type="button"><svg width="20" height="20" class="spark"><use href="#i-spark"/></svg><span data-i18n="nav.edit">Монтаж</span></button>
+        <button class="side-nav__item" data-nav="invite" type="button" data-needs="referral"><svg width="20" height="20"><use href="#i-invite"/></svg><span data-i18n="nav.invite">Пригласить</span></button>
+        <button class="side-nav__item" data-nav="studio" type="button"><svg width="20" height="20" class="spark"><use href="#i-spark"/></svg><span data-i18n="nav.studio">Студия</span></button>
         <button class="side-nav__item" data-nav="videos" type="button"><svg width="20" height="20"><use href="#i-results"/></svg><span data-i18n="nav.videos">Результаты</span><i class="dot" data-active-dot hidden></i></button>
         <button class="side-nav__item" data-nav="tariffs" type="button"><svg width="20" height="20"><use href="#i-coins"/></svg><span data-i18n="nav.tariffs">Тарифы</span><b class="count" data-balance-count>0</b></button>
         <button class="side-nav__item" data-nav="profile" type="button"><svg width="20" height="20"><use href="#i-user"/></svg><span data-i18n="nav.profile">Профиль</span></button>
@@ -76,14 +83,27 @@
     </aside>
 
     <div class="main">
+      <!-- Шапка в двух видах. На вкладках — логотип, тема, уведомления и баланс.
+           На вложенных экранах (монтаж, тарифы) — «назад», название и баланс. -->
       <header class="topbar">
+        <div class="logo topbar__logo" data-brand>…</div>
         <button class="icon-btn" id="back" type="button" data-i18n-aria="back" hidden><svg width="20" height="20"><use href="#i-back"/></svg></button>
-        <div class="topbar__title">
+        <div class="topbar__title" id="topbar-title" hidden>
           <h1 id="page-title">…</h1>
           <span class="topbar__step" id="page-step" hidden></span>
         </div>
-        <div class="seg seg--sm lang-seg" data-lang-seg></div>
-        <button class="avatar avatar--btn" type="button" data-nav="profile" data-avatar data-i18n-aria="nav.profile">?</button>
+        <span class="topbar__gap"></span>
+        <button class="icon-btn icon-btn--top" type="button" data-theme-toggle data-root-only data-i18n-aria="theme">
+          <svg width="20" height="20" class="i-sun"><use href="#i-sun"/></svg>
+          <svg width="20" height="20" class="i-moon"><use href="#i-moon"/></svg>
+        </button>
+        <button class="icon-btn icon-btn--top" type="button" id="bell" data-root-only data-i18n-aria="notif.title">
+          <svg width="20" height="20"><use href="#i-bell"/></svg>
+          <i class="bell-dot" id="bell-dot" hidden></i>
+        </button>
+        <button class="balance-pill" type="button" data-nav="tariffs" data-i18n-aria="tariffs.balance">
+          <svg width="18" height="18"><use href="#i-coins"/></svg><b data-balance-count>0</b>
+        </button>
       </header>
 
       <main class="screens">
@@ -93,7 +113,6 @@
             <span class="hero__text">
               <b class="hero__title"><span data-i18n="home.new">Новый ролик</span><i class="grad-dot">.</i></b>
               <span class="hero__sub" data-i18n="home.new_sub">Загрузите видео — смонтируем за пару минут</span>
-              <span class="hero__sub hero__offer" id="home-offer" hidden></span>
             </span>
             <span class="round-btn round-btn--light"><svg width="22" height="22"><use href="#i-plus"/></svg></span>
           </button>
@@ -102,31 +121,29 @@
             <h2 data-i18n="home.recent">Последнее</h2>
             <button class="link-quiet" type="button" data-nav="videos" data-i18n="home.all">Все</button>
           </div>
-          <div class="list" id="home-recent"></div>
+          <div class="card list" id="home-recent"></div>
 
           <button class="card list-row list-row--card" type="button" data-nav="invite" data-needs="referral">
             <span class="tile"><svg width="20" height="20"><use href="#i-invite"/></svg></span>
-            <span class="list-row__text"><b data-i18n="home.invite">Пригласите друга</b><span class="muted" id="home-invite-sub"></span></span>
+            <span class="list-row__text"><b data-i18n="home.invite">Пригласите друга</b><span class="muted" data-i18n="home.invite_sub">Токены вам — с каждой его покупки</span></span>
             <svg width="18" height="18" class="chev"><use href="#i-chevron"/></svg>
           </button>
         </section>
 
         <!-- ============================================================ Приглашения -->
         <section class="screen" data-screen="invite" hidden>
-          <p class="lead" id="invite-lead"></p>
+          <div class="page-head">
+            <h1 class="page-title" data-i18n="title.invite">Приглашайте друзей</h1>
+            <p class="lead" id="invite-lead"></p>
+          </div>
 
           <div class="card pad">
             <div class="label" data-i18n="invite.your_link">Ваша ссылка</div>
             <div class="field">
               <span class="field__value" id="invite-link">…</span>
-              <button class="icon-btn icon-btn--sm" type="button" id="invite-copy" data-i18n-aria="invite.copy"><svg width="17" height="17"><use href="#i-copy"/></svg></button>
-              <button class="icon-btn icon-btn--sm icon-btn--light" type="button" id="invite-share" data-i18n-aria="invite.share"><svg width="17" height="17"><use href="#i-share"/></svg></button>
+              <button class="icon-btn icon-btn--sq" type="button" id="invite-copy" data-i18n-aria="invite.copy"><svg width="17" height="17"><use href="#i-copy"/></svg></button>
+              <button class="icon-btn icon-btn--sq icon-btn--light" type="button" id="invite-share" data-i18n-aria="invite.share"><svg width="17" height="17"><use href="#i-share"/></svg></button>
             </div>
-            <ol class="steps">
-              <li data-i18n="invite.step1">Друг открывает бота по вашей ссылке</li>
-              <li data-i18n="invite.step2">Покупает пакет роликов</li>
-              <li id="invite-step3"></li>
-            </ol>
           </div>
 
           <div class="card pad">
@@ -134,18 +151,55 @@
             <div class="stats3">
               <div><b id="ref-invited">0</b><span><span data-i18n="invite.came">Пришли</span><em id="ref-invited-today">+0</em></span></div>
               <div><b id="ref-paid">0</b><span><span data-i18n="invite.paid">Оплатили</span><em id="ref-paid-today">+0</em></span></div>
-              <div><b id="ref-earned">+0</b><span><span data-i18n="invite.earned">Роликов</span><em id="ref-earned-today">+0</em></span></div>
+              <div><b id="ref-earned">+0</b><span><span data-i18n="invite.earned">Токенов</span><em id="ref-earned-today">+0</em></span></div>
             </div>
             <p class="muted small" id="ref-credit" hidden></p>
           </div>
 
-          <div class="seg seg--period" id="ref-period" role="radiogroup"></div>
+          <button class="period-btn" type="button" id="ref-period" aria-haspopup="dialog">
+            <svg width="17" height="17"><use href="#i-calendar"/></svg><span id="ref-period-text"></span><svg width="16" height="16" class="chev"><use href="#i-down"/></svg>
+          </button>
 
           <div class="card pad">
-            <h3 class="card-title" data-i18n="invite.friends">Приглашённые</h3>
-            <p class="muted small" id="ref-summary"></p>
-            <div class="list list--flush" id="ref-friends"></div>
+            <div class="friends-head">
+              <h3 class="card-title" data-i18n="invite.friends">Приглашённые</h3>
+              <p class="friends-sum" id="ref-summary"></p>
+            </div>
+            <div class="list list--flush friends" id="ref-friends"></div>
           </div>
+
+          <!-- «Деньги вместо токенов»: партнёрам платят рублями. Выплата на
+               картинке — пример, а не чья-то настоящая. -->
+          <div class="promo">
+            <div class="promo__text">
+              <b class="promo__title" data-i18n="partner.title">Деньги вместо токенов</b>
+              <p class="promo__sub"><span id="partner-sub"></span> <button class="promo__link" type="button" id="partner-terms" data-i18n="partner.terms">Условия</button></p>
+              <button class="grad-btn" type="button" id="partner-go"><span data-i18n="partner.become">Стать партнёром</span><i class="grad-btn__arrow"><svg width="16" height="16"><use href="#i-arrow"/></svg></i></button>
+            </div>
+            <div class="payout" aria-hidden="true">
+              <span class="payout__badge" data-i18n="partner.payout">Выплата</span>
+              <b class="payout__sum">+4&nbsp;500&nbsp;₽</b>
+              <i class="payout__line"></i><i class="payout__line payout__line--short"></i>
+              <span class="payout__foot" id="payout-foot"></span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================ Студия -->
+        <section class="screen" data-screen="studio" hidden>
+          <h1 class="page-title" data-i18n="nav.studio">Студия</h1>
+          <button class="studio-hero" type="button" data-nav="edit">
+            <span class="studio-hero__text">
+              <b class="studio-hero__title" data-i18n="home.new">Новый ролик</b>
+              <span class="studio-hero__sub" data-i18n="studio.new_sub">Из видео — готовый Reels</span>
+              <span class="pill-btn"><span data-i18n="cta.edit">Смонтировать</span><i class="pill-btn__arrow"><svg width="16" height="16"><use href="#i-arrow"/></svg></i></span>
+            </span>
+            <!-- Экран телефона: кадр последнего готового ролика, а пока роликов
+                 нет — нарисованный кадр с субтитром. -->
+            <span class="phone" id="studio-phone" aria-hidden="true">
+              <span class="phone__caption"><i></i><i></i></span>
+            </span>
+          </button>
         </section>
 
         <!-- ============================================================ Монтаж -->
@@ -153,7 +207,7 @@
           <!-- Шаг 1: видео и нарезка -->
           <div class="step" data-step="1">
             <h2 class="step__title" data-i18n="edit.s1_title">Загрузите видео для ролика</h2>
-            <p class="lead" id="s1-lead" data-i18n="edit.s1_lead">Видео, где человек говорит в камеру. Соберём из него вертикальный ролик с субтитрами.</p>
+            <p class="lead" id="s1-lead" data-i18n="edit.s1_lead">Можно одно или несколько — склеим их в один Reels в том порядке, который вы зададите.</p>
 
             <div class="seg seg--wide" id="layout-seg" role="radiogroup"></div>
 
@@ -197,7 +251,7 @@
 
             <div class="under-drop">
               <button class="link-hint" id="requirements" type="button"><svg width="15" height="15"><use href="#i-info"/></svg><span data-i18n="edit.requirements">Требования к видео</span></button>
-              <button class="link-hint link-hint--strong" id="send-in-chat" type="button"><span data-i18n="edit.in_chat">Отправить в чат с ботом</span></button>
+              <button class="link-hint link-hint--strong" id="send-in-chat" type="button"><span data-i18n="edit.in_chat">Загрузить в боте</span></button>
             </div>
 
             <div class="card pad">
@@ -269,6 +323,11 @@
                       <span class="toggle-row__label" data-i18n="opt.sfx">Звуковые эффекты</span>
                       <button class="help" type="button" data-help="sfx">?</button>
                       <label class="switch"><input type="checkbox" data-option="sfx" /><span></span></label>
+                    </div>
+                    <div class="toggle-row">
+                      <span class="toggle-row__label" data-i18n="opt.music">Фоновая музыка</span>
+                      <button class="help" type="button" data-help="music">?</button>
+                      <label class="switch"><input type="checkbox" data-option="music" /><span></span></label>
                     </div>
                   </div>
 
@@ -358,8 +417,8 @@
 
         <!-- ============================================================ Результаты -->
         <section class="screen" data-screen="videos" hidden>
+          <h1 class="page-title" data-i18n="nav.videos">Результаты</h1>
           <div class="chips" id="jobs-filter" role="radiogroup"></div>
-          <p class="muted small" id="jobs-retention" hidden></p>
           <div id="jobs" class="jobs"></div>
         </section>
 
@@ -391,11 +450,7 @@
           <div class="card pad profile-card">
             <div class="profile-card__who">
               <span class="avatar avatar--lg" data-avatar>?</span>
-              <div><b class="profile-card__name" data-user-name>…</b><div class="muted" data-user-handle></div></div>
-            </div>
-            <div class="profile-stats">
-              <div><b id="stat-done">0</b><span class="muted" data-i18n="profile.done">смонтировано</span></div>
-              <div><b data-balance-value>0</b><span class="muted" data-i18n="profile.balance">на балансе</span></div>
+              <div class="profile-card__text"><b class="profile-card__name" data-user-name>…</b><div class="muted" data-user-handle></div></div>
             </div>
             <button class="cta cta--slim" type="button" data-nav="tariffs" id="profile-topup"><span class="cta__title" data-i18n="cta.topup">Пополнить баланс</span></button>
           </div>
@@ -403,7 +458,12 @@
           <div class="card list" data-needs="referral">
             <button class="list-row" type="button" data-nav="invite">
               <span class="tile tile--plain"><svg width="20" height="20"><use href="#i-invite"/></svg></span>
-              <span class="list-row__text"><b data-i18n="home.invite">Пригласите друга</b><span class="muted" id="profile-invite-sub"></span></span>
+              <span class="list-row__text"><b data-i18n="profile.invite">Пригласить друга</b><span class="muted" id="profile-invite-sub"></span></span>
+              <svg width="18" height="18" class="chev"><use href="#i-chevron"/></svg>
+            </button>
+            <button class="list-row" type="button" id="profile-partner">
+              <span class="tile tile--plain"><svg width="20" height="20"><use href="#i-case"/></svg></span>
+              <span class="list-row__text"><b data-i18n="partner.become">Стать партнёром</b><span class="muted" id="profile-partner-sub"></span></span>
               <svg width="18" height="18" class="chev"><use href="#i-chevron"/></svg>
             </button>
           </div>
@@ -420,12 +480,23 @@
               <div class="seg seg--sm seg--icons" id="theme-seg"></div>
             </div>
             <button class="list-row" type="button" id="open-chat">
-              <span class="tile tile--plain"><svg width="20" height="20"><use href="#i-chat"/></svg></span>
-              <span class="list-row__text"><b data-i18n="profile.chat">Чат с ботом</b><span class="muted" id="profile-bot"></span></span>
+              <span class="tile tile--plain"><svg width="20" height="20"><use href="#i-shield"/></svg></span>
+              <span class="list-row__text"><b data-i18n="profile.login">Вход и уведомления</b><span class="muted">Telegram</span></span>
+              <svg width="18" height="18" class="chev"><use href="#i-chevron"/></svg>
+            </button>
+            <button class="list-row" type="button" id="open-channel" hidden>
+              <span class="tile tile--plain"><svg width="20" height="20"><use href="#i-horn"/></svg></span>
+              <span class="list-row__text"><b data-i18n="profile.channel">Официальный канал</b></span>
+              <svg width="18" height="18" class="chev"><use href="#i-chevron"/></svg>
+            </button>
+            <button class="list-row" type="button" id="open-support">
+              <span class="tile tile--plain"><svg width="20" height="20"><use href="#i-buoy"/></svg></span>
+              <span class="list-row__text"><b data-i18n="profile.support">Поддержка</b></span>
               <svg width="18" height="18" class="chev"><use href="#i-chevron"/></svg>
             </button>
           </div>
-          <p class="muted small profile-hint" id="profile-hint"></p>
+          <button class="link-quiet link-quiet--center" type="button" id="open-offer" data-i18n="profile.offer" hidden>Публичная оферта</button>
+          <p class="muted small profile-hint" id="profile-hint" hidden></p>
         </section>
       </main>
     </div>
@@ -433,12 +504,12 @@
     <!-- ============================================================ нижняя панель (телефон) -->
     <nav class="tabbar">
       <button class="tabbar__item" data-nav="home" type="button"><svg width="22" height="22"><use href="#i-home"/></svg><span data-i18n="nav.home">Главная</span></button>
-      <button class="tabbar__item" data-nav="videos" type="button"><svg width="22" height="22"><use href="#i-results"/></svg><span data-i18n="nav.videos">Результаты</span><i class="dot" data-active-dot hidden></i></button>
-      <button class="tabbar__main" data-nav="edit" type="button" data-i18n-aria="nav.edit">
+      <button class="tabbar__item" data-nav="invite" type="button" data-needs="referral"><svg width="22" height="22"><use href="#i-invite"/></svg><span data-i18n="nav.invite">Пригласить</span></button>
+      <button class="tabbar__main" data-nav="studio" type="button" data-i18n-aria="nav.studio">
         <span class="tabbar__orb"><svg width="28" height="28"><use href="#i-spark"/></svg></span>
-        <span data-i18n="nav.edit">Монтаж</span>
+        <span data-i18n="nav.studio">Студия</span>
       </button>
-      <button class="tabbar__item" data-nav="tariffs" type="button"><svg width="22" height="22"><use href="#i-coins"/></svg><span data-i18n="nav.tariffs">Тарифы</span><b class="count" data-balance-count>0</b></button>
+      <button class="tabbar__item" data-nav="videos" type="button"><svg width="22" height="22"><use href="#i-results"/></svg><span data-i18n="nav.videos">Результаты</span><i class="dot" data-active-dot hidden></i></button>
       <button class="tabbar__item" data-nav="profile" type="button"><svg width="22" height="22"><use href="#i-user"/></svg><span data-i18n="nav.profile">Профиль</span></button>
     </nav>
 
@@ -457,7 +528,7 @@
     <div class="blocker" id="blocker" hidden>
       <div class="card blocker__card">
         <h2 data-i18n="blocker.title">Откройте из Telegram</h2>
-        <p class="muted" data-i18n="blocker.text">Приложение работает внутри бота: нажмите кнопку «Монтаж» в чате.</p>
+        <p class="muted" data-i18n="blocker.text">Приложение работает внутри бота: нажмите кнопку «Приложение» в чате.</p>
       </div>
     </div>
   </div>

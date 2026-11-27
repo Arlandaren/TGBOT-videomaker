@@ -26,6 +26,7 @@ from typing import Awaitable, Callable
 from src.core.config import Settings, settings as default_settings
 from src.core.proc import ProcError, arun, run
 from src.core.render_plan import PlanBehind, RenderPlan
+from src.pipeline import fit
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +48,9 @@ class RenderRequest:
     concurrency: int | None = None
     x264_preset: str = "medium"
     gl: str | None = None
+    # Потолок битрейта, чтобы файл пролез в чат (`fit.render_cap`). None — без него.
+    max_video_kbps: int | None = None
+    audio_kbps: int | None = None
 
 
 def _stage_asset(src: str | Path, assets_dir: Path) -> str:
@@ -168,7 +172,23 @@ def _request_payload(req: RenderRequest) -> str:
         payload["concurrency"] = req.concurrency
     if req.gl:
         payload["gl"] = req.gl
+    if req.max_video_kbps:
+        payload["maxVideoKbps"] = req.max_video_kbps
+    if req.audio_kbps:
+        payload["audioKbps"] = req.audio_kbps
     return json.dumps(payload, ensure_ascii=False)
+
+
+def _size_cap(plan: RenderPlan, cfg: Settings) -> dict[str, int | None]:
+    """Потолок битрейта по длине ролика: готовый файл должен уйти в чат."""
+    cap = fit.render_cap(plan.duration, cfg)
+    if cap is None:
+        return {}
+    log.info(
+        "ролик %.0f с: потолок видео %d кбит/с, звук %s кбит/с",
+        plan.duration, cap.video_kbps, cap.audio_kbps or "как обычно",
+    )
+    return {"max_video_kbps": cap.video_kbps, "audio_kbps": cap.audio_kbps}
 
 
 def ensure_browser() -> None:
@@ -214,6 +234,7 @@ def render_remotion(
         concurrency=cfg.render_concurrency,
         x264_preset=cfg.render_x264_preset,
         gl=cfg.render_gl or None,
+        **_size_cap(plan, cfg),
     )
     try:
         stdout = run(["node", str(RENDER_CLI)], stdin=_request_payload(req), timeout=10_800)
@@ -330,6 +351,7 @@ async def arender_remotion(
         plan=plan, out=Path(out), assets_dir=assets_dir, job_key=job_key,
         crf=crf, concurrency=cfg.render_concurrency,
         x264_preset=cfg.render_x264_preset, gl=cfg.render_gl or None,
+        **_size_cap(plan, cfg),
     )
     try:
         stdout = await _run_node_with_progress(

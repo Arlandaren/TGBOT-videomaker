@@ -9,7 +9,11 @@ import logging
 from pathlib import Path
 
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
+from aiogram.exceptions import (
+    TelegramEntityTooLarge,
+    TelegramNetworkError,
+    TelegramRetryAfter,
+)
 from aiogram.types import CallbackQuery, FSInputFile, Message
 
 from src.bot.keyboards import app_keyboard, result_keyboard
@@ -19,6 +23,7 @@ from src.core.i18n import error_text, lang_of, stage_title, t, tokens_text
 from src.core.preset import available
 from src.db import repo
 from src.db.models import JobStatus
+from src.pipeline import fit
 from src.storage.s3 import SOURCES, storage
 from src.worker.tasks import (
     JOB_TIMEOUT,
@@ -334,6 +339,34 @@ async def _send_video(
     caption: str | None = None,
     filename: str = "reel.mp4",
 ) -> None:
+    """Отдать ролик в чат: сначала размер, потом заливка.
+
+    Облачный Bot API берёт от бота до 50 МБ. Рендер укладывает ролик в предел
+    сам, но файлы, собранные до этого, бывают крупнее — такому делаем ужатую
+    копию (`fit.for_chat`), иначе он не уйдёт ни с какой попытки.
+    """
+    fitted = await fit.for_chat(dst, fit.send_limit_bytes(settings))
+    try:
+        await _upload_video(
+            bot, chat_id, job, fitted, preset, lang, caption=caption, filename=filename
+        )
+    finally:
+        if fitted != dst:
+            fitted.unlink(missing_ok=True)
+            fitted.with_suffix(".thumb.jpg").unlink(missing_ok=True)
+
+
+async def _upload_video(
+    bot: Bot,
+    chat_id: int,
+    job,
+    dst: Path,
+    preset: str,
+    lang: str | None = None,
+    *,
+    caption: str | None = None,
+    filename: str = "reel.mp4",
+) -> None:
     """Отправка ролика, переживающая обрыв связи.
 
     Файл уже скачан — повторяем только саму заливку. Ошибки логики (не тот чат,
@@ -358,6 +391,10 @@ async def _send_video(
             )
             dst.with_suffix(".thumb.jpg").unlink(missing_ok=True)
             return
+        except TelegramEntityTooLarge:
+            # В aiogram это подкласс сетевой ошибки, но повтор тут не поможет:
+            # без этой ветки десятки мегабайт заливались четыре раза впустую.
+            raise
         except TelegramRetryAfter as e:  # флуд-контроль сам сказал, сколько ждать
             last = e
             wait = float(e.retry_after)

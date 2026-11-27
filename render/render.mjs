@@ -12,6 +12,8 @@
  *   "out":        "/abs/out.mp4",
  *   "concurrency": 2,
  *   "crf": 18,
+ *   "maxVideoKbps": 1900,                // необязательно: потолок битрейта видео
+ *   "audioKbps": 128,                    // необязательно: битрейт звука
  *   "jobKey": "job-123"
  * }
  *
@@ -172,6 +174,17 @@ const main = async () => {
       crf: req.crf ?? 18,
       x264Preset: req.x264Preset ?? "medium",
       pixelFormat: "yuv420p",
+      // Потолок битрейта по длине ролика (`src/pipeline/fit.py`): облачный Bot
+      // API берёт от бота файл до 50 МБ, а crf за размером не следит. Качество
+      // по-прежнему задаёт crf — потолок срабатывает только там, где без него
+      // файл не пролез бы в чат. Буфер в две секунды потока.
+      ...(req.maxVideoKbps
+        ? {
+            encodingMaxRate: `${req.maxVideoKbps}k`,
+            encodingBufferSize: `${req.maxVideoKbps * 2}k`,
+          }
+        : {}),
+      ...(req.audioKbps ? { audioBitrate: `${req.audioKbps}k` } : {}),
       concurrency: req.concurrency ?? null,
       // Режим GL — число настройки (RENDER_GL), а не константа: на сервере без
       // GPU программная эмуляция WebGL стоит времени на каждом кадре, а слоям из

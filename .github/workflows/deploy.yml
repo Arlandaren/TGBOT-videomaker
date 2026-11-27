@@ -1,7 +1,7 @@
 # Push в main → тесты → выкладка на сервер тем же deploy/update.sh, что и руками.
 #
 # Секрет репозитория DEPLOY_SSH_KEY — приватный ключ, открытая часть которого
-# лежит в ~/.ssh/authorized_keys пользователя dev на сервере. Ключ хоста
+# лежит в ~/.ssh/authorized_keys пользователя developer на сервере. Ключ хоста
 # закреплён в deploy/known_hosts. Сломанные тесты до сервера не доезжают.
 
 name: deploy
@@ -140,8 +140,8 @@ jobs:
           # Имя хоста то же, что в локальном ~/.ssh/config: update.sh не меняется.
           cat > ~/.ssh/config <<'EOF'
           Host redstar
-            HostName 109.199.115.142
-            User dev
+            HostName 77.216.6.4
+            User developer
             IdentityFile ~/.ssh/deploy
             IdentitiesOnly yes
             StrictHostKeyChecking yes

@@ -77,9 +77,10 @@ const I18N = {
     "edit.s1_lead_split": "Сверху — то, что показываете, снизу — вы в кадре. Соберём из двух видео ролик с субтитрами.",
     "cta.topup": "Пополнить баланс", "cta.missing": "на ролик не хватает {n}",
     "cta.free": "бесплатно для владельца", "cta.ready": "готовый ролик придёт в чат", "cta.pick": "сначала выберите видео", "cta.charge": "спишется {c} из {n}",
-    "cta.uploading": "Загрузка {p}%", "cta.checking": "Проверяю видео…", "cta.keep_open": "не закрывайте приложение до конца загрузки",
+    "cta.uploading": "Загрузка {p}%", "cta.checking": "Проверяю видео…", "cta.keep_open": "свернуть можно — загрузка продолжится, когда вернётесь; совсем не закрывайте",
     "upload.lost": "Связь оборвалась во время загрузки. Попробуйте ещё раз.",
-    "toast.accepted": "Видео принято. Готовый ролик придёт в чат, а прогресс — в «Результатах».",
+    "toast.accepted_title": "Видео загружено",
+    "toast.accepted": "Приложение можно закрыть: монтаж идёт на сервере. Готовый ролик придёт в чат, прогресс виден в «Результатах».",
     "err.title": "Не получилось",
     "balance.unlimited": "без ограничений",
     "balance.note": "Один ролик — {c}. Если монтаж не получится, токены вернутся на баланс.",
@@ -235,9 +236,10 @@ const I18N = {
     "edit.s1_lead_split": "On top — what you show, below — you on camera. We'll turn the two videos into a reel with captions.",
     "cta.topup": "Top up balance", "cta.missing": "{n} short of a reel",
     "cta.free": "free for the owner", "cta.ready": "the finished reel arrives in the chat", "cta.pick": "pick a video first", "cta.charge": "uses {c} of your {n}",
-    "cta.uploading": "Uploading {p}%", "cta.checking": "Checking the video…", "cta.keep_open": "keep the app open until the upload finishes",
+    "cta.uploading": "Uploading {p}%", "cta.checking": "Checking the video…", "cta.keep_open": "you can minimise — the upload resumes when you come back; just don’t close it",
     "upload.lost": "The connection dropped during upload. Please try again.",
-    "toast.accepted": "Video received. The finished reel will arrive in the chat; track progress in “Results”.",
+    "toast.accepted_title": "Video uploaded",
+    "toast.accepted": "You can close the app: editing runs on the server. The finished reel arrives in the chat; progress is in “Results”.",
     "err.title": "Something went wrong",
     "balance.unlimited": "unlimited",
     "balance.note": "One reel is {c}. If editing fails, the tokens go back to your balance.",
@@ -1565,6 +1567,7 @@ async function onCta() {
   if (!ready()) { haptic("warning"); missingInput().click(); return; }
 
   state.busy = true;
+  guardClosing(true);
   try {
     // Ссылка ещё проверяется — ролик уйдёт без музыки, и сказать об этом надо
     // сейчас: сервер про незаконченную проверку не знает.
@@ -1578,21 +1581,48 @@ async function onCta() {
     state.step = 1;
     for (const s of $$("[data-step]")) s.hidden = Number(s.dataset.step) !== 1;
     await refreshBoot();
-    toast(res.music_dropped || musicPending ? tr("music.dropped") : tr("toast.accepted"));
+    guardClosing(false);
     state.jobs = [job, ...state.jobs.filter((j) => j.id !== job.id)];
     state.jobsLoaded = true;
     go("videos", { replace: true });
+    if (res.music_dropped || musicPending) toast(tr("music.dropped"));
+    // Главное, что человеку надо знать в эту секунду: дальше приложение не нужно.
+    popup(tr("toast.accepted_title"), tr("toast.accepted"));
   } catch (e) {
     haptic("error");
     if (e.status === 402) { await refreshBoot(); go("tariffs"); }
     popup(tr("err.title"), e.message);
   } finally {
     state.busy = false;
+    guardClosing(false);
     renderCta();
   }
 }
 
 // Один файл кусками; `onBytes(сколько принято)` — для общей полосы прогресса.
+// Ждать, пока страница снова станет видимой (приложение развернули).
+function untilVisible() {
+  return new Promise((done) => {
+    if (!document.hidden) { done(); return; }
+    const back = () => {
+      if (document.hidden) return;
+      document.removeEventListener("visibilitychange", back);
+      done();
+    };
+    document.addEventListener("visibilitychange", back);
+  });
+}
+
+// Пока видео уходит на сервер, случайное закрытие приложения стоит всей
+// загрузки: Telegram переспросит. После загрузки закрывать можно свободно.
+function guardClosing(on) {
+  if (!tg) return;
+  try {
+    if (on) tg.enableClosingConfirmation && tg.enableClosingConfirmation();
+    else tg.disableClosingConfirmation && tg.disableClosingConfirmation();
+  } catch (_) { /* старый клиент */ }
+}
+
 async function uploadOne(file, onBytes) {
   const start = await api("/api/uploads", { method: "POST", body: { size: file.size, name: file.name } });
   const id = start.upload_id;
@@ -1610,9 +1640,17 @@ async function uploadOne(file, onBytes) {
       // 409 — сервер принял больше или меньше, чем мы думаем: продолжаем с его числа.
       if (e.status === 409 && e.data && typeof e.data.received === "number") { offset = e.data.received; continue; }
       if (e.status && e.status < 500) throw e;
+      // Приложение свернули или ушли в другое: телефон останавливает сеть у
+      // фоновой страницы. Это не обрыв связи — ждём возвращения и продолжаем с
+      // того байта, который сервер принял последним (он скажет его сам, 409).
+      if (document.hidden) {
+        await untilVisible();
+        failures = 0;
+        continue;
+      }
       failures += 1;
-      if (failures > 5) throw new Error(tr("upload.lost"));
-      await new Promise((r) => setTimeout(r, 1500 * failures));
+      if (failures > 8) throw new Error(tr("upload.lost"));
+      await new Promise((r) => setTimeout(r, Math.min(8000, 1500 * failures)));
     }
   }
   return id;

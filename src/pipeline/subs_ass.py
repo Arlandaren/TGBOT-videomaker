@@ -288,7 +288,58 @@ def _block_dialogues(
     return out
 
 
-def build_ass(plan: RenderPlan) -> str:
+def font_em_scale(font_file: str | Path | None) -> float:
+    """Во сколько раз кегль libass больше кегля CSS для этого шрифта.
+
+    CSS меряет кегль по em, libass — по высоте строки шрифта: сумме
+    `usWinAscent + usWinDescent` из таблицы OS/2. Замер 2026-11-28 на
+    Montserrat ExtraBold: при кегле 100 буква «Н» в libass 45 px, у браузера и
+    PIL — 70 px; отношение 1.556 против 1.562 по таблице. Без поправки быстрый
+    рендер рисовал субтитры в полтора раза мельче. Шрифт не прочитался — 1.0,
+    прежнее поведение.
+    """
+    if not font_file:
+        return 1.0
+    try:
+        # Две таблицы читаются руками: fontTools на сервере не стоит, а ради
+        # трёх чисел тянуть зависимость незачем. Формат — OpenType, раздел
+        # «Table Directory»: 12 байт заголовка, затем по 16 байт на таблицу.
+        import struct
+
+        data = Path(font_file).read_bytes()
+        (count,) = struct.unpack(">H", data[4:6])
+        tables = {}
+        for i in range(count):
+            tag, _, offset, _ = struct.unpack(">4sIII", data[12 + 16 * i : 28 + 16 * i])
+            tables[tag] = offset
+        (upem,) = struct.unpack(">H", data[tables[b"head"] + 18 : tables[b"head"] + 20])
+        os2 = tables[b"OS/2"]
+        win_ascent, win_descent = struct.unpack(">HH", data[os2 + 74 : os2 + 78])
+        scale = (win_ascent + win_descent) / float(upem)
+    except Exception as e:  # noqa: BLE001 — без поправки субтитры мельче, но ролик будет
+        log.warning("метрики шрифта %s не прочитаны: %s", font_file, e)
+        return 1.0
+    return scale if 0.5 < scale < 3 else 1.0
+
+
+def _place_tag(block: PlanBlock, align: int) -> str:
+    """Место блока — центр его прямоугольника из плана, как у Remotion.
+
+    Без прямоугольника — прежнее выравнивание стиля (`\\an` и `MarginV`).
+    """
+    r = block.rect
+    if r is None:
+        return f"\\an{align}"
+    return f"\\an5\\pos({r.x + r.width / 2:.1f},{r.y + r.height / 2:.1f})"
+
+
+def build_ass(plan: RenderPlan, *, em_scale: float = 1.0, place: bool = False) -> str:
+    """Файл субтитров по плану.
+
+    `em_scale` — поправка кегля под libass (`font_em_scale`), `place` — ставить
+    блок в его прямоугольник из плана, а не по `MarginV`. Обе нужны быстрому
+    рендеру (`fastrender`); по умолчанию файл прежний.
+    """
     preset = Preset(**plan.preset)
     c = preset.colors
     f = preset.font
@@ -298,7 +349,7 @@ def build_ass(plan: RenderPlan) -> str:
         [
             "Main",
             f.family,
-            str(f.size),
+            str(round(f.size * em_scale)),
             to_ass_colour(c.active),  # PrimaryColour
             to_ass_colour(c.active),  # SecondaryColour (караоке не используем)
             to_ass_colour(c.outline),  # OutlineColour
@@ -347,17 +398,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     lines: list[str] = []
     for block in plan.blocks:
         for start, end, text, align in _block_dialogues(block, preset, plan.fps):
-            body = "{" + f"\\an{align}\\blur{blur}" + "}" + text
+            where = _place_tag(block, align) if place else f"\\an{align}"
+            body = "{" + f"{where}\\blur{blur}" + "}" + text
             lines.append(
                 f"Dialogue: 0,{ass_time(start)},{ass_time(end)},Main,,0,0,0,,{body}"
             )
     return header + "\n".join(lines) + "\n"
 
 
-def write_ass(plan: RenderPlan, path: str | Path) -> Path:
+def write_ass(
+    plan: RenderPlan, path: str | Path, *, em_scale: float = 1.0, place: bool = False
+) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(build_ass(plan), encoding="utf-8")
+    path.write_text(build_ass(plan, em_scale=em_scale, place=place), encoding="utf-8")
     return path
 
 

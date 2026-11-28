@@ -23,7 +23,13 @@
  */
 
 import { bundle } from "@remotion/bundler";
-import { ensureBrowser, renderMedia, selectComposition } from "@remotion/renderer";
+import {
+  ensureBrowser,
+  openBrowser,
+  renderFrames,
+  renderMedia,
+  selectComposition,
+} from "@remotion/renderer";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -111,6 +117,81 @@ const readStdin = () =>
     process.stdin.on("error", reject);
   });
 
+/**
+ * Кадры для быстрого рендера (`src/pipeline/fastrender.py`): не ролик, а
+ * отдельные картинки — только те кадры и слои, которые не умеет ffmpeg.
+ *
+ * Проход — `{layers, frames, dir}`: `overlay` снимается в PNG с прозрачностью
+ * и без видео, `under` — целым кадром в JPEG. Браузер один на все проходы:
+ * запуск Chromium стоит секунды, а проходов обычно два. Файлы называются
+ * `element-<номер кадра>.<ext>` — номер кадра ролика, а не порядковый.
+ */
+const renderPasses = async (req, serveUrl, baseProps, prefix) => {
+  const browser = await openBrowser("chrome", {
+    chromiumOptions: { gl: req.gl ?? "swangle" },
+  });
+  try {
+    for (const pass of req.passes) {
+      if (!Array.isArray(pass.frames) || pass.frames.length === 0) continue;
+      const overlay = pass.layers === "overlay";
+      const inputProps = {
+        ...baseProps,
+        layers: pass.layers,
+        browserBlocks: req.browserBlocks ?? [],
+        // Графика ищет свои картинки по префиксу папки задачи; без видео в
+        // плане вывести его не из чего — отдаём явно.
+        assetsPrefix: prefix,
+        ...(overlay
+          ? { video: null, audio: null, preset: { ...baseProps.preset, background: "transparent" } }
+          : {}),
+      };
+      const composition = await selectComposition({
+        serveUrl,
+        id: "Reel",
+        inputProps,
+        puppeteerInstance: browser,
+      });
+      fs.rmSync(pass.dir, { recursive: true, force: true });
+      fs.mkdirSync(pass.dir, { recursive: true });
+      const started = Date.now();
+      let done = 0;
+      let lastLogged = 0;
+      await renderFrames({
+        composition,
+        serveUrl,
+        inputProps,
+        outputDir: pass.dir,
+        frames: pass.frames,
+        imageFormat: overlay ? "png" : "jpeg",
+        ...(overlay ? {} : { jpegQuality: 92 }),
+        concurrency: req.concurrency ?? null,
+        puppeteerInstance: browser,
+        chromiumOptions: { gl: req.gl ?? "swangle" },
+        timeoutInMilliseconds: req.timeoutMs ?? 120_000,
+        onStart: () => {},
+        // Тот же контракт с Python, что у ролика: `[render] progress N`, но
+        // доля — от всех кадров всех проходов (`req.totalFrames`).
+        // `[render] frame <проход> <номер>` — кадр записан на диск: Python
+        // берёт его в ролик, не дожидаясь конца прохода.
+        onFrameUpdate: (_rendered, frameIndex) => {
+          log(`frame ${pass.layers} ${frameIndex}`);
+          done += 1;
+          const pct = Math.round(((req.doneBefore ?? 0) + done) / (req.totalFrames || 1) * 100);
+          if (pct >= lastLogged + 2) {
+            lastLogged = pct;
+            log(`progress ${pct}`);
+          }
+        },
+      });
+      req.doneBefore = (req.doneBefore ?? 0) + pass.frames.length;
+      log(`проход ${pass.layers}: ${pass.frames.length} кадров за ${((Date.now() - started) / 1000).toFixed(1)}с`);
+    }
+  } finally {
+    await browser.close({ silent: true });
+  }
+  process.stdout.write("ok\n");
+};
+
 const main = async () => {
   const args = process.argv.slice(2);
 
@@ -154,6 +235,11 @@ const main = async () => {
         b.behind ? { ...b, behind: { ...b.behind, dir: withPrefix(prefix, b.behind.dir) } } : b,
       ),
     };
+
+    if (Array.isArray(req.passes)) {
+      await renderPasses(req, serveUrl, inputProps, prefix);
+      return;
+    }
 
     const composition = await selectComposition({
       serveUrl,

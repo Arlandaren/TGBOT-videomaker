@@ -27,6 +27,21 @@ import { CutFlash, ProgressBar, cutStyle, useCut } from "../layers/Cuts";
 import { Overlays } from "../visuals/Overlays";
 import { Stage } from "../visuals/Stage";
 
+/**
+ * Слои для быстрого рендера (`src/pipeline/fastrender.py`). Там видео, камеру,
+ * переходы, полосу и простые субтитры рисует ffmpeg, а браузер снимает только
+ * те кадры и слои, которые ffmpeg не умеет:
+ *
+ * - `overlay` — графика и «браузерные» блоки субтитров на прозрачном фоне,
+ *   без видео: ffmpeg кладёт их поверх своего кадра;
+ * - `under` — весь кадр, кроме простых субтитров и полосы: там, где слою нужны
+ *   пиксели видео (b-roll с размытой подложкой, окно сцены, стеклянная панель).
+ *
+ * `browserBlocks` — номера блоков, которые рисует браузер (заголовок, плашка,
+ * значок, панель, уход за голову); остальные блоки рисует libass.
+ */
+type FastLayers = { layers?: "overlay" | "under"; browserBlocks?: number[] };
+
 export const Reel: React.FC<RenderPlan> = (plan) => {
   const { preset } = plan;
   const frame = useCurrentFrame();
@@ -35,6 +50,21 @@ export const Reel: React.FC<RenderPlan> = (plan) => {
   const camera = cameraAt(shots, frame, fps);
   // Переход (`layers/Cuts.tsx`) двигает кадр, уже увеличенный камерой.
   const cut = useCut(plan);
+  const { layers, browserBlocks } = plan as RenderPlan & FastLayers;
+  const ownBlocks = React.useMemo(() => {
+    if (!layers) return plan.blocks ?? [];
+    const keep = new Set(browserBlocks ?? []);
+    return (plan.blocks ?? []).filter((_, i) => keep.has(i));
+  }, [plan.blocks, layers, browserBlocks]);
+
+  if (layers === "overlay") {
+    return (
+      <AbsoluteFill>
+        <Overlays plan={plan} />
+        <Captions blocks={ownBlocks} preset={preset} camera={camera} />
+      </AbsoluteFill>
+    );
+  }
 
   return (
     <AbsoluteFill style={{ backgroundColor: preset.background }}>
@@ -71,8 +101,8 @@ export const Reel: React.FC<RenderPlan> = (plan) => {
 
       <Broll items={plan.broll ?? []} preset={preset} />
       <Overlays plan={plan} />
-      <Captions blocks={plan.blocks ?? []} preset={preset} camera={camera} />
-      <ProgressBar plan={plan} />
+      <Captions blocks={ownBlocks} preset={preset} camera={camera} />
+      {layers ? null : <ProgressBar plan={plan} />}
     </AbsoluteFill>
   );
 };

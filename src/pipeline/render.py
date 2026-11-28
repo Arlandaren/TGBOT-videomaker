@@ -18,6 +18,7 @@ import os
 import re
 import shutil
 import signal
+import threading
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -346,6 +347,10 @@ async def arender_remotion(
     cfg = cfg or default_settings
     crf = cfg.render_crf if crf is None else crf
     assets_dir = Path(assets_dir)
+    if cfg.render_mode != "browser":
+        fast = await _arender_fast(plan, Path(out), assets_dir, cfg, crf, on_progress)
+        if fast is not None:
+            return fast
     plan = prepare_assets(plan, assets_dir, cfg=cfg)
     req = RenderRequest(
         plan=plan, out=Path(out), assets_dir=assets_dir, job_key=job_key,
@@ -367,6 +372,55 @@ async def arender_remotion(
     return produced
 
 
+async def _arender_fast(
+    plan: RenderPlan,
+    out: Path,
+    work_dir: Path,
+    cfg: Settings,
+    crf: int,
+    on_progress: Callable[[float], Awaitable[None] | None] | None,
+) -> Path | None:
+    """Быстрая сборка (`RENDER_MODE` hybrid/fast) или None — тогда обычный рендер.
+
+    None — и когда план невыгоден быстрому пути, и когда тот упал: ролик
+    пользователя важнее скорости, обычный рендер его соберёт.
+    """
+    from src.pipeline.fastrender import render_fast, supports
+
+    all_captions = cfg.render_mode == "hybrid"
+    ok, why = supports(plan, all_captions=all_captions)
+    if not ok:
+        log.info("быстрая сборка не выгодна (%s) — обычный рендер", why)
+        return None
+
+    loop = asyncio.get_running_loop()
+
+    def progress(done: float) -> None:  # зовётся из потока сборки
+        if on_progress is None:
+            return
+
+        def fire() -> None:
+            res = on_progress(done)
+            if hasattr(res, "__await__"):
+                asyncio.ensure_future(res)  # type: ignore[arg-type]
+
+        loop.call_soon_threadsafe(fire)
+
+    cancel = threading.Event()
+    try:
+        return await asyncio.to_thread(
+            render_fast, plan, out, work_dir=work_dir, cfg=cfg, on_progress=progress,
+            all_captions=all_captions, crf=crf, cancel=cancel,
+        )
+    except asyncio.CancelledError:
+        cancel.set()
+        raise
+    except Exception:  # noqa: BLE001 — любой сбой быстрого пути лечится обычным
+        log.exception("быстрая сборка упала — собираю ролик обычным рендером")
+        out.unlink(missing_ok=True)
+        return None
+
+
 def render_ass(
     plan: RenderPlan,
     out: str | Path,
@@ -374,12 +428,20 @@ def render_ass(
     work_dir: str | Path,
     cfg: Settings | None = None,
 ) -> Path:
-    from src.pipeline.subs_ass import burn, write_ass
+    """Быстрый рендер (`fastrender`): кадр собирает ffmpeg, браузер снимает
+    только кадры с графикой, заголовком и b-roll.
+
+    План, где браузеру всё равно снимать большую часть кадров целиком
+    (`fastrender.supports`), уходит в обычный рендер.
+    """
+    from src.pipeline.fastrender import render_fast, supports
 
     cfg = cfg or default_settings
-    work_dir = Path(work_dir)
-    ass_path = write_ass(plan, work_dir / "captions.ass")
-    return burn(plan, ass_path, out, fonts_dir=cfg.fonts_dir)
+    ok, why = supports(plan)
+    if not ok:
+        log.info("быстрый рендер не выгоден (%s) — обычный рендер", why)
+        return render_remotion(plan, out, assets_dir=work_dir, job_key=Path(work_dir).name, cfg=cfg)
+    return render_fast(plan, out, work_dir=Path(work_dir), cfg=cfg)
 
 
 def render(

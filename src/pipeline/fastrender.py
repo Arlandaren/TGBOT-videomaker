@@ -42,6 +42,7 @@ import numpy as np
 
 from src.core.camera import state_at
 from src.core.config import Settings, settings as default_settings
+from src.core.proc import deadline
 from src.core.render_plan import RenderPlan
 
 log = logging.getLogger(__name__)
@@ -60,6 +61,12 @@ TAU = math.pi * 2
 
 class FastRenderError(RuntimeError):
     pass
+
+
+# Срок каждому процессу сборки — тот же, что обычному рендеру
+# (`render.RENDER_TIMEOUT`): зависший ffmpeg или браузер иначе держал бы
+# задачу вечно, `read` на нём не возвращается.
+FAST_TIMEOUT = 2 * 3600
 
 
 @dataclass(frozen=True, slots=True)
@@ -429,6 +436,8 @@ class _BrowserFeed:
             ["node", str(R.RENDER_CLI)], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
         )
+        self.alarm = deadline(self.proc, FAST_TIMEOUT)
+        self.alarm.__enter__()
         assert self.proc.stdin is not None
         self.proc.stdin.write(json.dumps(payload, ensure_ascii=False))
         self.proc.stdin.close()
@@ -482,6 +491,7 @@ class _BrowserFeed:
     def close(self) -> None:
         if self.proc.poll() is None:
             self.proc.kill()
+        self.alarm.__exit__(None, None, None)
         self.reader.join(timeout=10)
 
     def check(self) -> None:
@@ -581,7 +591,11 @@ def render_fast(
                 )
 
     dec = subprocess.Popen(decode, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    dec_alarm = deadline(dec, FAST_TIMEOUT)
+    dec_alarm.__enter__()
     enc = subprocess.Popen(encode, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    enc_alarm = deadline(enc, FAST_TIMEOUT)
+    enc_alarm.__enter__()
     errs: dict[str, bytes] = {}
 
     def drain(name: str, stream) -> None:  # stderr читаем сразу: полный буфер вешает ffmpeg
@@ -630,6 +644,8 @@ def render_fast(
         dec.kill()
         dec.wait()
         enc.wait(timeout=600)
+        dec_alarm.__exit__(None, None, None)
+        enc_alarm.__exit__(None, None, None)
         for r in readers:
             r.join(timeout=5)
         if pool is not None:

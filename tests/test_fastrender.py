@@ -232,3 +232,9 @@ def test_browser_is_the_default_mode():
     from src.core.config import Settings
 
     assert Settings.model_fields["render_mode"].default == "browser"
+
+
+def test_the_fast_deadline_matches_the_render_deadline():
+    from src.pipeline.render import RENDER_TIMEOUT
+
+    assert fr.FAST_TIMEOUT == RENDER_TIMEOUT

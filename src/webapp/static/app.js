@@ -104,9 +104,12 @@ const I18N = {
     "ed.upload": "Загрузить фото", "ed.uploading": "Загружаю фото…", "ed.remove_pic": "Убрать картинку",
     "ed.media_hint": "Фото появится карточкой поверх видео, пока звучит эта сцена.",
     "ed.title": "Заголовок в начале", "ed.sound": "Звук", "ed.undo": "Отменить", "ed.redo": "Вернуть",
-    "ed.confirm": "Собрать новую версию ролика? Спишется {c}.", "ed.confirm_free": "Собрать новую версию ролика?",
+    "ed.confirm": "Собрать новую версию ролика? Спишется {c}.",
     "ed.started": "Собираю версию {n}. Готовый ролик придёт в чат.", "ed.nothing": "Сначала что-нибудь поменяйте",
-    "ed.leave": "Выйти из редактора? Правки не сохранятся.",
+    "ed.leave": "Правки не сохранятся.", "ed.leave_title": "Выйти из редактора?", "ed.leave_ok": "Выйти",
+    "ed.no_tokens_title": "Не хватает токенов", "ed.hint_cost": "Сборка стоит {c}.",
+    "ed.no_tokens": "Сборка версии стоит {c}, на балансе {n}. Пополните баланс и вернитесь назад — правки сохранятся.",
+    "ed.confirm_title": "Новая версия", "ed.cancel": "Отмена", "ed.sending": "Отправляю правки…",
     "ed.preview": "После сборки", "ed.changed": "изменено", "ed.preview_cut": "вырезано: {w}",
     "ed.hint": "Правок: {n}. В ролике они появятся после кнопки «Собрать» — придёт новая версия.",
     "ed.global": "стиль и цвет — для всего ролика",
@@ -259,9 +262,12 @@ const I18N = {
     "ed.upload": "Upload a photo", "ed.uploading": "Uploading the photo…", "ed.remove_pic": "Remove the picture",
     "ed.media_hint": "The photo appears as a card over the video while this scene is spoken.",
     "ed.title": "Opening title", "ed.sound": "Sound", "ed.undo": "Undo", "ed.redo": "Redo",
-    "ed.confirm": "Build a new version of the reel? It costs {c}.", "ed.confirm_free": "Build a new version of the reel?",
+    "ed.confirm": "Build a new version of the reel? It costs {c}.",
     "ed.started": "Building version {n}. The finished reel will arrive in the chat.", "ed.nothing": "Change something first",
-    "ed.leave": "Leave the editor? Your edits won't be saved.",
+    "ed.leave": "Your edits won't be saved.", "ed.leave_title": "Leave the editor?", "ed.leave_ok": "Leave",
+    "ed.no_tokens_title": "Not enough tokens", "ed.hint_cost": "A build costs {c}.",
+    "ed.no_tokens": "Building a version costs {c}; your balance is {n}. Top up and go back — your edits are kept.",
+    "ed.confirm_title": "New version", "ed.cancel": "Cancel", "ed.sending": "Sending your edits…",
     "ed.preview": "After the build", "ed.changed": "changed", "ed.preview_cut": "cut: {w}",
     "ed.hint": "Edits: {n}. They appear in the reel after you tap “Build” — a new version arrives.",
     "ed.global": "style and colour apply to the whole reel",
@@ -2307,7 +2313,9 @@ function renderEdPreview() {
   const hint = $("#ed-hint");
   const total = edChanges();
   hint.hidden = !total;
-  hint.textContent = total ? tr("ed.hint", { n: total }) : "";
+  // Цена сборки — до нажатия, а не после него.
+  const price = d && d.cost ? ` ${tr("ed.hint_cost", { c: tokensText(d.cost) })}` : "";
+  hint.textContent = total ? tr("ed.hint", { n: total }) + price : "";
   if (!d || !d.scenes.length) { box.hidden = true; return; }
   const v = edScene(editor.current);
   const global = editor.preset !== d.preset || editor.accent !== d.accent;
@@ -2574,12 +2582,21 @@ function edGeneralSheet() {
   openSheet(tr("ed.general"), parts);
 }
 
-function askConfirm(message) {
+// Подтверждение — своим листом, а не окном Telegram: `showConfirm` на части
+// клиентов молча не открывался, и «Собрать» не делала ничего (28.11.2026).
+// Закрытый любым способом лист — это «нет».
+let confirmDone = null;
+function askConfirm(title, message, okLabel) {
   return new Promise((done) => {
-    if (tg && tg.showConfirm) {
-      try { tg.showConfirm(message, (ok) => done(!!ok)); return; } catch (_) { /* ниже */ }
-    }
-    done(window.confirm(message));
+    openSheet(title, [
+      message ? el("p", { class: "confirm-text", text: message }) : null,
+      el("button", {
+        class: "cta cta--slim", type: "button",
+        onclick: () => { confirmDone = null; closeSheet(); done(true); },
+      }, [el("span", { class: "cta__title", text: okLabel })]),
+      el("button", { class: "btn-soft ed-remove", type: "button", text: tr("ed.cancel"), onclick: () => closeSheet() }),
+    ].filter(Boolean));
+    confirmDone = done;
   });
 }
 
@@ -2589,10 +2606,18 @@ async function edBuild() {
   if (!edDirty()) { haptic("warning"); toast(tr("ed.nothing")); return; }
   const cost = d.cost || 0;
   // Не хватает токенов — в тарифы; правки остаются и ждут возвращения.
-  if (cost > 0 && state.boot.user.balance < cost) { haptic("warning"); go("tariffs"); return; }
-  if (!(await askConfirm(cost ? tr("ed.confirm", { c: tokensText(cost) }) : tr("ed.confirm_free")))) return;
+  if (cost > 0 && state.boot.user.balance < cost) {
+    // Молча уводить в тарифы нельзя: человек нажал «Собрать» и не понял, почему ничего не собралось.
+    haptic("warning");
+    go("tariffs");
+    popup(tr("ed.no_tokens_title"), tr("ed.no_tokens", { c: tokensText(cost), n: state.boot.user.balance }));
+    return;
+  }
+  // Спрашиваем, только когда сборка стоит токенов: бесплатную подтверждать незачем.
+  if (cost && !(await askConfirm(tr("ed.confirm_title"), tr("ed.confirm", { c: tokensText(cost) }), tr("ed.build")))) return;
   editor.busy = true;
   renderEdBuild();
+  toast(tr("ed.sending"));
   try {
     const res = await api(`/api/jobs/${editor.jobId}/edit`, {
       method: "POST", body: { edits: editor.edits, preset: editor.preset, accent: editor.accent },
@@ -2862,6 +2887,7 @@ function openSheet(title, body) {
 function closeSheet() {
   if ($("#sheet").hidden) return false;
   $("#sheet").hidden = true;
+  if (confirmDone) { const done = confirmDone; confirmDone = null; done(false); }
   // Содержимое убираем: плеер в закрытом листе продолжал бы играть.
   $("#sheet-body").replaceChildren();
   syncBackButton();
@@ -3163,7 +3189,7 @@ function goBack() {
   if (state.screen === "edit" && state.step === 2) { setStep(1); return; }
   if (state.screen === "editor" && edDirty()) {
     // Правки живут только здесь: уйти — значит их потерять, спрашиваем.
-    askConfirm(tr("ed.leave")).then((ok) => { if (ok) { editor.data = null; goBack(); } });
+    askConfirm(tr("ed.leave_title"), tr("ed.leave"), tr("ed.leave_ok")).then((ok) => { if (ok) { editor.data = null; goBack(); } });
     return;
   }
   const prev = state.history.pop();

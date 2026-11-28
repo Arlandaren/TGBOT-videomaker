@@ -1431,9 +1431,17 @@ async def job_edit(request: web.Request) -> web.Response:
     if not isinstance(body, dict):
         return await _fail(request, 400, "api.edit_bad")
 
+    # Каждая попытка сборки — в журнал: без этого «нажал „Собрать“, ничего не
+    # произошло» нечем отличить от запроса, который до сервера не дошёл.
+    asked = body.get("edits") if isinstance(body.get("edits"), dict) else {}
+    log.info(
+        "редактор: человек %s собирает версию ролика %s — сцен с правками %d, стиль %s, цвет %s",
+        user.id, job.id, len(asked.get("scenes") or {}), body.get("preset"), body.get("accent"),
+    )
     try:
         new, cut_on = apply_edits(edl, body.get("edits") or {}, apply_cuts=options.cut)
     except EditError as e:
+        log.warning("редактор: правки ролика %s отклонены (%s): %s", job.id, e.code, e)
         return await _fail(request, 400, f"api.{e.code}")
     # Картинки: либо те, что уже были в листе, либо загруженные этим человеком.
     known = {b.asset_key for b in edl.broll if b.asset_key}
@@ -1444,6 +1452,7 @@ async def job_edit(request: web.Request) -> web.Response:
     preset = body.get("preset") if body.get("preset") in available() else job.preset
     accent = body.get("accent") if body.get("accent") in ACCENTS else options.accent
     if not changed(edl, new) and preset == job.preset and accent == options.accent:
+        log.warning("редактор: в правках ролика %s ничего не меняется: %s", job.id, json.dumps(asked, ensure_ascii=False)[:400])
         return await _fail(request, 400, "api.edit_nothing")
     new.preset = preset
     fresh = options.model_copy(update={"cut": cut_on, "accent": accent})
@@ -1467,7 +1476,9 @@ async def job_edit(request: web.Request) -> web.Response:
             source_duration=job.source_duration,
         )
     except repo.InsufficientBalance:
+        log.warning("редактор: человеку %s не хватило токенов на версию ролика %s", user.id, job.id)
         return await _fail(request, 402, "api.no_balance_edit", extra={"balance": user.balance})
+    log.info("редактор: версия %d ролика %s — задача %s", version, root, made.id)
 
     status_id: int | None = None
     try:

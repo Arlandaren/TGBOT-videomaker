@@ -904,6 +904,7 @@ html.is-editor .screens { padding-left: 0; padding-right: 0; }
   font-weight: 700; font-size: 15px;
 }
 .ed-word.is-cut { text-decoration: line-through; color: var(--muted); background: transparent; border-style: dashed; }
+.confirm-text { margin: 2px 0 14px; line-height: 1.45; }
 .ed-remove { display: block; width: 100%; margin-top: 10px; min-height: 46px; }
 .sheet__body .label { margin: 14px 0 8px; }
 .sheet__body .label:first-child { margin-top: 4px; }

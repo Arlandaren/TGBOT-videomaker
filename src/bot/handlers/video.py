@@ -525,7 +525,7 @@ def _caption(job, lang: str | None = None) -> str:
         text = t("video.version_ready", lang, n=version) + "\n" + text
     if music_lost(job):
         text += "\n" + t("video.caption_music_lost", lang)
-    return text + "\n" + t("video.caption_rebuild", lang)
+    return text
 
 
 def music_lost(job) -> bool:
@@ -665,9 +665,7 @@ async def _deliver_rerender(
         # стоил бы пользователю всего перерендера, как когда-то стоил монтажа.
         await _send_video(
             bot, chat_id, job, dst, preset, lang,
-            caption=t("video.caption_style", lang, preset=theme_label(preset, lang, preset))
-            + "\n"
-            + t("video.caption_rebuild", lang),
+            caption=t("video.caption_style", lang, preset=theme_label(preset, lang, preset)),
             filename=f"reel-{preset}.mp4",
         )
         await _safe_edit(bot, chat_id, message_id, t("video.done", lang))

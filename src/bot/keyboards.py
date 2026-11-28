@@ -47,28 +47,19 @@ def presets_keyboard(current: str, lang: str | None = None) -> InlineKeyboardMar
     return kb.as_markup()
 
 
-def result_keyboard(job_id: str, current: str, lang: str | None = None) -> InlineKeyboardMarkup:
-    """После готового ролика: перерендер тем же EDL, но другим стилем (§0.4).
+def result_keyboard(job_id: str, current: str, lang: str | None = None) -> InlineKeyboardMarkup | None:
+    """Под готовым роликом — одна кнопка «Редактировать»: открывает его в
+    редакторе сцен приложения. Там же, в «Общих», меняется стиль.
 
-    Кнопка — одно название темы, а не «Пересобрать в „X“»: тем семнадцать, и
-    развёрнутая формулировка в столбик давала под каждым роликом стену из
-    шестнадцати строк. Что делает нажатие, говорит подпись к видео
-    (`video.caption_rebuild`), и говорит один раз.
+    Кнопок стилей под роликом больше нет (просьба владельца 28.11.2026): стена
+    из двадцати названий заслоняла главное действие. Под роликами, присланными
+    раньше, они остались — их нажатие по-прежнему обслуживает `on_rerender`.
+    Без адреса приложения кнопки нет вовсе.
     """
+    if not _webapp_url:
+        return None
     kb = InlineKeyboardBuilder()
-    # «Редактировать» — первой строкой, во всю ширину: открывает ролик в
-    # редакторе сцен приложения. Без адреса приложения кнопки нет.
-    edit = f"{_webapp_url}/?screen=editor&job={job_id}" if _webapp_url else None
-    if edit:
-        kb.button(text=t("btn.edit", lang), web_app=WebAppInfo(url=edit))
-    for name, title in _titles(lang):
-        if name == current:
-            continue
-        kb.button(text=title, callback_data=f"rerender:{job_id}:{name}")
-    if edit:
-        kb.adjust(1, 3)
-    else:
-        kb.adjust(3)
+    kb.button(text=t("btn.edit", lang), web_app=WebAppInfo(url=f"{_webapp_url}/?screen=editor&job={job_id}"))
     return kb.as_markup()
 
 

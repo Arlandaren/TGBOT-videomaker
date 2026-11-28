@@ -182,12 +182,10 @@ def test_the_result_keyboard_opens_the_scene_editor():
     keyboards.set_webapp_url("https://app.example")
     try:
         kb = keyboards.result_keyboard("job-1", "glass", "ru")
-        first = kb.inline_keyboard[0]
-        assert len(first) == 1 and first[0].text == "Редактировать"
-        assert first[0].web_app.url == "https://app.example/?screen=editor&job=job-1"
-        assert all(len(row) <= 3 for row in kb.inline_keyboard[1:])
+        # Одна кнопка и ничего больше: кнопок стилей под роликом нет.
+        assert [[b.text for b in row] for row in kb.inline_keyboard] == [["Редактировать"]]
+        assert kb.inline_keyboard[0][0].web_app.url == "https://app.example/?screen=editor&job=job-1"
         keyboards.set_webapp_url(None)
-        plain = keyboards.result_keyboard("job-1", "glass", "ru")
-        assert all(b.web_app is None for row in plain.inline_keyboard for b in row)
+        assert keyboards.result_keyboard("job-1", "glass", "ru") is None
     finally:
         keyboards.set_webapp_url(was)

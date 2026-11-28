@@ -800,7 +800,36 @@ html.is-editor .screens { padding-left: 0; padding-right: 0; }
   animation: spin 0.9s linear infinite; display: none;
 }
 .ed__player.is-loading .ed__spin { display: block; }
-.ed__mute {
+/* Предпросмотр правок поверх кадра: виден на паузе, при воспроизведении уходит —
+   играет само видео, каким оно собрано сейчас. */
+.ed__preview {
+  position: absolute; inset: 0; z-index: 1; padding: 30px 10px 44px;
+  background: rgb(10 9 14 / 72%); display: flex; flex-direction: column; align-items: center; text-align: center;
+  pointer-events: none;
+}
+.ed__player.is-playing .ed__preview { display: none; }
+.ed__preview[data-position="top"] { justify-content: flex-start; }
+.ed__preview[data-position="center"] { justify-content: center; }
+.ed__preview[data-position="bottom"] { justify-content: flex-end; }
+.ed__preview-tag {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  padding: 3px 9px; border-radius: 999px; background: var(--grad); color: #fff;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.ed__preview-text {
+  max-width: 100%; color: #fff; font-family: var(--display); font-weight: 800; line-height: 1.15;
+  font-size: 16px; overflow-wrap: anywhere; text-shadow: 0 2px 8px rgb(0 0 0 / 60%);
+}
+.ed__preview[data-size="s"] .ed__preview-text { font-size: 12px; }
+.ed__preview[data-size="l"] .ed__preview-text { font-size: 21px; }
+.ed__preview-note { margin-top: 6px; font-size: 10px; line-height: 1.3; color: rgb(255 255 255 / 70%); }
+.ed__preview-note:empty { display: none; }
+.ed__hint { margin: -2px 18px 0; padding: 9px 12px; border-radius: 12px; background: rgb(255 122 61 / 14%); color: var(--text); font-size: 13px; line-height: 1.35; }
+.ed-card__mark {
+  margin-left: 8px; padding: 2px 7px; border-radius: 999px; background: rgb(255 122 61 / 18%); color: #ff9a5c;
+  font-style: normal; font-size: 11px; font-weight: 700;
+}
+.ed__mute { z-index: 2;
   position: absolute; right: 10px; bottom: 10px; width: 32px; height: 32px; border-radius: 50%;
   background: rgb(20 18 27 / 70%); color: #fff; display: inline-flex; align-items: center; justify-content: center;
 }

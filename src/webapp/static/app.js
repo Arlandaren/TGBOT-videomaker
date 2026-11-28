@@ -107,6 +107,9 @@ const I18N = {
     "ed.confirm": "Собрать новую версию ролика? Спишется {c}.", "ed.confirm_free": "Собрать новую версию ролика?",
     "ed.started": "Собираю версию {n}. Готовый ролик придёт в чат.", "ed.nothing": "Сначала что-нибудь поменяйте",
     "ed.leave": "Выйти из редактора? Правки не сохранятся.",
+    "ed.preview": "После сборки", "ed.changed": "изменено", "ed.preview_cut": "вырезано: {w}",
+    "ed.hint": "Правок: {n}. В ролике они появятся после кнопки «Собрать» — придёт новая версия.",
+    "ed.global": "стиль и цвет — для всего ролика",
     "jobs.edit": "Редактировать", "jobs.version": "{t} · версия {n}",
     "studio.more": "Ещё в студии", "cover.title": "Обложка", "cover.sub": "Для Reels из ролика", "cover.reel": "Ролик",
     "cover.random": "Случайные", "cover.all": "Все стили", "cover.less": "Свернуть", "cover.caption": "Надпись",
@@ -259,6 +262,9 @@ const I18N = {
     "ed.confirm": "Build a new version of the reel? It costs {c}.", "ed.confirm_free": "Build a new version of the reel?",
     "ed.started": "Building version {n}. The finished reel will arrive in the chat.", "ed.nothing": "Change something first",
     "ed.leave": "Leave the editor? Your edits won't be saved.",
+    "ed.preview": "After the build", "ed.changed": "changed", "ed.preview_cut": "cut: {w}",
+    "ed.hint": "Edits: {n}. They appear in the reel after you tap “Build” — a new version arrives.",
+    "ed.global": "style and colour apply to the whole reel",
     "jobs.edit": "Edit", "jobs.version": "{t} · version {n}",
     "studio.more": "More in the studio", "cover.title": "Cover", "cover.sub": "For Reels, from your reel", "cover.reel": "Reel",
     "cover.random": "Shuffle", "cover.all": "All styles", "cover.less": "Show fewer", "cover.caption": "Caption",
@@ -2141,6 +2147,8 @@ function edCommit(change) {
   editor.past.push(before);
   editor.future = [];
   haptic();
+  const video = $("#ed-video");
+  if (video && !video.paused) video.pause();
   renderEditor();
 }
 function edUndo() {
@@ -2262,6 +2270,7 @@ function renderEditor() {
   if (!d) return;
   if (!d.scenes.length) {
     $("#ed-cards").replaceChildren(el("div", { class: "card ed-card empty" }, [el("b", { text: tr("ed.no_scenes") })]));
+    renderEdPreview();
     return;
   }
   editor.current = Math.min(editor.current, d.scenes.length - 1);
@@ -2273,6 +2282,58 @@ function renderEditor() {
   renderEdCount();
 }
 
+// Цвет выделенного слова, каким он будет после сборки: выбранный в «Общих»,
+// а у «как в теме» — цвет самой темы.
+function edAccentColor() {
+  const chosen = (state.boot.accents || []).find((a) => a.key === editor.accent);
+  const preset = (state.boot.presets || []).find((p) => p.name === editor.preset);
+  return (chosen && chosen.color) || (preset && preset.colors.accent) || "#F3D28F";
+}
+
+// Сколько всего правок: по сценам плюс общие (стиль, цвет, заголовок).
+function edChanges() {
+  const d = editor.data;
+  if (!d) return 0;
+  return Object.keys(editor.edits.scenes).length + (editor.edits.title !== undefined ? 1 : 0)
+    + (editor.preset !== d.preset ? 1 : 0) + (editor.accent !== d.accent ? 1 : 0);
+}
+
+// Предпросмотр текущей сцены поверх кадра. Готовое видео правок не знает —
+// субтитр в нём прежний, — поэтому кадр затемняется и поверх рисуется сцена
+// такой, какой её соберёт сервер: текст, место, размер, цвет выделения.
+function renderEdPreview() {
+  const d = editor.data;
+  const box = $("#ed-preview");
+  const hint = $("#ed-hint");
+  const total = edChanges();
+  hint.hidden = !total;
+  hint.textContent = total ? tr("ed.hint", { n: total }) : "";
+  if (!d || !d.scenes.length) { box.hidden = true; return; }
+  const v = edScene(editor.current);
+  const global = editor.preset !== d.preset || editor.accent !== d.accent;
+  const touched = Object.keys(v.e).length > 0;
+  box.hidden = !(touched || global);
+  if (box.hidden) return;
+  box.dataset.position = v.position === "auto" ? (v.s.position === "auto" ? "bottom" : v.s.position) : v.position;
+  box.dataset.size = v.size;
+  const text = $("#ed-preview-text");
+  const accent = edAccentColor();
+  if (v.e.text !== undefined) {
+    text.replaceChildren(v.text || tr("ed.no_text"));
+  } else {
+    text.replaceChildren(...v.words.flatMap((w, k) => [
+      k ? " " : null,
+      el("span", { text: w.text, style: w.em ? `color:${accent}` : null }),
+    ]).filter(Boolean));
+    if (!v.words.length) text.replaceChildren(tr("ed.no_text"));
+  }
+  const notes = [];
+  if (v.cut.size) notes.push(tr("ed.preview_cut", { w: v.s.words.filter((w) => v.cut.has(w.idx)).map((w) => w.text).join(" ") }));
+  if (v.e.media) notes.push(tr(v.e.media.op === "set" ? "ed.own_picture" : "ed.remove_pic"));
+  if (global) notes.push(tr("ed.global"));
+  $("#ed-preview-note").textContent = notes.join(" · ");
+}
+
 function renderEdCount() {
   const d = editor.data;
   $("#ed-count").textContent = d && d.scenes.length ? tr("ed.scene_of", { n: editor.current + 1, m: d.scenes.length }) : "";
@@ -2280,6 +2341,7 @@ function renderEdCount() {
     seg.classList.toggle("is-active", n === editor.current);
   }
   for (const [n, card] of [...$("#ed-cards").children].entries()) card.classList.toggle("is-active", n === editor.current);
+  renderEdPreview();
 }
 
 // Шкала: отрезок на сцену, бегунок — время плеера.
@@ -2368,7 +2430,10 @@ function edCard(n) {
     class: `card ed-card${n === editor.current ? " is-active" : ""}`,
     onclick: () => { if (n !== editor.current) edSetCurrent(n, { seek: true, scroll: true }); },
   }, [
-    el("div", { class: "ed-card__label", text: tr(v.media ? "ed.picture" : "ed.text_scene") }),
+    el("div", { class: "ed-card__label" }, [
+      tr(v.media ? "ed.picture" : "ed.text_scene"),
+      Object.keys(v.e).length ? el("i", { class: "ed-card__mark", text: tr("ed.changed") }) : null,
+    ]),
     textBox,
     v.media
       ? el("div", { class: "ed-card__note muted", text: v.media.custom ? tr("ed.own_picture") : tr("ed.on_picture", { w: v.media.word }) })

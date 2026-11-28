@@ -485,6 +485,13 @@
           <div class="ed">
             <div class="ed__player is-loading" id="ed-player">
               <video id="ed-video" playsinline preload="metadata"></video>
+              <!-- Предпросмотр правок: готовое видео их ещё не знает, поэтому
+                   изменённая сцена рисуется поверх кадра — так, как выйдет после сборки. -->
+              <div class="ed__preview" id="ed-preview" hidden>
+                <span class="ed__preview-tag" data-i18n="ed.preview">После сборки</span>
+                <div class="ed__preview-text" id="ed-preview-text"></div>
+                <span class="ed__preview-note" id="ed-preview-note"></span>
+              </div>
               <span class="ed__spin" aria-hidden="true"></span>
               <button class="ed__mute" type="button" id="ed-mute" data-i18n-aria="ed.sound">
                 <svg width="16" height="16" class="i-sound"><use href="#i-sound"/></svg>
@@ -505,6 +512,7 @@
               <b class="ed__count" id="ed-count"></b>
               <button class="ed__general" type="button" id="ed-general"><svg width="18" height="18"><use href="#i-sliders"/></svg><span data-i18n="ed.general">Общие</span></button>
             </div>
+            <p class="ed__hint" id="ed-hint" hidden></p>
             <div class="ed__cards" id="ed-cards"></div>
           </div>
         </section>
